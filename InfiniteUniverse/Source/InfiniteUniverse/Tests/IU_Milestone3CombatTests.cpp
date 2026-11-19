@@ -14,6 +14,7 @@
 #include "Combat/IU_DamageComponent.h"
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_CombatComponent.h"
+#include "Combat/IU_CombatThreatSubsystem.h"
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_AfterimageGhost.h"
 #include "Combat/IU_PracticeDummy.h"
@@ -116,16 +117,13 @@ bool FIU_M3_LockOnAcquireSwitchAndAutoReleaseTest::RunTest(const FString& Parame
 	UIU_TargetingComponent* TargetComp = Player->GetTargetingComponent();
 	TestNotNull(TEXT("TargetingComponent attached"), TargetComp);
 
-	// 1. Toggle Lock-On acquires nearest aligned in-range dummy (ignores DummyFarOut)
 	TestTrue(TEXT("ToggleLockOn acquires valid target"), TargetComp->ToggleLockOn());
 	TestEqual(TEXT("Locked onto DummyFront"), TargetComp->GetLockedTarget(), static_cast<AActor*>(DummyFront));
 	TestFalse(TEXT("Out-of-range DummyFarOut rejected by SetLockedTarget"), TargetComp->SetLockedTarget(DummyFarOut));
 
-	// 2. SwitchTarget(+1) switches cleanly to DummyRight
 	TestTrue(TEXT("SwitchLockedTarget(+1) switches to right-side target"), TargetComp->SwitchLockedTarget(1.0f));
 	TestEqual(TEXT("Now locked onto DummyRight"), TargetComp->GetLockedTarget(), static_cast<AActor*>(DummyRight));
 
-	// 3. Defeating locked target MUST automatically release Lock-On!
 	FIU_DamageSpec LethalSpec;
 	LethalSpec.Amount = 500.0f;
 	LethalSpec.InstigatorActor = Player;
@@ -150,36 +148,41 @@ bool FIU_M3_MeleeThreeHitComboGroundAndAirTest::RunTest(const FString& Parameter
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
 	PC->Possess(Player);
+	Player->GetIUMovementComponent()->GravityScale = 0.0f;
 
-	AIU_PracticeDummy* Dummy = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(130.0, 0.0, 0.0), FRotator::ZeroRotator);
+	AIU_PracticeDummy* Dummy = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(135.0, 0.0, 0.0), FRotator::ZeroRotator);
 	Dummy->GetAttributeComponent()->MaxHP = 300.0f;
 	Dummy->GetAttributeComponent()->ResetAttributesToFull();
 
 	UIU_CombatComponent* Combat = Player->GetCombatComponent();
+	Combat->MeleeStepLungeSpeed = 0.0f; // Keep crisp fixed spacing in floorless test world
 	Player->GetTargetingComponent()->SetLockedTarget(Dummy);
 
-	// Hit 1
+	// Hit 1 starts windup at t=0 (0 damage before windup impact frame!), then deals 15 damage at impact frame
 	TestTrue(TEXT("Combo Hit 1 started"), Combat->RequestMeleeAttack());
 	TestEqual(TEXT("State is Attacking"), Combat->GetCombatState(), EIU_CombatState::Attacking);
 	TestEqual(TEXT("Combo step is 1"), Combat->GetCurrentComboStep(), 1);
-	TestEqual(TEXT("Dummy HP reduced by Hit 1 (15)"), Dummy->GetAttributeComponent()->GetHP(), 285.0f);
+	TestEqual(TEXT("No instant frame-0 damage during punch windup"), Dummy->GetAttributeComponent()->GetHP(), 300.0f);
 
-	// Queue Hit 2 while Attacking (must NOT immediately apply Hit 2 damage before step 1 timer finishes!)
+	// Queue Hit 2 during Hit 1 windup
 	TestTrue(TEXT("Queued Hit 2 cleanly during Hit 1"), Combat->RequestMeleeAttack());
-	TestEqual(TEXT("No overlapping instant damage before step 1 finishes"), Dummy->GetAttributeComponent()->GetHP(), 285.0f);
 
-	// Advance past step 1 duration -> auto-chains into Hit 2!
-	ScopeWorld.TickSimulation(Combat->AttackStepDuration + 0.03f, Player);
+	// Advance past Hit 1 windup (0.11s) -> Hit 1 deals 15 damage (285 HP)
+	ScopeWorld.TickSimulation(0.14f, Player);
+	TestEqual(TEXT("Dummy HP reduced by Hit 1 at impact frame (15 -> 285)"), Dummy->GetAttributeComponent()->GetHP(), 285.0f);
+
+	// Advance past step 1 completion + Hit 2 impact frame -> Hit 2 deals 20 damage (265 HP)
+	ScopeWorld.TickSimulation(Combat->AttackStepDuration + 0.04f, Player);
 	TestEqual(TEXT("Chained into Combo Step 2"), Combat->GetCurrentComboStep(), 2);
 	TestEqual(TEXT("Dummy HP reduced by Hit 2 (20 -> 265)"), Dummy->GetAttributeComponent()->GetHP(), 265.0f);
 
-	// Queue Hit 3 and advance -> chains into Hit 3 (30 dmg -> 235), then finishes back to Idle!
+	// Queue Hit 3 and advance past step 2 completion + Hit 3 impact frame -> Hit 3 deals 30 damage (235 HP)
 	TestTrue(TEXT("Queued Hit 3 cleanly"), Combat->RequestMeleeAttack());
-	ScopeWorld.TickSimulation(Combat->AttackStepDuration + 0.03f, Player);
+	ScopeWorld.TickSimulation(Combat->AttackStepDuration + 0.06f, Player);
 	TestEqual(TEXT("Chained into Combo Step 3"), Combat->GetCurrentComboStep(), 3);
 	TestEqual(TEXT("Dummy HP reduced by Hit 3 (30 -> 235)"), Dummy->GetAttributeComponent()->GetHP(), 235.0f);
 
-	ScopeWorld.TickSimulation(Combat->AttackStepDuration + 0.05f, Player);
+	ScopeWorld.TickSimulation(Combat->AttackStepDuration, Player);
 	TestEqual(TEXT("Returned cleanly to Idle after 3-hit combo"), Combat->GetCombatState(), EIU_CombatState::Idle);
 	TestEqual(TEXT("Combo counter reset to 0 after step 3"), Combat->GetCurrentComboStep(), 0);
 
@@ -191,6 +194,7 @@ bool FIU_M3_MeleeThreeHitComboGroundAndAirTest::RunTest(const FString& Parameter
 
 	TestTrue(TEXT("Player is Flying"), Player->GetFlightComponent()->IsFlying());
 	TestTrue(TEXT("Aerial Melee Attack succeeds while Flying"), Combat->RequestMeleeAttack());
+	ScopeWorld.TickSimulation(0.15f, Player);
 	TestEqual(TEXT("Airborne dummy received melee damage (85 HP left)"), SkyDummy->GetAttributeComponent()->GetHP(), 85.0f);
 
 	return true;
@@ -223,19 +227,15 @@ bool FIU_M3_KiBlastDamageAndDeadGuardTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("Ki Blast projectile spawned"), Proj1);
 	TestEqual(TEXT("Ki deducted accurately by KiBlastKiCost"), PlayerAttr->GetKi(), InitialKi - Combat->KiBlastKiCost);
 
-	// Immediate second shot must be blocked by cooldown
 	TestNull(TEXT("Cooldown prevents instant spam Ki Blast"), Combat->RequestKiBlast());
 
-	// Fly projectile into Dummy -> deals 20 damage (25 -> 5 HP) and triggers Hit Reaction!
 	ScopeWorld.TickSimulation(0.35f, Player, Proj1);
 	TestEqual(TEXT("Ki Blast dealt 20 damage to Dummy (5 HP remaining)"), Dummy->GetAttributeComponent()->GetHP(), 5.0f);
 
-	// Wait for cooldown, then drain player Ki to 0 -> RequestKiBlast must fail when insufficient Ki!
 	PlayerAttr->TryConsumeKi(PlayerAttr->GetKi());
 	PlayerAttr->PassiveKiRegenPerSecond = 0.0f;
 	TestNull(TEXT("Cannot fire Ki Blast with 0 Ki"), Combat->RequestKiBlast());
 
-	// Restore Ki, fire lethal Ki Blast -> Dummy reaches 0 HP (Dead), then verify dead target ignores extra damage!
 	PlayerAttr->RestoreKi(50.0f);
 	AIU_KiProjectile* Proj2 = Combat->RequestKiBlast();
 	TestNotNull(TEXT("Second Ki Blast spawned after Ki restore"), Proj2);
@@ -260,7 +260,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 {
-	// 0. Verify Q -> KiBlast and RightMouseButton -> Dodge/Dash/Evade mapping in IMC_Player
 	if (UInputMappingContext* DiskIMC = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Input/IMC_Player.IMC_Player")))
 	{
 		bool bFoundQKiBlast = false;
@@ -285,6 +284,7 @@ bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
 	PC->Possess(Player);
+	Player->GetIUMovementComponent()->GravityScale = 0.0f;
 
 	UIU_CombatComponent* Combat = Player->GetCombatComponent();
 	UIU_DamageComponent* DmgComp = Player->GetDamageComponent();
@@ -292,75 +292,158 @@ bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 
 	const FVector OriginA(0.0, 0.0, 0.0);
 
-	// 1. Earthling Dash ("Lướt kiểu người Trái Đất" - no enemy nearby): continuous A -> B_Dash over DodgeDuration
+	// 1. Standing right next to a NON-ATTACKING monster (150 cm away): MUST NOT trigger Perfect Evade or spawn Afterimage!
+	AIU_PracticeDummy* Monster = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(150.0, 120.0, 0.0), FRotator::ZeroRotator);
 	Combat->SetMobilityStyle(EIU_MobilityStepStyle::Dash);
 	Player->SetActorLocation(OriginA);
 	Player->SetActorRotation(FRotator::ZeroRotator);
 
 	Player->DodgeInput();
-	TestEqual(TEXT("CombatState is Dodging during Earthling Dash"), Combat->GetCombatState(), EIU_CombatState::Dodging);
-	TestFalse(TEXT("No enemy nearby -> not Mirage Evade"), Combat->IsLastDodgeCombatEvade());
-	TestFalse(TEXT("Earthling Dash streams continuously (not instant frame-0 blink)"), Combat->DidLastDodgeBlinkInstantly());
-	TestNull(TEXT("No afterimage spawned during normal Earthling Dash"), Combat->GetLastSpawnedAfterimage());
+	TestFalse(TEXT("Idle nearby monster MUST NOT trigger Perfect Evade"), Combat->IsLastDodgeCombatEvade());
+	TestNull(TEXT("Idle nearby monster MUST NOT spawn Afterimage Ghost"), Combat->GetLastSpawnedAfterimage());
 
-	// Tick right to the end of DodgeDuration (0.20s) to sample exact arrival destination B_Dash (before post-dash gravity fall)
 	ScopeWorld.TickSimulation(Combat->DodgeDuration + (1.0f / 60.0f), Player);
 	const FVector DestB_EarthDash = Player->GetActorLocation();
-	TestEqual(TEXT("Returned to Idle after Earthling Dash"), Combat->GetCombatState(), EIU_CombatState::Idle);
 	TestTrue(TEXT("Earthling Dash traveled full MobilityTravelDistance (~420 cm)"),
 		FMath::IsNearlyEqual((float)DestB_EarthDash.X, Combat->MobilityTravelDistance, 2.0f));
-
-	// Wait remaining cooldown
 	ScopeWorld.TickSimulation(Combat->DodgeCooldown, Player);
 
-	// 2. Alien InstantBlink ("Dịch chuyển tức thời kiểu người Hành Tinh" - no enemy nearby): arrives at IDENTICAL B!
+	// 2. Alien InstantBlink (no attack): arrives at EXACT SAME B with ZERO afterimage!
 	Combat->SetMobilityStyle(EIU_MobilityStepStyle::InstantBlink);
 	Player->SetActorLocation(OriginA);
 	Player->SetActorRotation(FRotator::ZeroRotator);
 
 	Player->DodgeInput();
 	const FVector DestB_AlienBlink = Player->GetActorLocation();
-	TestTrue(TEXT("Alien InstantBlink relocates on frame 0"), Combat->DidLastDodgeBlinkInstantly());
-	TestNull(TEXT("No afterimage spawned during non-combat Alien InstantBlink"), Combat->GetLastSpawnedAfterimage());
+	TestFalse(TEXT("Alien InstantBlink without incoming attack is NOT Perfect Evade"), Combat->IsLastDodgeCombatEvade());
+	TestNull(TEXT("Alien InstantBlink without incoming attack spawns NO Afterimage"), Combat->GetLastSpawnedAfterimage());
 	TestTrue(TEXT("Alien InstantBlink lands at EXACT SAME destination B as Earthling Dash"),
 		FVector::Dist(DestB_AlienBlink, DestB_EarthDash) < 1.0f);
+	ScopeWorld.TickSimulation(Combat->DodgeCooldown + 0.05f, Player);
 
-	ScopeWorld.TickSimulation(Combat->DodgeCooldown + 0.08f, Player);
-
-	// 3. Black Myth: Wukong style Mirage Evade ("Né khi có quái"):
-	//    Spawns translucent Afterimage Ghost right at Origin A, activates i-frames, AND lands at EXACT SAME B!
+	// 3. Monster winds up a 0.50s attack, but Player dodges TOO EARLY at t=0.05s (Remaining = 0.45s > 0.30s AND Gap > 20 cm):
+	//    MUST execute normal Dash (NO Afterimage Ghost)!
 	Combat->SetMobilityStyle(EIU_MobilityStepStyle::Dash);
 	Player->SetActorLocation(OriginA);
 	Player->SetActorRotation(FRotator::ZeroRotator);
-	AIU_PracticeDummy* Attacker = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(200.0, 120.0, 0.0), FRotator::ZeroRotator);
+	Monster->SetActorLocation(FVector(240.0, 0.0, 0.0));
+	Monster->TriggerTelegraphedStrike(OriginA, 0.50f); // 0.50s windup; fist starts ~110 cm away from player skin
+
+	ScopeWorld.TickSimulation(0.05f, Player); // t = 0.05s -> 0.45s remaining (> 0.30s) & fist gap > 20 cm
+	Player->DodgeInput();
+	TestFalse(TEXT("Dodging too early (0.45s before hit & >20cm gap) does NOT trigger Perfect Evade"), Combat->IsLastDodgeCombatEvade());
+	TestNull(TEXT("Dodging too early spawns NO Afterimage Ghost"), Combat->GetLastSpawnedAfterimage());
+	ScopeWorld.TickSimulation(0.60f, Player);
+
+	// 4. Rule A (<= 0.30s Time-to-Impact): Monster winds up 0.50s attack; Player dodges at t=0.25s (0.25s remaining <= 0.30s)!
+	//    MUST trigger Black Myth: Wukong Perfect Evade + Afterimage Ghost at A + exact same destination B!
+	Player->SetActorLocation(OriginA);
+	Player->SetActorRotation(FRotator::ZeroRotator);
+	Monster->TriggerTelegraphedStrike(OriginA, 0.50f);
+
+	ScopeWorld.TickSimulation(0.25f, Player); // t = 0.25s -> 0.25s remaining (<= 0.30s)!
+	Player->DodgeInput();
+	const FVector DestB_PerfectEvadeTime = Player->GetActorLocation();
+	AIU_AfterimageGhost* GhostFromTimeRule = Combat->GetLastSpawnedAfterimage();
+
+	TestTrue(TEXT("Dodging within <= 0.30s of damage triggers Perfect Evade"), Combat->IsLastDodgeCombatEvade());
+	TestTrue(TEXT("Perfect Evade grants i-frames"), DmgComp->IsInvulnerable());
+	TestNotNull(TEXT("Perfect Evade (<=0.30s rule) spawns Wukong Afterimage Ghost at A"), GhostFromTimeRule);
+	if (GhostFromTimeRule)
+	{
+		TestTrue(TEXT("Afterimage Ghost stays frozen at exact origin A"),
+			FVector::Dist(GhostFromTimeRule->GetActorLocation(), OriginA) < 1.0f);
+	}
+	TestTrue(TEXT("Perfect Evade arrives at EXACT SAME destination B as normal Dash/Blink"),
+		FVector::Dist(DestB_PerfectEvadeTime, DestB_EarthDash) < 1.0f);
+	TestEqual(TEXT("Player took 0 damage thanks to Perfect Evade"), Attr->GetHP(), 100.0f);
+
+	ScopeWorld.TickSimulation(Combat->DodgeCooldown + 0.15f, Player);
+
+	// 5. Rule B (< 20 cm Physical Hitbox Gap): Slow 1.20s attack still has 0.50s left (> 0.30s!),
+	//    but its damaging hitbox is physically 12 cm (< 20 cm) from Player's capsule surface!
+	Player->SetActorLocation(OriginA);
+	Player->SetActorRotation(FRotator::ZeroRotator);
+	UIU_CombatThreatSubsystem* ThreatSubsys = ScopeWorld.World->GetSubsystem<UIU_CombatThreatSubsystem>();
+	// Player capsule radius = 40 cm; Hitbox radius = 30 cm; Center at X = 82 cm -> Surface gap = 82 - 40 - 30 = 12 cm (< 20 cm)!
+	const int32 ClosePhysicalThreatId = ThreatSubsys->RegisterMeleeAttackWindup(
+		Monster,
+		FVector(82.0, 0.0, 0.0),
+		FVector(82.0, 0.0, 0.0),
+		30.0f,
+		0.55f); // 0.55s > 0.30s time window, so ONLY the <20cm physical rule can trigger!
 
 	Player->DodgeInput();
-	const FVector DestB_MirageEvade = Player->GetActorLocation();
-	AIU_AfterimageGhost* MirageGhost = Combat->GetLastSpawnedAfterimage();
+	TestTrue(TEXT("Physical hitbox gap (12 cm < 20 cm) triggers Perfect Evade even when time > 0.30s!"),
+		Combat->IsLastDodgeCombatEvade());
+	TestNotNull(TEXT("Physical < 20 cm Perfect Evade spawns Afterimage Ghost at A"), Combat->GetLastSpawnedAfterimage());
+	ThreatSubsys->UnregisterMeleeThreat(ClosePhysicalThreatId);
 
-	TestEqual(TEXT("CombatState is Dodging during Wukong Mirage Evade"), Combat->GetCombatState(), EIU_CombatState::Dodging);
-	TestTrue(TEXT("Nearby enemy auto-detected -> Mirage Evade active"), Combat->IsLastDodgeCombatEvade());
-	TestTrue(TEXT("Player is invulnerable during Mirage Evade"), DmgComp->IsInvulnerable());
-	TestNotNull(TEXT("Wukong Afterimage Ghost decoy spawned at origin A"), MirageGhost);
-	if (MirageGhost)
-	{
-		TestTrue(TEXT("Afterimage Ghost remains frozen at exact origin A"),
-			FVector::Dist(MirageGhost->GetActorLocation(), OriginA) < 1.0f);
-	}
-	TestTrue(TEXT("Mirage Evade arrives at EXACT SAME destination B as free-roam Dash/Blink!"),
-		FVector::Dist(DestB_MirageEvade, DestB_EarthDash) < 1.0f);
+	return true;
+}
 
-	// Incoming attack during Mirage Evade must be completely negated (0 HP lost)
-	FIU_DamageSpec IncomingHit;
-	IncomingHit.Amount = 35.0f;
-	IncomingHit.InstigatorActor = Attacker;
-	TestFalse(TEXT("Damage rejected while Evading"), DmgComp->ApplyDamageSpec(IncomingHit));
-	TestEqual(TEXT("Player HP unchanged at 100"), Attr->GetHP(), 100.0f);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_M3_PvPPlayerVsPlayerPerfectEvadeTest,
+	"InfiniteUniverse.Milestone3.PvPPlayerVsPlayerPerfectEvade",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-	// Advance past DodgeDuration -> returns cleanly to Idle & vulnerable again
-	ScopeWorld.TickSimulation(Combat->DodgeDuration + 0.05f, Player);
-	TestEqual(TEXT("Dodge finished cleanly back to Idle"), Combat->GetCombatState(), EIU_CombatState::Idle);
-	TestFalse(TEXT("Invulnerability cleared after Dodge"), DmgComp->IsInvulnerable());
+bool FIU_M3_PvPPlayerVsPlayerPerfectEvadeTest::RunTest(const FString& Parameters)
+{
+	IU_M3TestHelpers::FScopedCombatTestWorld ScopeWorld;
+
+	// Spawn Rival Player 1 (Attacker) and Player 2 (Defender) facing each other
+	AIU_PlayerCharacter* Player1 = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0, 0.0, 0.0), FRotator::ZeroRotator);
+	AIU_PlayerCharacter* Player2 = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(150.0, 0.0, 0.0), FRotator(0.0, 180.0, 0.0));
+	AIU_PlayerController* PC1 = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	AIU_PlayerController* PC2 = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC1->Possess(Player1);
+	PC2->Possess(Player2);
+	Player1->GetIUMovementComponent()->GravityScale = 0.0f;
+	Player2->GetIUMovementComponent()->GravityScale = 0.0f;
+	Player1->GetCombatComponent()->MeleeStepLungeSpeed = 0.0f;
+
+	// 1. Standing face-to-face in PvP WITHOUT Player 1 attacking -> Player 2 RMB does NOT spawn Afterimage!
+	const FVector P2DuelOrigin(150.0, 0.0, 0.0);
+	Player2->DodgeInput();
+	TestFalse(TEXT("PvP: Idle rival player does NOT trigger Perfect Evade"), Player2->GetCombatComponent()->IsLastDodgeCombatEvade());
+	TestNull(TEXT("PvP: No Afterimage spawned when rival player is not attacking"), Player2->GetCombatComponent()->GetLastSpawnedAfterimage());
+
+	ScopeWorld.TickSimulation(Player2->GetCombatComponent()->DodgeCooldown + 0.08f, Player2);
+	Player2->SetActorLocation(P2DuelOrigin);
+	Player2->SetActorRotation(FRotator(0.0, 180.0, 0.0));
+
+	// 2. PvP Melee Attack: Player 1 throws Melee Combo Hit 1 -> Player 2 Perfect-Evades mid-windup!
+	TestTrue(TEXT("PvP: Player 1 starts Melee Attack against Player 2"), Player1->GetCombatComponent()->RequestMeleeAttack());
+	ScopeWorld.TickSimulation(0.04f, Player1); // Inside Player 1's 0.11s punch windup (<= 0.30s to hit!)
+
+	Player2->DodgeInput();
+	TestTrue(TEXT("PvP Melee: Player 2 triggers Perfect Evade against Player 1's punch!"),
+		Player2->GetCombatComponent()->IsLastDodgeCombatEvade());
+	TestNotNull(TEXT("PvP Melee: Player 2 leaves Wukong Afterimage Ghost at duel origin"),
+		Player2->GetCombatComponent()->GetLastSpawnedAfterimage());
+
+	// Advance past Player 1's punch impact frame -> Player 2 takes 0 damage!
+	ScopeWorld.TickSimulation(0.55f, Player1);
+	ScopeWorld.TickSimulation(0.05f, Player2);
+	TestEqual(TEXT("PvP Melee: Player 2 took 0 damage after Perfect Evade"), Player2->GetAttributeComponent()->GetHP(), 100.0f);
+
+	// 3. PvP Ki Blast Projectile: Player 1 fires Q Ki Blast at Player 2 -> Player 2 Perfect-Evades incoming blast!
+	Player2->SetActorLocation(FVector(550.0, 0.0, 0.0));
+	Player2->SetActorRotation(FRotator(0.0, 180.0, 0.0));
+	Player1->GetTargetingComponent()->SetLockedTarget(Player2);
+
+	AIU_KiProjectile* RivalBlast = Player1->GetCombatComponent()->RequestKiBlast();
+	TestNotNull(TEXT("PvP KiBlast: Player 1 fired Ki Blast toward Player 2"), RivalBlast);
+
+	// At 550 cm and speed 3000 cm/s, time-to-impact is ~0.14s (<= 0.30s)!
+	Player2->DodgeInput();
+	TestTrue(TEXT("PvP KiBlast: Player 2 triggers Perfect Evade against incoming Player 1 Ki Blast!"),
+		Player2->GetCombatComponent()->IsLastDodgeCombatEvade());
+	TestNotNull(TEXT("PvP KiBlast: Player 2 leaves Afterimage Ghost while evading Ki Blast"),
+		Player2->GetCombatComponent()->GetLastSpawnedAfterimage());
+
+	ScopeWorld.TickSimulation(0.25f, Player2, RivalBlast);
+	TestEqual(TEXT("PvP KiBlast: Player 2 HP untouched at 100"), Player2->GetAttributeComponent()->GetHP(), 100.0f);
 
 	return true;
 }

@@ -25,6 +25,7 @@ public:
 	AIU_KiProjectile();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Initializes velocity, instigator exclusion, and damage amount immediately after spawning. */
 	void InitializeProjectile(AActor* InShooter, const FVector& ShootDirection, float InDamage, float InSpeed);
@@ -49,6 +50,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|KiBlast")
 	UProjectileMovementComponent* GetProjectileMovement() const { return ProjectileMovement; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|KiBlast")
+	AActor* GetShooterActor() const { return ShooterActor.Get(); }
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|KiBlast")

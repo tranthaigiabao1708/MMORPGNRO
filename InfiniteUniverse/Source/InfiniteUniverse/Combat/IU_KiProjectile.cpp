@@ -2,7 +2,9 @@
 
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_DamageComponent.h"
+#include "Combat/IU_CombatThreatSubsystem.h"
 #include "Attributes/IU_AttributeComponent.h"
+#include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
@@ -55,6 +57,18 @@ void AIU_KiProjectile::BeginPlay()
 	SetLifeSpan(MaxLifetimeSeconds);
 }
 
+void AIU_KiProjectile::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			ThreatSubsys->UnregisterProjectileThreat(this);
+		}
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void AIU_KiProjectile::InitializeProjectile(AActor* InShooter, const FVector& ShootDirection, float InDamage, float InSpeed)
 {
 	ShooterActor = InShooter;
@@ -78,6 +92,14 @@ void AIU_KiProjectile::InitializeProjectile(AActor* InShooter, const FVector& Sh
 		ProjectileMovement->InitialSpeed = ProjectileSpeed;
 		ProjectileMovement->MaxSpeed = ProjectileSpeed;
 		ProjectileMovement->Velocity = NormDir * ProjectileSpeed;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			ThreatSubsys->RegisterProjectileThreat(this);
+		}
 	}
 }
 
@@ -132,6 +154,14 @@ void AIU_KiProjectile::ProcessImpact(AActor* TargetActor, const FVector& ImpactP
 		return;
 	}
 	bHasImpacted = true;
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			ThreatSubsys->UnregisterProjectileThreat(this);
+		}
+	}
 
 	if (TargetActor)
 	{

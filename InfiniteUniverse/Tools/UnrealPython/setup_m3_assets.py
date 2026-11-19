@@ -171,13 +171,14 @@ def setup_m3_assets():
                 actor_subsys.destroy_actor(actor)
 
         dummies = [
-            ("IU_PracticeDummy_Ground_A", unreal.Vector(550.0, -160.0, 95.0)),
-            ("IU_PracticeDummy_Ground_B", unreal.Vector(620.0, 220.0, 95.0)),
-            ("IU_PracticeDummy_Sky_5m", unreal.Vector(900.0, 0.0, 615.0)),
+            ("IU_PracticeDummy_Ground_A", unreal.Vector(550.0, -160.0, 95.0), False),
+            ("IU_PracticeDummy_Ground_B_Striker", unreal.Vector(620.0, 220.0, 95.0), True),
+            ("IU_PracticeDummy_Sky_5m", unreal.Vector(900.0, 0.0, 615.0), False),
         ]
-        for label, loc in dummies:
+        for label, loc, enable_striker in dummies:
             d = actor_subsys.spawn_actor_from_class(dummy_cls, loc)
             d.set_actor_label(label)
+            d.set_editor_property("bEnablePeriodicTestStrike", enable_striker)
 
         level_subsys.save_current_level()
         unreal.log("=== [IU M3] Placed 3 Combat Practice Dummies in M_Prototype ===")

@@ -5,6 +5,7 @@
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_AfterimageGhost.h"
+#include "Combat/IU_CombatThreatSubsystem.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -16,7 +17,6 @@
 
 UIU_CombatComponent::UIU_CombatComponent()
 {
-	// Zero-Tick at rest; enabled dynamically ONLY during a 0.20s Earthling kinematic Dash
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
@@ -63,11 +63,13 @@ void UIU_CombatComponent::EnsureComponentsCached()
 
 void UIU_CombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	CancelPendingMeleeWindup();
 	SetDashZeroGravityOverride(false);
 	SetOwnerPawnCollisionIgnored(false);
 	if (UWorld* World = GetWorld())
 	{
 		FTimerManager& TM = World->GetTimerManager();
+		TM.ClearTimer(MeleeImpactTimerHandle);
 		TM.ClearTimer(AttackStepTimerHandle);
 		TM.ClearTimer(ComboResetTimerHandle);
 		TM.ClearTimer(KiBlastCooldownTimerHandle);
@@ -252,6 +254,8 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		return false;
 	}
 
+	// Cancel any active melee windup/swing cleanly when cancelling into Dash/Evade
+	CancelPendingMeleeWindup();
 	World->GetTimerManager().ClearTimer(AttackStepTimerHandle);
 	bQueuedNextComboHit = false;
 	LastSpawnedAfterimage.Reset();
@@ -261,7 +265,7 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 	const bool bGrounded = (MoveComp && MoveComp->IsMovingOnGround());
 	const FTransform OriginTransform = Owner->GetActorTransform();
 
-	// 1. Compute unified A -> B direction (strictly identical whether an enemy is present or not!)
+	// 1. Compute unified A -> B direction (strictly identical across Dash, InstantBlink, and Perfect Evade!)
 	FVector TravelDir = DesiredWorldDirection.GetSafeNormal();
 	if (TravelDir.IsNearlyZero())
 	{
@@ -291,38 +295,26 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		TravelDir = Owner->GetActorForwardVector();
 	}
 
-	// 2. Detect nearby / locked enemy for Black Myth: Wukong style Mirage Evade
-	AActor* ThreatTarget = nullptr;
-	if (TargetingComp)
-	{
-		if (TargetingComp->IsLockedOn())
-		{
-			AActor* Locked = TargetingComp->GetLockedTarget();
-			if (Locked && FVector::DistSquared(OriginTransform.GetLocation(), Locked->GetActorLocation()) <= FMath::Square((double)CombatEvadeMaxLockDistance))
-			{
-				ThreatTarget = Locked;
-			}
-		}
-		if (!ThreatTarget)
-		{
-			ThreatTarget = TargetingComp->FindNearestLivingTarget(CombatEvadeSenseRadius);
-		}
-	}
+	// 2. Check STRICT Imminent-Damage Condition ("sắp gây sát thương" from Monster, Boss, OR Rival Player):
+	//    True ONLY if an active attack is <= PerfectEvadeTimeWindow (0.30s) from hitting OR < PerfectEvadePhysicalGapCm (20 cm)!
+	UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>();
+	const bool bImminentIncomingAttack = (ThreatSubsys != nullptr) &&
+		ThreatSubsys->HasImminentThreatAgainstActor(Owner, PerfectEvadeTimeWindow, PerfectEvadePhysicalGapCm);
 
-	bLastDodgeWasCombatEvade = (ThreatTarget != nullptr);
-	bLastDodgeBlinkedInstantly = (bLastDodgeWasCombatEvade || MobilityStyle == EIU_MobilityStepStyle::InstantBlink);
+	bLastDodgeWasCombatEvade = bImminentIncomingAttack;
+	bLastDodgeBlinkedInstantly = (bImminentIncomingAttack || MobilityStyle == EIU_MobilityStepStyle::InstantBlink);
 
-	// 3. If evading near an enemy, leave a glowing phantom afterimage decoy right at origin A BEFORE moving!
-	if (bLastDodgeWasCombatEvade)
+	// 3. ONLY Perfect Evade ("Né") leaves a Black Myth: Wukong style Afterimage Ghost at origin A & grants i-frames!
+	if (bImminentIncomingAttack)
 	{
 		LastSpawnedAfterimage = SpawnMirageAfterimageAt(OriginTransform);
+		if (DamageComp)
+		{
+			DamageComp->SetInvulnerable(true);
+		}
 	}
 
-	// 4. Activate i-frames and temporarily ignore Pawn-vs-Pawn blocking so A -> B never snags on enemy capsules
-	if (DamageComp)
-	{
-		DamageComp->SetInvulnerable(true);
-	}
+	// Temporarily ignore Pawn-vs-Pawn blocking so A -> B traversal never snags on capsules
 	SetOwnerPawnCollisionIgnored(true);
 	bDodgeOnCooldown = true;
 	SetCombatState(EIU_CombatState::Dodging);
@@ -332,9 +324,7 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		MoveComp->Velocity = FVector::ZeroVector;
 	}
 
-	// 5. Execute A -> B traversal:
-	//    - Mirage Evade (enemy nearby) OR Alien InstantBlink: relocate immediately to B
-	//    - Earthling Dash (no enemy nearby): streak smoothly across A -> B over DodgeDuration
+	// 4. Execute A -> B traversal (arrives at the EXACT SAME B whether Dash, InstantBlink, or Perfect Evade!)
 	if (bLastDodgeBlinkedInstantly)
 	{
 		bActiveKinematicDash = false;
@@ -353,15 +343,17 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		SetComponentTickEnabled(true);
 	}
 
-	// 6. Orient character yaw (does not alter destination B coordinates)
-	if (ThreatTarget)
+	// 5. Orient character yaw (keep facing locked target if locked-on, else face travel direction)
+	if (TargetingComp && TargetingComp->IsLockedOn())
 	{
-		const FVector TargetLoc = ThreatTarget->GetActorLocation();
-		const FVector ExpectedEndLoc = OriginTransform.GetLocation() + (TravelDir * MobilityTravelDistance);
-		const FVector PostEvadeToThreat = TargetLoc - ExpectedEndLoc;
-		if (!PostEvadeToThreat.IsNearlyZero(1.0f))
+		if (const AActor* Locked = TargetingComp->GetLockedTarget())
 		{
-			Owner->SetActorRotation(FRotator(0.0f, PostEvadeToThreat.Rotation().Yaw, 0.0f));
+			const FVector ExpectedEndLoc = OriginTransform.GetLocation() + (TravelDir * MobilityTravelDistance);
+			const FVector ToLocked = Locked->GetActorLocation() - ExpectedEndLoc;
+			if (!ToLocked.IsNearlyZero(1.0f))
+			{
+				Owner->SetActorRotation(FRotator(0.0f, ToLocked.Rotation().Yaw, 0.0f));
+			}
 		}
 	}
 	else
@@ -480,6 +472,7 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 		return;
 	}
 
+	CancelPendingMeleeWindup();
 	CurrentComboStep = StepIndex;
 	bQueuedNextComboHit = false;
 	SetCombatState(EIU_CombatState::Attacking);
@@ -514,12 +507,43 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 		}
 	}
 
-	const float StepDamage = ComboStepDamages.IsValidIndex(StepIndex - 1)
+	PendingMeleeStepDamage = ComboStepDamages.IsValidIndex(StepIndex - 1)
 		? ComboStepDamages[StepIndex - 1]
 		: 15.0f;
 
-	PerformMeleeSweep(StepDamage);
+	const float RawWindup = ComboStepWindupTimes.IsValidIndex(StepIndex - 1)
+		? ComboStepWindupTimes[StepIndex - 1]
+		: 0.11f;
+	const float EffectiveWindup = FMath::Clamp(RawWindup, 0.0f, FMath::Max(0.0f, AttackStepDuration - 0.03f));
+
 	OnComboStepExecuted.Broadcast(CurrentComboStep);
+
+	if (EffectiveWindup > KINDA_SMALL_NUMBER)
+	{
+		// Register melee windup threat so an opposing Player (PvP) or AI can Perfect-Evade right before impact!
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			const FVector WindupStartPos = Owner->GetActorLocation() + (StrikeDir * 45.0f);
+			const FVector ImpactTargetPos = Owner->GetActorLocation() + (StrikeDir * FMath::Max(60.0f, MeleeReachDistance - MeleeHitSweepRadius * 0.35f));
+			ActiveMeleeThreatId = ThreatSubsys->RegisterMeleeAttackWindup(
+				Owner,
+				WindupStartPos,
+				ImpactTargetPos,
+				MeleeHitSweepRadius,
+				EffectiveWindup);
+		}
+
+		World->GetTimerManager().SetTimer(
+			MeleeImpactTimerHandle,
+			this,
+			&UIU_CombatComponent::OnMeleeImpactTimerFired,
+			EffectiveWindup,
+			false);
+	}
+	else
+	{
+		PerformMeleeSweep(PendingMeleeStepDamage);
+	}
 
 	World->GetTimerManager().SetTimer(
 		AttackStepTimerHandle,
@@ -527,6 +551,40 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 		&UIU_CombatComponent::OnAttackStepTimerFinished,
 		AttackStepDuration,
 		false);
+}
+
+void UIU_CombatComponent::OnMeleeImpactTimerFired()
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			ThreatSubsys->UnregisterMeleeThreat(ActiveMeleeThreatId);
+		}
+	}
+	ActiveMeleeThreatId = 0;
+
+	if (CurrentCombatState == EIU_CombatState::Attacking)
+	{
+		PerformMeleeSweep(PendingMeleeStepDamage);
+	}
+}
+
+void UIU_CombatComponent::CancelPendingMeleeWindup()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MeleeImpactTimerHandle);
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			if (ActiveMeleeThreatId > 0)
+			{
+				ThreatSubsys->UnregisterMeleeThreat(ActiveMeleeThreatId);
+			}
+			ThreatSubsys->CancelThreatsFromAttacker(GetOwner());
+		}
+	}
+	ActiveMeleeThreatId = 0;
 }
 
 void UIU_CombatComponent::PerformMeleeSweep(float StepDamage)
@@ -673,7 +731,6 @@ void UIU_CombatComponent::OnComboResetTimerExpired()
 
 void UIU_CombatComponent::OnDodgeFinished()
 {
-	// Flush any tiny sub-frame remainder of an Earthling Dash so destination B matches InstantBlink/Evade to the millimeter
 	if (bActiveKinematicDash && RemainingDashDistance > 0.01f)
 	{
 		if (AActor* Owner = GetOwner())
@@ -726,6 +783,7 @@ void UIU_CombatComponent::HandleHitReactionStarted(const FIU_DamageSpec& Spec)
 		return;
 	}
 
+	CancelPendingMeleeWindup();
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(AttackStepTimerHandle);
@@ -744,6 +802,7 @@ void UIU_CombatComponent::HandleHitReactionRecovered()
 
 void UIU_CombatComponent::HandleOwnerHealthDepleted(AActor* DepletedActor)
 {
+	CancelPendingMeleeWindup();
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(AttackStepTimerHandle);
