@@ -44,6 +44,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Damage")
 	bool IsInHitReaction() const { return bInHitReaction; }
 
+	/** Clears hit-stun timer and invulnerability flag cleanly upon respawn/reset. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Damage")
+	void ResetDamageState();
+
 	UPROPERTY(BlueprintAssignable, Category = "IU|Damage|Events")
 	FIU_OnDamageReceivedSignature OnDamageReceived;
 

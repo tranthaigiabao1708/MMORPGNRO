@@ -16,6 +16,7 @@ class UIU_AttributeComponent;
 class UIU_DamageComponent;
 class UIU_TargetingComponent;
 class UIU_CombatComponent;
+class UIU_SkeletalAnimDirectorComponent;
 
 /**
  * Playable Third-Person Character orchestrator (Milestone 1).
@@ -29,7 +30,9 @@ class INFINITEUNIVERSE_API AIU_PlayerCharacter : public ACharacter
 public:
 	explicit AIU_PlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void Landed(const FHitResult& Hit) override;
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
@@ -89,6 +92,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Combat")
 	UIU_CombatComponent* GetCombatComponent() const { return CombatComponent; }
 
+	UFUNCTION(BlueprintPure, Category = "IU|Animation")
+	UIU_SkeletalAnimDirectorComponent* GetAnimDirectorComponent() const { return AnimDirectorComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Placeholder")
+	UStaticMeshComponent* GetPlaceholderBodyMesh() const { return PlaceholderBodyMesh; }
+
+	/** Restores full HP/Ki, movement, Idle combat state, and spawn transform after defeat. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Lifecycle")
+	void ResetPlayerAtSpawn();
+
 	UFUNCTION(BlueprintPure, Category = "IU|Camera")
 	USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
@@ -98,18 +111,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Camera")
 	float GetDesiredCameraArmLength() const { return DesiredCameraArmLength; }
 
+	/** Returns the exact world-space origin and forward unit vector of the active third-person FollowCamera. */
+	UFUNCTION(BlueprintPure, Category = "IU|Camera")
+	bool GetCameraAimRay(FVector& OutCameraOrigin, FVector& OutCameraDirection) const;
+
 	// ========================================================================
-	// Tunable Camera Parameters
+	// Tunable Camera Parameters (Genshin Impact-Inspired Elevated Framing)
 	// ========================================================================
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "100.0", ClampMax = "1000.0"))
-	float DefaultCameraArmLength = 360.0f;
+	float DefaultCameraArmLength = 420.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "100.0", ClampMax = "600.0"))
-	float MinCameraArmLength = 180.0f;
+	float MinCameraArmLength = 200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "250.0", ClampMax = "1200.0"))
-	float MaxCameraArmLength = 620.0f;
+	float MaxCameraArmLength = 700.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "10.0", ClampMax = "200.0"))
 	float CameraZoomStep = 45.0f;
@@ -117,28 +134,39 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "1.0", ClampMax = "30.0"))
 	float CameraZoomInterpSpeed = 12.0f;
 
-	/** Pivot offset on the character's central vertical axis (X=0, Y=0 keeps character as pure orbit center). */
+	/** Upper-shoulder/neck orbit pivot on the character's central vertical axis (X=0, Y=0). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera")
-	FVector CameraTargetOffset = FVector(0.0f, 0.0f, 55.0f);
+	FVector CameraTargetOffset = FVector(0.0f, 0.0f, 68.0f);
 
-	/** Camera socket offset (Y=0 ensures camera looks straight along character axis without shoulder skew). */
+	/** Elevated Genshin-style socket offset (+52 cm up) placing character in lower half so center aim ray clears head. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera")
-	FVector CameraSocketOffset = FVector(0.0f, 0.0f, 20.0f);
+	FVector CameraSocketOffset = FVector(0.0f, 0.0f, 52.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.1", ClampMax = "5.0"))
 	float LookSensitivity = 1.0f;
 
-	/** Default camera field-of-view in degrees. */
+	/** Natural anime action RPG field-of-view (86 deg keeps mid-range enemies crisp and clear to aim at). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "60.0", ClampMax = "120.0"))
-	float DefaultCameraFOV = 90.0f;
+	float DefaultCameraFOV = 86.0f;
 
 	/** Expanded camera field-of-view during Flight Dash for high-speed sensation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "70.0", ClampMax = "130.0"))
-	float FlightDashCameraFOV = 102.0f;
+	float FlightDashCameraFOV = 100.0f;
 
 	/** Extra camera arm distance added smoothly while Flight Dashing (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.0", ClampMax = "300.0"))
 	float FlightDashArmLengthOffset = 65.0f;
+
+	/** Automatically equips /Game/Characters/Player/Meshes/SK_Player at BeginPlay when no custom mesh is set. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Animation")
+	bool bAutoLoadDefaultAnimeMesh = true;
+
+	/** Automatically respawns the defeated player at spawn transform so prototype testing never soft-locks. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Lifecycle")
+	bool bAutoRespawnOnDefeat = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Lifecycle", meta = (ClampMin = "0.2", ClampMax = "30.0"))
+	float PlayerRespawnDelaySeconds = 3.0f;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Movement")
@@ -158,6 +186,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Combat")
 	TObjectPtr<UIU_CombatComponent> CombatComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Animation")
+	TObjectPtr<UIU_SkeletalAnimDirectorComponent> AnimDirectorComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -182,11 +213,17 @@ private:
 	UFUNCTION()
 	void HandleCombatStateVisuals(EIU_CombatState PreviousState, EIU_CombatState NewState);
 
-	float DesiredCameraArmLength = 360.0f;
+	UFUNCTION()
+	void HandlePlayerDefeated(AActor* DepletedActor);
+
+	FTransform InitialSpawnTransform;
+	bool bHasSavedInitialSpawn = false;
+	float DesiredCameraArmLength = 420.0f;
 	FVector2D LastMoveAxisInput = FVector2D::ZeroVector;
 	bool bFlightDashCameraActive = false;
 	FTimerHandle StrikePulseResetTimerHandle;
 	FTimerHandle VanishFlickerTimerHandle;
+	FTimerHandle PlayerAutoRespawnTimerHandle;
 	void ResetStrikeVisualPulse();
 	void RestoreVanishVisibility();
 	void UpdatePlaceholderVisibility();

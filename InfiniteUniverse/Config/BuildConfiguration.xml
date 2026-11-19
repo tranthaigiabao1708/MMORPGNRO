@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
-	<!-- Safe parallel compilation cap for Intel i5-11400H (6C/12T) with 15.8 GB RAM -->
-	<!-- Prevents cl.exe out-of-memory errors (C1060) during Unreal C++ builds -->
+	<!-- Tuned for Primary Workstation: Intel Core i5-14600KF (14C/20T) + 32 GB RAM -->
+	<!-- Uses up to 18 parallel actions (1.5 GB ceiling each = ~27 GB max) keeping OS/Editor responsive -->
 	<ParallelExecutor>
-		<MaxProcessorCount>6</MaxProcessorCount>
+		<MaxProcessorCount>18</MaxProcessorCount>
 		<ProcessorCountMultiplier>1.0</ProcessorCountMultiplier>
 		<MemoryPerActionBytes>1610612736</MemoryPerActionBytes>
 	</ParallelExecutor>

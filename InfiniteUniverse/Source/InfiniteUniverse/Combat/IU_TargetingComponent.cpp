@@ -2,9 +2,11 @@
 
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_DamageComponent.h"
+#include "Characters/Player/IU_PlayerCharacter.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -35,14 +37,37 @@ void UIU_TargetingComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		return;
 	}
 
-	// Smoothly assist controller rotation so 3D target stays framed in view on ground & in flight
+	// Smoothly assist controller rotation so 3D target stays framed cleanly ABOVE the character's head (Genshin-style)
 	if (APawn* OwnerPawn = Cast<APawn>(Owner))
 	{
 		if (AController* Ctrl = OwnerPawn->GetController())
 		{
-			const FVector ViewOrigin = OwnerPawn->GetPawnViewLocation();
 			const FVector AimPoint = GetLockedTargetAimLocation();
-			const FRotator DesiredRot = (AimPoint - ViewOrigin).Rotation();
+			FVector PivotOrigin = OwnerPawn->GetPawnViewLocation();
+			float ArmLen = 0.0f;
+			float SocketOffsetZ = 0.0f;
+
+			if (const AIU_PlayerCharacter* PlayerChar = Cast<AIU_PlayerCharacter>(OwnerPawn))
+			{
+				if (const USpringArmComponent* Boom = PlayerChar->GetCameraBoom())
+				{
+					PivotOrigin = Boom->GetComponentLocation() + Boom->TargetOffset;
+					ArmLen = Boom->TargetArmLength;
+					SocketOffsetZ = Boom->SocketOffset.Z;
+				}
+			}
+
+			const FVector PivotToTarget = AimPoint - PivotOrigin;
+			FRotator DesiredRot = PivotToTarget.Rotation();
+
+			// Exact analytical compensation for elevated CameraSocketOffset.Z so locked enemy projects onto center sightline
+			if (!FMath::IsNearlyZero(SocketOffsetZ))
+			{
+				const float TotalRayRange = FMath::Max(ArmLen + PivotToTarget.Size(), FMath::Abs(SocketOffsetZ) + 1.0f);
+				const float ParallaxPitchDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(SocketOffsetZ / TotalRayRange, -0.85f, 0.85f)));
+				DesiredRot.Pitch = FMath::Clamp(DesiredRot.Pitch - ParallaxPitchDeg, -75.0f, 75.0f);
+			}
+
 			const FRotator CurrentRot = Ctrl->GetControlRotation();
 			const FRotator SmoothedRot = FMath::RInterpTo(CurrentRot, DesiredRot, DeltaTime, CameraAssistInterpSpeed);
 			Ctrl->SetControlRotation(FRotator(SmoothedRot.Pitch, SmoothedRot.Yaw, 0.0f));
@@ -68,7 +93,11 @@ bool UIU_TargetingComponent::ToggleLockOn()
 	AActor* Owner = GetOwner();
 	FVector ViewLoc = Owner->GetActorLocation();
 	FVector ViewDir = Owner->GetActorForwardVector();
-	if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+	if (const AIU_PlayerCharacter* PlayerChar = Cast<AIU_PlayerCharacter>(Owner))
+	{
+		PlayerChar->GetCameraAimRay(ViewLoc, ViewDir);
+	}
+	else if (const APawn* OwnerPawn = Cast<APawn>(Owner))
 	{
 		if (const AController* Ctrl = OwnerPawn->GetController())
 		{

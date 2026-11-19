@@ -8,7 +8,7 @@ public class InfiniteUniverseTarget : TargetRules
 	public InfiniteUniverseTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Game;
-		DefaultBuildSettings = BuildSettingsVersion.V5;
+		DefaultBuildSettings = BuildSettingsVersion.Latest;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
 		ExtraModuleNames.Add("InfiniteUniverse");
 	}

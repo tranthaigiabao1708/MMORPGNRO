@@ -7,6 +7,8 @@
 #include "Combat/IU_DamageComponent.h"
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_CombatComponent.h"
+#include "Characters/IU_SkeletalAnimDirectorComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Camera/CameraComponent.h"
@@ -37,6 +39,7 @@ AIU_PlayerCharacter::AIU_PlayerCharacter(const FObjectInitializer& ObjectInitial
 	DamageComponent = CreateDefaultSubobject<UIU_DamageComponent>(TEXT("DamageComponent"));
 	TargetingComponent = CreateDefaultSubobject<UIU_TargetingComponent>(TEXT("TargetingComponent"));
 	CombatComponent = CreateDefaultSubobject<UIU_CombatComponent>(TEXT("CombatComponent"));
+	AnimDirectorComponent = CreateDefaultSubobject<UIU_SkeletalAnimDirectorComponent>(TEXT("AnimDirectorComponent"));
 
 	// Position SkeletalMesh at bottom of capsule facing +X
 	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
@@ -88,9 +91,40 @@ AIU_PlayerCharacter::AIU_PlayerCharacter(const FObjectInitializer& ObjectInitial
 	DesiredCameraArmLength = DefaultCameraArmLength;
 }
 
+void AIU_PlayerCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (AttributeComponent)
+	{
+		AttributeComponent->OnHealthDepleted.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandlePlayerDefeated);
+	}
+}
+
 void AIU_PlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	InitialSpawnTransform = GetActorTransform();
+	bHasSavedInitialSpawn = true;
+
+	// Auto-migrate legacy M1 Blueprint CDO camera values (360 / Z=55 / Z=20 / FOV=90) to Genshin-elevated profile
+	if (FMath::IsNearlyEqual(DefaultCameraArmLength, 360.0f, 0.5f))
+	{
+		DefaultCameraArmLength = 420.0f;
+	}
+	if (CameraTargetOffset.Equals(FVector(0.0f, 0.0f, 55.0f), 0.5f))
+	{
+		CameraTargetOffset = FVector(0.0f, 0.0f, 68.0f);
+	}
+	if (CameraSocketOffset.Equals(FVector(0.0f, 0.0f, 20.0f), 0.5f))
+	{
+		CameraSocketOffset = FVector(0.0f, 0.0f, 52.0f);
+	}
+	if (FMath::IsNearlyEqual(DefaultCameraFOV, 90.0f, 0.5f))
+	{
+		DefaultCameraFOV = 86.0f;
+	}
 
 	DesiredCameraArmLength = FMath::Clamp(DefaultCameraArmLength, MinCameraArmLength, MaxCameraArmLength);
 	if (CameraBoom)
@@ -98,6 +132,7 @@ void AIU_PlayerCharacter::BeginPlay()
 		CameraBoom->TargetArmLength = DesiredCameraArmLength;
 		CameraBoom->TargetOffset = CameraTargetOffset;
 		CameraBoom->SocketOffset = CameraSocketOffset;
+		CameraBoom->TickComponent(0.0f, LEVELTICK_All, nullptr);
 	}
 	if (FollowCamera)
 	{
@@ -105,15 +140,43 @@ void AIU_PlayerCharacter::BeginPlay()
 	}
 	if (FlightComponent)
 	{
-		FlightComponent->OnFlightDashChanged.AddDynamic(this, &AIU_PlayerCharacter::HandleFlightDashChanged);
+		FlightComponent->OnFlightDashChanged.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleFlightDashChanged);
 	}
 	if (CombatComponent)
 	{
-		CombatComponent->OnComboStepExecuted.AddDynamic(this, &AIU_PlayerCharacter::HandleComboVisualPulse);
-		CombatComponent->OnCombatStateChanged.AddDynamic(this, &AIU_PlayerCharacter::HandleCombatStateVisuals);
+		CombatComponent->OnComboStepExecuted.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleComboVisualPulse);
+		CombatComponent->OnCombatStateChanged.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleCombatStateVisuals);
+	}
+	if (AttributeComponent)
+	{
+		AttributeComponent->OnHealthDepleted.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandlePlayerDefeated);
+	}
+
+	if (bAutoLoadDefaultAnimeMesh && GetMesh() && !GetMesh()->GetSkeletalMeshAsset())
+	{
+		if (USkeletalMesh* DefaultAnimeMesh = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Player/Meshes/SK_Player.SK_Player")))
+		{
+			GetMesh()->SetSkeletalMeshAsset(DefaultAnimeMesh);
+		}
 	}
 
 	UpdatePlaceholderVisibility();
+	if (AnimDirectorComponent)
+	{
+		AnimDirectorComponent->RefreshMeshAndBindings();
+	}
+}
+
+void AIU_PlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		FTimerManager& TM = World->GetTimerManager();
+		TM.ClearTimer(StrikePulseResetTimerHandle);
+		TM.ClearTimer(VanishFlickerTimerHandle);
+		TM.ClearTimer(PlayerAutoRespawnTimerHandle);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void AIU_PlayerCharacter::Tick(float DeltaTime)
@@ -174,6 +237,16 @@ void AIU_PlayerCharacter::Landed(const FHitResult& Hit)
 
 void AIU_PlayerCharacter::ApplyMovementInput(const FVector2D& MoveAxis)
 {
+	if (AttributeComponent && AttributeComponent->IsDead())
+	{
+		LastMoveAxisInput = FVector2D::ZeroVector;
+		if (FlightComponent)
+		{
+			FlightComponent->SetMoveAxisInput(FVector2D::ZeroVector);
+		}
+		return;
+	}
+
 	LastMoveAxisInput = MoveAxis;
 
 	if (FlightComponent)
@@ -226,8 +299,41 @@ void AIU_PlayerCharacter::AdjustCameraZoom(float ZoomAxisValue)
 	SetActorTickEnabled(true);
 }
 
+bool AIU_PlayerCharacter::GetCameraAimRay(FVector& OutCameraOrigin, FVector& OutCameraDirection) const
+{
+	const FRotator AimRot = Controller ? Controller->GetControlRotation() : GetActorRotation();
+	OutCameraDirection = AimRot.Vector();
+
+	if (CameraBoom && FollowCamera)
+	{
+		// Compute exact elevated lens location even if SpringArm has not ticked yet this frame
+		if (CameraBoom->IsRegistered())
+		{
+			const FVector PivotPos = CameraBoom->GetComponentLocation() + CameraTargetOffset;
+			const FVector ArmTip = PivotPos - (OutCameraDirection * CameraBoom->TargetArmLength);
+			const FVector SocketWorld = ArmTip + FQuat(AimRot).RotateVector(CameraSocketOffset);
+			const FVector LiveCamLoc = FollowCamera->GetComponentLocation();
+
+			// Use live SpringArm-collided camera position once initialized; fallback to analytical elevated lens
+			OutCameraOrigin = (FVector::DistSquared(LiveCamLoc, GetActorLocation()) > 100.0)
+				? LiveCamLoc
+				: SocketWorld;
+			return true;
+		}
+	}
+
+	OutCameraOrigin = GetPawnViewLocation();
+	return false;
+}
+
 void AIU_PlayerCharacter::StartJumpInput()
 {
+	if ((AttributeComponent && AttributeComponent->IsDead()) ||
+		(DamageComponent && DamageComponent->IsInHitReaction()))
+	{
+		return;
+	}
+
 	if (FlightComponent)
 	{
 		FlightComponent->HandleJumpOrAscendStarted();
@@ -252,6 +358,11 @@ void AIU_PlayerCharacter::StopJumpInput()
 
 void AIU_PlayerCharacter::StartDescendInput()
 {
+	if (AttributeComponent && AttributeComponent->IsDead())
+	{
+		return;
+	}
+
 	if (FlightComponent && FlightComponent->IsFlying())
 	{
 		FlightComponent->HandleDescendStarted();
@@ -299,6 +410,12 @@ void AIU_PlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHe
 
 void AIU_PlayerCharacter::ToggleFlightInput()
 {
+	if ((AttributeComponent && AttributeComponent->IsDead()) ||
+		(DamageComponent && DamageComponent->IsInHitReaction()))
+	{
+		return;
+	}
+
 	if (FlightComponent)
 	{
 		FlightComponent->ToggleFlightMode();
@@ -307,6 +424,11 @@ void AIU_PlayerCharacter::ToggleFlightInput()
 
 void AIU_PlayerCharacter::StartSprintInput()
 {
+	if (AttributeComponent && AttributeComponent->IsDead())
+	{
+		return;
+	}
+
 	if (IUMovementComponent)
 	{
 		IUMovementComponent->SetSprinting(true);
@@ -511,5 +633,111 @@ void AIU_PlayerCharacter::UpdatePlaceholderVisibility()
 	if (PlaceholderBodyMesh)
 	{
 		PlaceholderBodyMesh->SetVisibility(!bHasSkeletalMesh, true);
+	}
+}
+
+void AIU_PlayerCharacter::HandlePlayerDefeated(AActor* DepletedActor)
+{
+	LastMoveAxisInput = FVector2D::ZeroVector;
+
+	if (FlightComponent)
+	{
+		FlightComponent->SetMoveAxisInput(FVector2D::ZeroVector);
+		FlightComponent->HandleJumpOrAscendCompleted();
+		FlightComponent->HandleDescendCompleted();
+		FlightComponent->SetFlightDashActive(false);
+		FlightComponent->ExitFlight(false);
+	}
+
+	if (TargetingComponent)
+	{
+		TargetingComponent->ClearLockOn();
+	}
+
+	if (IUMovementComponent)
+	{
+		IUMovementComponent->SetSprinting(false);
+		IUMovementComponent->StopMovementImmediately();
+		IUMovementComponent->DisableMovement();
+	}
+
+	const bool bHasSkeletalMesh = (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr);
+	if (!bHasSkeletalMesh && PlaceholderBodyMesh)
+	{
+		PlaceholderBodyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -66.0f));
+		PlaceholderBodyMesh->SetRelativeRotation(FRotator(-85.0f, 0.0f, 0.0f));
+		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.65f, 0.65f, 0.45f));
+	}
+
+	if (bAutoRespawnOnDefeat)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				PlayerAutoRespawnTimerHandle,
+				this,
+				&AIU_PlayerCharacter::ResetPlayerAtSpawn,
+				FMath::Max(0.2f, PlayerRespawnDelaySeconds),
+				false);
+		}
+	}
+}
+
+void AIU_PlayerCharacter::ResetPlayerAtSpawn()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PlayerAutoRespawnTimerHandle);
+	}
+
+	if (AttributeComponent)
+	{
+		AttributeComponent->ResetAttributesToFull();
+	}
+	if (DamageComponent)
+	{
+		DamageComponent->ResetDamageState();
+	}
+	if (CombatComponent)
+	{
+		CombatComponent->ResetCombatState();
+	}
+	if (FlightComponent)
+	{
+		FlightComponent->SetMoveAxisInput(FVector2D::ZeroVector);
+		FlightComponent->HandleJumpOrAscendCompleted();
+		FlightComponent->HandleDescendCompleted();
+		FlightComponent->SetFlightDashActive(false);
+		FlightComponent->ExitFlight(false);
+	}
+
+	if (bHasSavedInitialSpawn)
+	{
+		TeleportTo(InitialSpawnTransform.GetLocation(), InitialSpawnTransform.GetRotation().Rotator(), false, true);
+	}
+
+	UnCrouch();
+	if (IUMovementComponent)
+	{
+		IUMovementComponent->SetSprinting(false);
+		IUMovementComponent->StopMovementImmediately();
+		IUMovementComponent->SetMovementMode(MOVE_Walking);
+		IUMovementComponent->SetIUMovementMode(EIU_PlayerMovementMode::Grounded);
+		IUMovementComponent->RefreshMovementSettings();
+	}
+
+	if (PlaceholderBodyMesh)
+	{
+		PlaceholderBodyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -5.0f));
+		PlaceholderBodyMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.65f, 0.65f, 1.65f));
+	}
+
+	ApplyVisualFlightLean(FRotator::ZeroRotator);
+	RestoreVanishVisibility();
+
+	if (AnimDirectorComponent)
+	{
+		AnimDirectorComponent->ResetAnimDirector();
 	}
 }

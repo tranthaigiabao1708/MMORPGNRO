@@ -36,6 +36,11 @@ Build/
 *.blend1
 *.blend2
 
+# Python Bytecode Cache
+__pycache__/
+*.pyc
+*.pyo
+
 # OS Temp Files
 Thumbs.db
 .DS_Store

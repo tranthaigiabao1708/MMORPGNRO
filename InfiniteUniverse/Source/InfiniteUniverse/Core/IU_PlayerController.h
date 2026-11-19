@@ -26,6 +26,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
+	/** Marks synthetic headless automation test controllers (without ULocalPlayer) as locally controlled in UE 5.8+. */
+	void MarkAsLocalTestController() { SetAsLocalPlayerController(); }
+
 	/**
 	 * Populates an InputMappingContext in C++ using direct FEnhancedActionKeyMapping& references
 	 * so axis swizzle/negate modifiers for W/A/S/D and Mouse2D are guaranteed persisted on the asset.
@@ -98,14 +101,22 @@ public:
 	TObjectPtr<UInputAction> ToggleMobilityStyleAction;
 
 	// ========================================================================
-	// Camera Pitch Clamp Limits
+	// Camera Pitch Clamp Limits & Genshin-Style Initial Overlook Angle
 	// ========================================================================
+
+	/** Gentle downward overlook pitch (-8.5 deg) on spawn so enemies ahead & character both stay clearly visible. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "-35.0", ClampMax = "15.0"))
+	float DefaultStartingCameraPitch = -8.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "-89.0", ClampMax = "0.0"))
 	float MinCameraPitch = -75.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.0", ClampMax = "89.0"))
 	float MaxCameraPitch = 75.0f;
+
+	/** Applies DefaultStartingCameraPitch while preserving current controller yaw. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Camera")
+	void ApplyInitialGameplayCameraAngle();
 
 private:
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;

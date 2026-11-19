@@ -74,6 +74,7 @@ bool FIU_M2_DoubleSpaceActivationRuleTest::RunTest(const FString& Parameters)
 	IU_M2TestHelpers::FScopedFlightTestWorld ScopeWorld;
 	AIU_PlayerCharacter* PlayerChar = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0, 0.0, 200.0), FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(PlayerChar);
 
 	UIU_FlightComponent* FlightComp = PlayerChar->GetFlightComponent();
@@ -110,6 +111,7 @@ bool FIU_M2_GradualAscentCurveAndCtrl2xSpeedTest::RunTest(const FString& Paramet
 	IU_M2TestHelpers::FScopedFlightTestWorld ScopeWorld;
 	AIU_PlayerCharacter* PlayerChar = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0, 0.0, 500.0), FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(PlayerChar);
 
 	UIU_FlightComponent* FlightComp = PlayerChar->GetFlightComponent();
@@ -171,6 +173,7 @@ bool FIU_M2_ShiftDescendAndLandingTest::RunTest(const FString& Parameters)
 
 	AIU_PlayerCharacter* PlayerChar = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0, 0.0, 260.0), FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(PlayerChar);
 
 	UIU_FlightComponent* FlightComp = PlayerChar->GetFlightComponent();

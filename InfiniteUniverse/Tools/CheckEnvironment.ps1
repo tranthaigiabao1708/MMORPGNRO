@@ -8,31 +8,42 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $UProjectPath = Join-Path $ProjectRoot "InfiniteUniverse.uproject"
 $AllPassed = $true
 
+function Get-UEVersionKey([string]$VerText) {
+    $clean = $VerText -replace '^UE_', ''
+    try { return [version]($clean + $(if ($clean -notmatch '\.') { '.0' } else { '' })) }
+    catch { return [version]"0.0" }
+}
+
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host " INFINITE UNIVERSE - MILESTONE 0 ENVIRONMENT CHECK" -ForegroundColor Cyan
 Write-Host "==================================================================" -ForegroundColor Cyan
 
-# 1. Disk Space Check (Protect C: drive, ensure D: has space for DDC/Build)
+# 1. Disk Space Check
 $driveC = Get-PSDrive C
 $driveD = Get-PSDrive D -ErrorAction SilentlyContinue
 $freeC_GB = [math]::Round($driveC.Free / 1GB, 1)
 $freeD_GB = if ($driveD) { [math]::Round($driveD.Free / 1GB, 1) } else { 0 }
 
-Write-Host ("[DISK] C: Free = {0} GB | D: Free = {1} GB" -f $freeC_GB, $freeD_GB)
+if ($driveD) {
+    Write-Host ("[DISK] C: Free = {0} GB | D: Free = {1} GB" -f $freeC_GB, $freeD_GB)
+} else {
+    Write-Host ("[DISK] C: Free = {0} GB (Single-drive workstation)" -f $freeC_GB)
+}
+
 if ($freeC_GB -lt 10.0) {
     Write-Host "  [FAIL] C: drive critically low (< 10 GB free)." -ForegroundColor Red
     $AllPassed = $false
-} elseif ($freeC_GB -lt 45.0) {
-    Write-Host "  [WARN] C: drive has < 45 GB free. Keep UE5 & DerivedDataCache on D:!" -ForegroundColor Yellow
+} elseif ($freeC_GB -lt 45.0 -and $driveD) {
+    Write-Host "  [WARN] C: drive has < 45 GB free. DerivedDataCache will redirect to D:\UE_DerivedDataCache." -ForegroundColor Yellow
 }
 
-# 2. Find Unreal Engine 5 Installation
+# 2. Find Unreal Engine 5 Installation (prefers highest installed 5.x, e.g. 5.8)
 $foundUEVersion = $null
 $foundUEPath = $null
 
 if ($CustomUE5Path -and (Test-Path (Join-Path $CustomUE5Path "Engine\Build\BatchFiles\Build.bat"))) {
     $foundUEPath = $CustomUE5Path
-    $foundUEVersion = Split-Path -Leaf $CustomUE5Path
+    $foundUEVersion = (Split-Path -Leaf $CustomUE5Path) -replace '^UE_', ''
 }
 
 if (-not $foundUEPath) {
@@ -41,7 +52,7 @@ if (-not $foundUEPath) {
         $ueEntry = Get-Content $launcherDat -Raw | ConvertFrom-Json |
             Select-Object -ExpandProperty InstallationList |
             Where-Object { $_.AppName -like "UE_5*" } |
-            Sort-Object AppName -Descending | Select-Object -First 1
+            Sort-Object { Get-UEVersionKey $_.AppName } -Descending | Select-Object -First 1
         if ($ueEntry -and (Test-Path (Join-Path $ueEntry.InstallLocation "Engine\Build\BatchFiles\Build.bat"))) {
             $foundUEVersion = $ueEntry.AppName.Replace("UE_", "")
             $foundUEPath = $ueEntry.InstallLocation
@@ -50,10 +61,11 @@ if (-not $foundUEPath) {
 }
 
 if (-not $foundUEPath) {
-    foreach ($dir in @("D:\Epic Games", "C:\Program Files\Epic Games", "D:\UnrealEngine")) {
+    foreach ($dir in @("C:\Program Files\Epic Games", "D:\Epic Games", "D:\UnrealEngine")) {
         if (Test-Path $dir) {
             $cand = Get-ChildItem $dir -Directory -Filter "UE_5*" -ErrorAction SilentlyContinue |
-                Sort-Object Name -Descending | Select-Object -First 1
+                Where-Object { -not (Test-Path (Join-Path $_.FullName ".egstore\Pending")) } |
+                Sort-Object { Get-UEVersionKey $_.Name } -Descending | Select-Object -First 1
             if ($cand -and (Test-Path (Join-Path $cand.FullName "Engine\Build\BatchFiles\Build.bat"))) {
                 $foundUEVersion = $cand.Name.Replace("UE_", "")
                 $foundUEPath = $cand.FullName
@@ -69,16 +81,22 @@ if ($foundUEPath) {
         $uproj = Get-Content $UProjectPath -Raw | ConvertFrom-Json
         if ($uproj.EngineAssociation -ne $foundUEVersion) {
             $uproj.EngineAssociation = $foundUEVersion
-            $uproj | ConvertTo-Json -Depth 10 | Set-Content $UProjectPath -Encoding UTF8
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText($UProjectPath, ($uproj | ConvertTo-Json -Depth 10), $utf8NoBom)
             Write-Host ("  [INFO] Updated InfiniteUniverse.uproject EngineAssociation -> {0}" -f $foundUEVersion) -ForegroundColor Cyan
         }
     }
 } else {
-    Write-Host "[BLOCKED] Unreal Engine 5 NOT FOUND. Install UE 5.4 or 5.5 onto D:\Epic Games\" -ForegroundColor Red
+    $pendingInstall = Get-ChildItem "C:\Program Files\Epic Games", "D:\Epic Games" -Directory -Filter "UE_5*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pendingInstall) {
+        Write-Host ("[BLOCKED] Unreal Engine folder '{0}' detected at '{1}', but Build.bat is not ready yet (Epic Games Launcher download/install still in progress)." -f $pendingInstall.Name, $pendingInstall.FullName) -ForegroundColor Yellow
+    } else {
+        Write-Host "[BLOCKED] Unreal Engine 5 NOT FOUND. Install UE 5.8 via Epic Games Launcher." -ForegroundColor Red
+    }
     $AllPassed = $false
 }
 
-# 3. MSVC v143 / C++ x64 Compiler Check
+# 3. MSVC C++ x64 Compiler Check
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vcPath = $null
 if (Test-Path $vswhere) {
@@ -93,7 +111,7 @@ if ($vcPath) {
         $AllPassed = $false
     }
 } else {
-    Write-Host "[BLOCKED] MSVC C++ x64/x86 Build Tools NOT FOUND. Modify Visual Studio -> Game development with C++ (MSVC v143)." -ForegroundColor Red
+    Write-Host "[BLOCKED] MSVC C++ x64/x86 Build Tools NOT FOUND. Modify Visual Studio -> Game development with C++." -ForegroundColor Red
     $AllPassed = $false
 }
 
@@ -121,15 +139,26 @@ if ((Get-Command git -ErrorAction SilentlyContinue) -and (& git lfs version 2>$n
 }
 
 # 6. Blender 5.2+ Check
-$blenderExe = if (Test-Path "D:\blender\blender.exe") { "D:\blender\blender.exe" }
-              elseif (Get-Command blender -ErrorAction SilentlyContinue) { (Get-Command blender).Source }
-              else { $null }
+$blenderExe = $null
+$pfBlender = Get-ChildItem "C:\Program Files\Blender Foundation" -Directory -Filter "Blender*" -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending |
+    ForEach-Object { Join-Path $_.FullName "blender.exe" } |
+    Where-Object { Test-Path $_ } |
+    Select-Object -First 1
+
+if ($pfBlender) {
+    $blenderExe = $pfBlender
+} elseif (Test-Path "D:\blender\blender.exe") {
+    $blenderExe = "D:\blender\blender.exe"
+} elseif (Get-Command blender -ErrorAction SilentlyContinue) {
+    $blenderExe = (Get-Command blender).Source
+}
 
 if ($blenderExe) {
     $bVer = (& $blenderExe --version | Select-Object -First 1)
     Write-Host ("[PASS] {0} found at {1}" -f $bVer, $blenderExe) -ForegroundColor Green
 } else {
-    Write-Host "[WARN] Blender executable not found at D:\blender\blender.exe or PATH." -ForegroundColor Yellow
+    Write-Host "[WARN] Blender executable not found in C:\Program Files\Blender Foundation, D:\blender, or PATH." -ForegroundColor Yellow
 }
 
 Write-Host "==================================================================" -ForegroundColor Cyan
@@ -137,6 +166,6 @@ if ($AllPassed) {
     Write-Host " OVERALL STATUS: READY FOR UE5 C++ BUILD (Milestone 0 Unblocked!)" -ForegroundColor Green
     exit 0
 } else {
-    Write-Host " OVERALL STATUS: BLOCKED - Resolve red [BLOCKED] items above first." -ForegroundColor Yellow
+    Write-Host " OVERALL STATUS: WAITING ON ENGINE INSTALL - Resolve items above." -ForegroundColor Yellow
     exit 2
 }

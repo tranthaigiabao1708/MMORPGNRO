@@ -1,49 +1,56 @@
-# Build & Editor Execution Guide (`InfiniteUniverse`)
+# Build & Standalone Execution Guide (`InfiniteUniverse` — UE `5.8`)
 
 ---
 
 ## 1. Prerequisites
 
-Before compiling C++, verify all checks pass in PowerShell:
+Before compiling C++, verify all workstation checks pass in PowerShell:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Tools\CheckEnvironment.ps1 -AutoBindUProject
 ```
 
-Required components:
-- **Unreal Engine `5.4` or `5.5`** installed on `D:\Epic Games\` (Core Components + Engine Source).
-- **Visual Studio 2022 or 2026** with:
-  - Workload: **Game development with C++**
-  - Individual Components: **`MSVC v143 - VS 2022 C++ x64/x86 build tools`**, **`Windows 11 SDK`**, **`.NET 8.0 Runtime`**.
-- **Git + Git LFS** (`git lfs install`).
+Verified Workstation Toolchain:
+- **Unreal Engine `5.8`** at `C:\Program Files\Epic Games\UE_5.8`
+- **Visual Studio 2022 Community (`17.14.19`)** with **`MSVC 14.44.35207`** and **`Windows 11 SDK 10.0.26100.0`**
+- **Blender `5.2.2 LTS`** at `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`
+- **Git + Git LFS** (`git version 2.52.0`)
 
 ---
 
-## 2. Building from Command Line (Recommended for AI Agent & CI)
+## 2. Building from Command Line
 
-From `d:\Openword_Dragonboy\InfiniteUniverse`:
+### A. Build `Development Editor` Target
+From `c:\MMORPGNRO\InfiniteUniverse`:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Tools\BuildEditor.ps1 -Configuration Development
 ```
 
-### Generating Visual Studio Solution Files (Optional for IDE Debugging)
-Once UE5 is installed, generate `InfiniteUniverse.sln` via UnrealBuildTool:
+### B. Build Standalone `Win64 Development` Game Binary (`InfiniteUniverse.exe`)
 ```powershell
-& "D:\Epic Games\UE_5.5\Engine\Build\BatchFiles\Build.bat" -projectfiles -project="d:\Openword_Dragonboy\InfiniteUniverse\InfiniteUniverse.uproject" -game -rocket -progress
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" InfiniteUniverse Win64 Development -Project="c:\MMORPGNRO\InfiniteUniverse\InfiniteUniverse.uproject" -WaitMutex -FromMsBuild
+```
+*(Outputs `c:\MMORPGNRO\InfiniteUniverse\Binaries\Win64\InfiniteUniverse.exe`).*
+
+### C. Run All Headless Automation Tests (`M1` – `M7`)
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "c:\MMORPGNRO\InfiniteUniverse\InfiniteUniverse.uproject" -ExecCmds="Automation RunTests InfiniteUniverse; Quit" -unattended -nopause -nosplash -NullRHI -TestExit="Automation Test Queue Empty"
 ```
 
 ---
 
 ## 3. Opening the Project in Unreal Editor
 
+Double-click `OpenInUnrealEditor.bat` or run:
 ```powershell
-$env:UE-LocalDataCachePath = "D:\UE_DerivedDataCache"
-Start-Process "D:\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor.exe" -ArgumentList '"d:\Openword_Dragonboy\InfiniteUniverse\InfiniteUniverse.uproject"'
+Start-Process "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" -ArgumentList '"c:\MMORPGNRO\InfiniteUniverse\InfiniteUniverse.uproject"'
 ```
+*(Default startup map: `/Game/Maps/Prototype/Lvl_Greybox_Prototype`).*
 
 ---
 
-## 4. Hardware Optimization Notes (RTX 3050 4GB VRAM / 16GB RAM)
+## 4. Workstation & Baseline Optimization Notes
 
-1. **VRAM Protection:** `Config/DefaultEngine.ini` disables Virtual Shadow Maps (`r.Shadow.Virtual.Enable=0`) and Lumen (`r.DynamicGlobalIlluminationMethod=0`) by default. Keep Editor Viewport Scalability at **High** (not *Cinematic*) to stay well under `2.8 GB VRAM`.
-2. **RAM Protection During C++ Compile:** `Config/BuildConfiguration.xml` caps parallel compiler processes at `6` (`MaxProcessorCount=6`). Avoid running Blender high-subdivision renders simultaneously while compiling full rebuilds.
-3. **Protect Drive `C:`:** Always keep `UE-LocalDataCachePath=D:\UE_DerivedDataCache` active (can also be added permanently to Windows User Environment Variables).
+1. **Workstation Tuning (`RTX 5060 Ti 16GB VRAM` / `i5-14600KF` / `32GB RAM`):**
+   - `Config/BuildConfiguration.xml` configures parallel compilation up to `MaxProcessorCount=18`.
+   - `Config/DefaultEngine.ini` allocates `r.Streaming.PoolSize=4096` (`4 GB` texture streaming pool) while preserving baseline scalability compatibility (`>= 60 FPS` target even on `RTX 3050` class hardware).
+2. **Zero-Tick Discipline:** Core gameplay components (`UIU_AttributeComponent`, `UIU_DamageComponent`, `UIU_CombatComponent` when not dashing, `AIU_PlayerCharacter` when camera is settled, `AIU_EnemySpawner`, and `UIU_PlayerHUDWidget`) run event/timer-driven with tick disabled when idle.

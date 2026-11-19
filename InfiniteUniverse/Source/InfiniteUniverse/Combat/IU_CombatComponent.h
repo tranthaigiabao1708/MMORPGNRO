@@ -16,6 +16,7 @@ class UAnimMontage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FIU_OnCombatStateChangedSignature, EIU_CombatState, PreviousState, EIU_CombatState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnComboStepExecutedSignature, int32, ComboStepIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FIU_OnKiBlastFiredSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnMobilityStyleChangedSignature, EIU_MobilityStepStyle, NewStyle);
 
 /**
@@ -172,11 +173,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Combat")
 	AIU_AfterimageGhost* GetLastSpawnedAfterimage() const { return LastSpawnedAfterimage.Get(); }
 
+	/** Clears active timers, cooldowns, and defeated/stun states back to Idle upon respawn. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Combat")
+	void ResetCombatState();
+
 	UPROPERTY(BlueprintAssignable, Category = "IU|Combat|Events")
 	FIU_OnCombatStateChangedSignature OnCombatStateChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "IU|Combat|Events")
 	FIU_OnComboStepExecutedSignature OnComboStepExecuted;
+
+	UPROPERTY(BlueprintAssignable, Category = "IU|Combat|Events")
+	FIU_OnKiBlastFiredSignature OnKiBlastFired;
 
 	UPROPERTY(BlueprintAssignable, Category = "IU|Combat|Events")
 	FIU_OnMobilityStyleChangedSignature OnMobilityStyleChanged;

@@ -149,6 +149,8 @@ void AIU_PlayerController::BeginPlay()
 
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
 	{
+		ApplyInitialGameplayCameraAngle();
+
 		if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
 		{
@@ -158,6 +160,14 @@ void AIU_PlayerController::BeginPlay()
 			}
 		}
 	}
+}
+
+void AIU_PlayerController::ApplyInitialGameplayCameraAngle()
+{
+	FRotator InitialRot = GetControlRotation();
+	InitialRot.Pitch = FMath::Clamp(DefaultStartingCameraPitch, MinCameraPitch, MaxCameraPitch);
+	InitialRot.Roll = 0.0f;
+	SetControlRotation(InitialRot);
 }
 
 void AIU_PlayerController::SetupInputComponent()

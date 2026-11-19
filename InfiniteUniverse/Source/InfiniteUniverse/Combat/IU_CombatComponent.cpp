@@ -6,6 +6,7 @@
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_AfterimageGhost.h"
 #include "Combat/IU_CombatThreatSubsystem.h"
+#include "Characters/Player/IU_PlayerCharacter.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -204,9 +205,16 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 	{
 		if (const USkeletalMeshComponent* Mesh = OwnerChar->GetMesh())
 		{
-			if (Mesh->GetSkeletalMeshAsset() && Mesh->DoesSocketExist(KiMuzzleSocketName))
+			if (Mesh->GetSkeletalMeshAsset())
 			{
-				MuzzleLocation = Mesh->GetSocketLocation(KiMuzzleSocketName);
+				if (Mesh->DoesSocketExist(KiMuzzleSocketName))
+				{
+					MuzzleLocation = Mesh->GetSocketLocation(KiMuzzleSocketName);
+				}
+				else if (Mesh->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE)
+				{
+					MuzzleLocation = Mesh->GetBoneLocation(TEXT("hand_r"));
+				}
 			}
 		}
 	}
@@ -230,6 +238,7 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 			&UIU_CombatComponent::ClearKiBlastCooldown,
 			KiBlastCooldown,
 			false);
+		OnKiBlastFired.Broadcast();
 	}
 
 	return Projectile;
@@ -669,20 +678,64 @@ FVector UIU_CombatComponent::ComputeCombatAimDirection(const FVector& MuzzleOrig
 	{
 		if (const AController* Ctrl = OwnerPawn->GetController())
 		{
-			const FVector CamStart = OwnerPawn->GetPawnViewLocation();
-			const FVector CamDir = Ctrl->GetControlRotation().Vector();
-			const FVector TraceEnd = CamStart + (CamDir * 6000.0f);
+			FVector CamStart = OwnerPawn->GetPawnViewLocation();
+			FVector CamDir = Ctrl->GetControlRotation().Vector();
 
-			FHitResult AimHit;
-			FCollisionQueryParams Params(SCENE_QUERY_STAT(IUKiAimTrace), false, Owner);
-			FVector TargetPoint = TraceEnd;
-			if (GetWorld()->LineTraceSingleByChannel(AimHit, CamStart, TraceEnd, ECC_Visibility, Params))
+			if (const AIU_PlayerCharacter* PlayerChar = Cast<AIU_PlayerCharacter>(OwnerPawn))
 			{
-				if ((AimHit.ImpactPoint - MuzzleOrigin).SizeSquared() > FMath::Square(100.0))
+				PlayerChar->GetCameraAimRay(CamStart, CamDir);
+			}
+
+			const FVector TraceEnd = CamStart + (CamDir * 8000.0f);
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(IUKiAimTrace), false, Owner);
+
+			FVector TargetPoint = TraceEnd;
+			bool bSnappedToLivingEnemy = false;
+
+			// 1. Genshin-style soft crosshair magnetism: check if a living enemy hurtbox grazes the center aim ray
+			FCollisionObjectQueryParams PawnObjParams;
+			PawnObjParams.AddObjectTypesToQuery(ECC_Pawn);
+			TArray<FHitResult> PawnHits;
+			if (GetWorld()->SweepMultiByObjectType(
+				PawnHits,
+				CamStart + (CamDir * 120.0f),
+				TraceEnd,
+				FQuat::Identity,
+				PawnObjParams,
+				FCollisionShape::MakeSphere(32.0f),
+				Params))
+			{
+				for (const FHitResult& PHit : PawnHits)
 				{
-					TargetPoint = AimHit.ImpactPoint;
+					AActor* Cand = PHit.GetActor();
+					if (!IsValid(Cand) || Cand == Owner)
+					{
+						continue;
+					}
+					const UIU_AttributeComponent* CandAttr = Cand->FindComponentByClass<UIU_AttributeComponent>();
+					const UIU_DamageComponent* CandDmg = Cand->FindComponentByClass<UIU_DamageComponent>();
+					if (CandAttr && CandDmg && !CandAttr->IsDead())
+					{
+						TargetPoint = Cand->GetActorLocation() + FVector(0.0f, 0.0f, 30.0f);
+						bSnappedToLivingEnemy = true;
+						break;
+					}
 				}
 			}
+
+			// 2. Exact zero-parallax visibility raycast through HUD center crosshair (50%, 50%)
+			if (!bSnappedToLivingEnemy)
+			{
+				FHitResult AimHit;
+				if (GetWorld()->LineTraceSingleByChannel(AimHit, CamStart, TraceEnd, ECC_Visibility, Params))
+				{
+					if ((AimHit.ImpactPoint - MuzzleOrigin).SizeSquared() > FMath::Square(100.0))
+					{
+						TargetPoint = AimHit.ImpactPoint;
+					}
+				}
+			}
+
 			return (TargetPoint - MuzzleOrigin).GetSafeNormal();
 		}
 	}
@@ -820,4 +873,40 @@ void UIU_CombatComponent::HandleOwnerHealthDepleted(AActor* DepletedActor)
 	}
 	bQueuedNextComboHit = false;
 	SetCombatState(EIU_CombatState::Defeated);
+}
+
+void UIU_CombatComponent::ResetCombatState()
+{
+	CancelPendingMeleeWindup();
+	if (UWorld* World = GetWorld())
+	{
+		FTimerManager& TM = World->GetTimerManager();
+		TM.ClearTimer(MeleeImpactTimerHandle);
+		TM.ClearTimer(AttackStepTimerHandle);
+		TM.ClearTimer(ComboResetTimerHandle);
+		TM.ClearTimer(KiBlastCooldownTimerHandle);
+		TM.ClearTimer(DodgeTimerHandle);
+		TM.ClearTimer(DodgeCooldownTimerHandle);
+	}
+
+	bActiveKinematicDash = false;
+	RemainingDashDistance = 0.0f;
+	SetComponentTickEnabled(false);
+	SetDashZeroGravityOverride(false);
+	SetOwnerPawnCollisionIgnored(false);
+
+	if (DamageComp)
+	{
+		DamageComp->SetInvulnerable(false);
+	}
+
+	CurrentComboStep = 0;
+	bQueuedNextComboHit = false;
+	bKiBlastOnCooldown = false;
+	bDodgeOnCooldown = false;
+	bLastDodgeWasCombatEvade = false;
+	bLastDodgeBlinkedInstantly = false;
+	LastSpawnedAfterimage.Reset();
+
+	SetCombatState(EIU_CombatState::Idle);
 }

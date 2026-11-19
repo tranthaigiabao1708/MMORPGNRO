@@ -106,6 +106,7 @@ bool FIU_M3_LockOnAcquireSwitchAndAutoReleaseTest::RunTest(const FString& Parame
 
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(Player);
 
 	AIU_PracticeDummy* DummyFront = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(500.0, -60.0, 0.0), FRotator::ZeroRotator);
@@ -147,6 +148,7 @@ bool FIU_M3_MeleeThreeHitComboGroundAndAirTest::RunTest(const FString& Parameter
 
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(Player);
 	Player->GetIUMovementComponent()->GravityScale = 0.0f;
 
@@ -211,6 +213,7 @@ bool FIU_M3_KiBlastDamageAndDeadGuardTest::RunTest(const FString& Parameters)
 
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(Player);
 
 	AIU_PracticeDummy* Dummy = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(450.0, 0.0, 0.0), FRotator::ZeroRotator);
@@ -283,6 +286,7 @@ bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
 	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
 	PC->Possess(Player);
 	Player->GetIUMovementComponent()->GravityScale = 0.0f;
 
@@ -396,6 +400,8 @@ bool FIU_M3_PvPPlayerVsPlayerPerfectEvadeTest::RunTest(const FString& Parameters
 	AIU_PlayerCharacter* Player2 = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector(150.0, 0.0, 0.0), FRotator(0.0, 180.0, 0.0));
 	AIU_PlayerController* PC1 = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
 	AIU_PlayerController* PC2 = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	PC1->MarkAsLocalTestController();
+	PC2->MarkAsLocalTestController();
 	PC1->Possess(Player1);
 	PC2->Possess(Player2);
 	Player1->GetIUMovementComponent()->GravityScale = 0.0f;

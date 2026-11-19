@@ -111,3 +111,13 @@ void UIU_DamageComponent::EndHitReaction()
 	bInHitReaction = false;
 	OnHitReactionRecovered.Broadcast();
 }
+
+void UIU_DamageComponent::ResetDamageState()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HitReactionTimerHandle);
+	}
+	bInHitReaction = false;
+	bIsInvulnerable = false;
+}

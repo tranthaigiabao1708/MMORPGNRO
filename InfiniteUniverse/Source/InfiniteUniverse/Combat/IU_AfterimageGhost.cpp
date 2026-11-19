@@ -155,3 +155,8 @@ void AIU_AfterimageGhost::Tick(float DeltaTime)
 		Destroy();
 	}
 }
+
+bool AIU_AfterimageGhost::IsUsingSkeletalPose() const
+{
+	return PoseableGhostMesh && PoseableGhostMesh->IsVisible() && PoseableGhostMesh->GetSkinnedAsset() != nullptr;
+}

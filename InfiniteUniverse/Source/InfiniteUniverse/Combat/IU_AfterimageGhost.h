@@ -32,6 +32,12 @@ public:
 	/** Copies visual pose/transforms from SourceCharacter at origin A and starts dissolve timer. */
 	void InitializeFromCharacter(const ACharacter* SourceCharacter, float InLifetime = 0.65f);
 
+	UFUNCTION(BlueprintPure, Category = "IU|VFX")
+	UPoseableMeshComponent* GetPoseableGhostMesh() const { return PoseableGhostMesh; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|VFX")
+	bool IsUsingSkeletalPose() const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|VFX")
 	float GhostLifetime = 0.65f;
 
