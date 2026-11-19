@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
+	<!-- Safe parallel compilation cap for Intel i5-11400H (6C/12T) with 15.8 GB RAM -->
+	<!-- Prevents cl.exe out-of-memory errors (C1060) during Unreal C++ builds -->
+	<ParallelExecutor>
+		<MaxProcessorCount>6</MaxProcessorCount>
+		<ProcessorCountMultiplier>1.0</ProcessorCountMultiplier>
+		<MemoryPerActionBytes>1610612736</MemoryPerActionBytes>
+	</ParallelExecutor>
+	<BuildConfiguration>
+		<bAllowXGE>false</bAllowXGE>
+		<bAllowFASTBuild>false</bAllowFASTBuild>
+	</BuildConfiguration>
+</Configuration>
