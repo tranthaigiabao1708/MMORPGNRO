@@ -15,6 +15,7 @@
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_CombatComponent.h"
 #include "Combat/IU_KiProjectile.h"
+#include "Combat/IU_AfterimageGhost.h"
 #include "Combat/IU_PracticeDummy.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "InputMappingContext.h"
@@ -51,6 +52,13 @@ namespace IU_M3TestHelpers
 
 				if (PlayerChar)
 				{
+					if (UIU_CombatComponent* CC = PlayerChar->GetCombatComponent())
+					{
+						if (CC->IsComponentTickEnabled())
+						{
+							CC->TickComponent(StepDelta, LEVELTICK_All, nullptr);
+						}
+					}
 					if (UIU_TargetingComponent* TC = PlayerChar->GetTargetingComponent())
 					{
 						if (TC->IsComponentTickEnabled())
@@ -282,27 +290,67 @@ bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 	UIU_DamageComponent* DmgComp = Player->GetDamageComponent();
 	UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
 
-	// 1. Free-roam RMB ("Lướt / dịch chuyển ngắn" - no enemy nearby, no WASD): blinks & dashes forward (+X)
-	Player->DodgeInput();
-	TestEqual(TEXT("CombatState is Dodging during Free-Roam Flash Dash"), Combat->GetCombatState(), EIU_CombatState::Dodging);
-	TestFalse(TEXT("No enemy nearby -> Free-Roam Flash Dash mode"), Combat->IsLastDodgeCombatEvade());
-	TestTrue(TEXT("Short blink moved player forward > 200 cm"), Player->GetActorLocation().X > 200.0);
+	const FVector OriginA(0.0, 0.0, 0.0);
 
-	// Wait for DodgeDuration + DodgeCooldown to reset
+	// 1. Earthling Dash ("Lướt kiểu người Trái Đất" - no enemy nearby): continuous A -> B_Dash over DodgeDuration
+	Combat->SetMobilityStyle(EIU_MobilityStepStyle::Dash);
+	Player->SetActorLocation(OriginA);
+	Player->SetActorRotation(FRotator::ZeroRotator);
+
+	Player->DodgeInput();
+	TestEqual(TEXT("CombatState is Dodging during Earthling Dash"), Combat->GetCombatState(), EIU_CombatState::Dodging);
+	TestFalse(TEXT("No enemy nearby -> not Mirage Evade"), Combat->IsLastDodgeCombatEvade());
+	TestFalse(TEXT("Earthling Dash streams continuously (not instant frame-0 blink)"), Combat->DidLastDodgeBlinkInstantly());
+	TestNull(TEXT("No afterimage spawned during normal Earthling Dash"), Combat->GetLastSpawnedAfterimage());
+
+	// Tick right to the end of DodgeDuration (0.20s) to sample exact arrival destination B_Dash (before post-dash gravity fall)
+	ScopeWorld.TickSimulation(Combat->DodgeDuration + (1.0f / 60.0f), Player);
+	const FVector DestB_EarthDash = Player->GetActorLocation();
+	TestEqual(TEXT("Returned to Idle after Earthling Dash"), Combat->GetCombatState(), EIU_CombatState::Idle);
+	TestTrue(TEXT("Earthling Dash traveled full MobilityTravelDistance (~420 cm)"),
+		FMath::IsNearlyEqual((float)DestB_EarthDash.X, Combat->MobilityTravelDistance, 2.0f));
+
+	// Wait remaining cooldown
+	ScopeWorld.TickSimulation(Combat->DodgeCooldown, Player);
+
+	// 2. Alien InstantBlink ("Dịch chuyển tức thời kiểu người Hành Tinh" - no enemy nearby): arrives at IDENTICAL B!
+	Combat->SetMobilityStyle(EIU_MobilityStepStyle::InstantBlink);
+	Player->SetActorLocation(OriginA);
+	Player->SetActorRotation(FRotator::ZeroRotator);
+
+	Player->DodgeInput();
+	const FVector DestB_AlienBlink = Player->GetActorLocation();
+	TestTrue(TEXT("Alien InstantBlink relocates on frame 0"), Combat->DidLastDodgeBlinkInstantly());
+	TestNull(TEXT("No afterimage spawned during non-combat Alien InstantBlink"), Combat->GetLastSpawnedAfterimage());
+	TestTrue(TEXT("Alien InstantBlink lands at EXACT SAME destination B as Earthling Dash"),
+		FVector::Dist(DestB_AlienBlink, DestB_EarthDash) < 1.0f);
+
 	ScopeWorld.TickSimulation(Combat->DodgeCooldown + 0.08f, Player);
-	TestEqual(TEXT("Returned to Idle after Free-Roam Flash Dash"), Combat->GetCombatState(), EIU_CombatState::Idle);
 
-	// 2. Proximity Combat Evade ("Né nếu có quái" - living enemy nearby, even without manual Lock-On!)
-	Player->SetActorLocation(FVector::ZeroVector);
-	AIU_PracticeDummy* Attacker = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(220.0, 0.0, 0.0), FRotator::ZeroRotator);
+	// 3. Black Myth: Wukong style Mirage Evade ("Né khi có quái"):
+	//    Spawns translucent Afterimage Ghost right at Origin A, activates i-frames, AND lands at EXACT SAME B!
+	Combat->SetMobilityStyle(EIU_MobilityStepStyle::Dash);
+	Player->SetActorLocation(OriginA);
+	Player->SetActorRotation(FRotator::ZeroRotator);
+	AIU_PracticeDummy* Attacker = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(200.0, 120.0, 0.0), FRotator::ZeroRotator);
 
 	Player->DodgeInput();
-	TestEqual(TEXT("CombatState is Dodging during Proximity Combat Evade"), Combat->GetCombatState(), EIU_CombatState::Dodging);
-	TestTrue(TEXT("Nearby enemy auto-detected -> Combat Evade mode active"), Combat->IsLastDodgeCombatEvade());
-	TestTrue(TEXT("Player is invulnerable during Combat Evade"), DmgComp->IsInvulnerable());
-	TestTrue(TEXT("Evaded laterally out of direct attack line"), FMath::Abs(Player->GetActorLocation().Y) > 80.0);
+	const FVector DestB_MirageEvade = Player->GetActorLocation();
+	AIU_AfterimageGhost* MirageGhost = Combat->GetLastSpawnedAfterimage();
 
-	// Incoming attack during Combat Evade must be completely negated (0 HP lost)
+	TestEqual(TEXT("CombatState is Dodging during Wukong Mirage Evade"), Combat->GetCombatState(), EIU_CombatState::Dodging);
+	TestTrue(TEXT("Nearby enemy auto-detected -> Mirage Evade active"), Combat->IsLastDodgeCombatEvade());
+	TestTrue(TEXT("Player is invulnerable during Mirage Evade"), DmgComp->IsInvulnerable());
+	TestNotNull(TEXT("Wukong Afterimage Ghost decoy spawned at origin A"), MirageGhost);
+	if (MirageGhost)
+	{
+		TestTrue(TEXT("Afterimage Ghost remains frozen at exact origin A"),
+			FVector::Dist(MirageGhost->GetActorLocation(), OriginA) < 1.0f);
+	}
+	TestTrue(TEXT("Mirage Evade arrives at EXACT SAME destination B as free-roam Dash/Blink!"),
+		FVector::Dist(DestB_MirageEvade, DestB_EarthDash) < 1.0f);
+
+	// Incoming attack during Mirage Evade must be completely negated (0 HP lost)
 	FIU_DamageSpec IncomingHit;
 	IncomingHit.Amount = 35.0f;
 	IncomingHit.InstigatorActor = Attacker;

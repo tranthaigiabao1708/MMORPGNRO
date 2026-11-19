@@ -64,6 +64,9 @@ private:
 	UFUNCTION()
 	void HandleFlightStateChanged(bool bIsFlying);
 
+	UFUNCTION()
+	void HandleMobilityStyleChanged(EIU_MobilityStepStyle NewStyle);
+
 	void UnbindCurrentComponents();
 	void RefreshStatusText();
 
@@ -74,4 +77,5 @@ private:
 	int32 DisplayedComboStep = 0;
 	bool bDisplayedFlying = false;
 	EIU_CombatState DisplayedCombatState = EIU_CombatState::Idle;
+	EIU_MobilityStepStyle DisplayedMobilityStyle = EIU_MobilityStepStyle::Dash;
 };

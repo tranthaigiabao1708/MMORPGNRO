@@ -400,6 +400,14 @@ void AIU_PlayerCharacter::DodgeInput()
 	CombatComponent->RequestDodge(EvadeWorldDir);
 }
 
+void AIU_PlayerCharacter::ToggleMobilityStyleInput()
+{
+	if (CombatComponent)
+	{
+		CombatComponent->ToggleMobilityStyle();
+	}
+}
+
 void AIU_PlayerCharacter::ToggleLockOnInput()
 {
 	if (TargetingComponent)
@@ -449,28 +457,41 @@ void AIU_PlayerCharacter::HandleCombatStateVisuals(EIU_CombatState PreviousState
 {
 	if (NewState == EIU_CombatState::Dodging)
 	{
-		// Brief anime Z-Vanish / Short-Teleport flicker (0.065s)
-		if (PlaceholderBodyMesh)
+		const bool bInstantBlinkOrMirage = (CombatComponent && CombatComponent->DidLastDodgeBlinkInstantly());
+		if (bInstantBlinkOrMirage)
 		{
-			PlaceholderBodyMesh->SetVisibility(false, true);
+			// Alien InstantBlink OR Wukong Mirage Evade: real body vanishes for 0.065s while phantom afterimage remains at A!
+			if (PlaceholderBodyMesh)
+			{
+				PlaceholderBodyMesh->SetVisibility(false, true);
+			}
+			if (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr)
+			{
+				GetMesh()->SetVisibility(false, true);
+			}
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(
+					VanishFlickerTimerHandle,
+					this,
+					&AIU_PlayerCharacter::RestoreVanishVisibility,
+					0.065f,
+					false);
+			}
 		}
-		if (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr)
+		else
 		{
-			GetMesh()->SetVisibility(false, true);
-		}
-		if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().SetTimer(
-				VanishFlickerTimerHandle,
-				this,
-				&AIU_PlayerCharacter::RestoreVanishVisibility,
-				0.065f,
-				false);
+			// Earthling Dash: body stays 100% visible, leaning forward aggressively as it streaks A -> B!
+			ApplyVisualFlightLean(FRotator(-22.0f, 0.0f, 0.0f));
 		}
 	}
 	else if (PreviousState == EIU_CombatState::Dodging)
 	{
 		RestoreVanishVisibility();
+		if (!FlightComponent || !FlightComponent->IsFlying())
+		{
+			ApplyVisualFlightLean(FRotator::ZeroRotator);
+		}
 	}
 }
 

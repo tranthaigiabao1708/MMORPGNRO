@@ -17,7 +17,8 @@ All player controls use Unreal Engine 5's **Enhanced Input** subsystem (`IMC_Pla
 | `IA_Sprint` | `Digital (bool)` | `Left Ctrl` | **Ground:** Fast Run (`880 cm/s`).<br>**While Flying:** **`x2.0`** high-speed Flight Boost (`3150 cm/s` planar / `2550 cm/s` vertical). |
 | `IA_MeleeAttack` | `Digital (bool)` | `Left Mouse Button` | Executes basic melee & advances `Combo 1 → 2 → 3` inside valid combo window (Ground & Air). |
 | `IA_KiBlast` | `Digital (bool)` | `Q` | Fires `AIU_KiProjectile` ("Chưởng") from hand socket toward locked target or camera aim point (consumes `Ki`). |
-| `IA_Dodge` | `Digital (bool)` | `Right Mouse Button` | **No Enemy Nearby:** Quick Dash + Short-Range Blink (`Lướt / Dịch chuyển ngắn`) forward or along `WASD` (Ground & 3D Flight).<br>**Enemy Nearby / Locked-On:** Contextual Combat Evade / Vanish-Step (`Né nếu có quái`) with `i-frames`, keeping character facing the enemy. |
+| `IA_Dodge` | `Digital (bool)` | `Right Mouse Button` | **Unified `A → B` Traversal (`420 cm`):**<br>• **Earthling (`Dash`):** High-speed continuous burst `A → B`.<br>• **Alien (`InstantBlink`):** Instant relocation `A → B`.<br>• **Combat Evade (Enemy Nearby):** Leaves a translucent *Black Myth: Wukong*-style **Afterimage Ghost (`AIU_AfterimageGhost`)** at `A`, grants `i-frames`, and relocates to the **exact same destination `B`**. |
+| `IA_ToggleMobilityStyle` | `Digital (bool)` | `V` | Toggles RMB archetype between **Earthling `Dash`** and **Alien `InstantBlink`** live in gameplay. |
 | `IA_LockOn` | `Digital (bool)` | `Middle Mouse Button` / `C` | Acquires nearest valid living target in range or releases current lock-on. |
 | `IA_SwitchTarget` | `Digital (bool)` | `E` | Cycles lock-on among valid living targets in range. |
 | `IA_ToggleRotationMode` | `Digital (bool)` | `Tab` | Toggles ground rotation mode between `OrientToCamera` (default) and `OrientToMovement`. |

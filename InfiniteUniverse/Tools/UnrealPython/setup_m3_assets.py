@@ -1,13 +1,15 @@
 """
-Milestone 3 Asset, HUD & Combat Target Setup Script
-- Creates IA_MeleeAttack (LMB), IA_KiBlast (Q), IA_Dodge (RMB - Contextual Dash / Short Blink / Combat Evade), IA_LockOn (MiddleMouse / C), IA_SwitchTarget (E)
-- Updates IMC_Player, BP_PlayerController, BP_PlayerCharacter, BP_GameMode, and creates WBP_PlayerHUD + BP_KiProjectile
-- Places 2 Ground Practice Dummies and 1 Sky Platform Practice Dummy in M_Prototype for immediate combat testing
+Milestone 3 Asset, HUD, Afterimage Ghost Shader & Combat Target Setup Script
+- Creates IA_MeleeAttack (LMB), IA_KiBlast (Q), IA_Dodge (RMB - Unified A->B Dash / InstantBlink / Wukong Mirage Evade),
+  IA_LockOn (MiddleMouse / C), IA_SwitchTarget (E), IA_ToggleMobilityStyle (V)
+- Generates /Game/Combat/VFX/M_AfterimageGhost translucent spirit material for Black Myth: Wukong style evade decoy
+- Updates IMC_Player, BP_PlayerController, BP_PlayerCharacter, BP_GameMode, BP_KiProjectile, and M_Prototype dummies
 """
 import unreal
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 editor_asset_lib = unreal.EditorAssetLibrary
+mat_lib = unreal.MaterialEditingLibrary
 
 
 def get_or_create_input_action(name: str, folder: str, value_type: unreal.InputActionValueType) -> unreal.InputAction:
@@ -38,7 +40,46 @@ def get_or_create_blueprint(name: str, folder: str, parent_class: unreal.Class, 
     return bp
 
 
+def create_or_update_afterimage_material():
+    mat_folder = "/Game/Combat/VFX"
+    mat_name = "M_AfterimageGhost"
+    full_path = f"{mat_folder}/{mat_name}"
+
+    if editor_asset_lib.does_asset_exist(full_path):
+        mat = editor_asset_lib.load_asset(full_path)
+        mat_lib.delete_all_material_expressions(mat)
+    else:
+        mat = asset_tools.create_asset(mat_name, mat_folder, unreal.Material, unreal.MaterialFactoryNew())
+
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("used_with_skeletal_mesh", True)
+
+    color_param = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -380, -100)
+    color_param.set_editor_property("parameter_name", "GhostColor")
+    color_param.set_editor_property("default_value", unreal.LinearColor(0.22, 0.85, 1.0, 1.0))
+
+    emissive_boost = mat_lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -380, 60)
+    emissive_boost.set_editor_property("r", 2.4)
+
+    mul_expr = mat_lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -150, -40)
+    mat_lib.connect_material_expressions(color_param, "", mul_expr, "A")
+    mat_lib.connect_material_expressions(emissive_boost, "", mul_expr, "B")
+    mat_lib.connect_material_property(mul_expr, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+    opacity_param = mat_lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -220, 160)
+    opacity_param.set_editor_property("parameter_name", "GhostOpacity")
+    opacity_param.set_editor_property("default_value", 0.62)
+    mat_lib.connect_material_property(opacity_param, "", unreal.MaterialProperty.MP_OPACITY)
+
+    mat_lib.recompile_material(mat)
+    editor_asset_lib.save_loaded_asset(mat, only_if_is_dirty=False)
+    unreal.log("=== [IU M3] Built Translucent Mirage Shader /Game/Combat/VFX/M_AfterimageGhost ===")
+
+
 def setup_m3_assets():
+    create_or_update_afterimage_material()
+
     actions_dir = "/Game/Input/Actions"
     ia_move = get_or_create_input_action("IA_Move", actions_dir, unreal.InputActionValueType.AXIS2D)
     ia_look = get_or_create_input_action("IA_Look", actions_dir, unreal.InputActionValueType.AXIS2D)
@@ -54,6 +95,7 @@ def setup_m3_assets():
     ia_dodge = get_or_create_input_action("IA_Dodge", actions_dir, unreal.InputActionValueType.BOOLEAN)
     ia_lockon = get_or_create_input_action("IA_LockOn", actions_dir, unreal.InputActionValueType.BOOLEAN)
     ia_switch = get_or_create_input_action("IA_SwitchTarget", actions_dir, unreal.InputActionValueType.AXIS1D)
+    ia_mob_style = get_or_create_input_action("IA_ToggleMobilityStyle", actions_dir, unreal.InputActionValueType.BOOLEAN)
 
     imc = editor_asset_lib.load_asset("/Game/Input/IMC_Player")
     unreal.IU_PlayerController.configure_standard_player_mappings(
@@ -71,6 +113,7 @@ def setup_m3_assets():
         ia_dodge,
         ia_lockon,
         ia_switch,
+        ia_mob_style,
     )
     imc.modify()
     editor_asset_lib.save_loaded_asset(imc, only_if_is_dirty=False)
@@ -105,6 +148,7 @@ def setup_m3_assets():
     pc_cdo.set_editor_property("DodgeAction", ia_dodge)
     pc_cdo.set_editor_property("LockOnAction", ia_lockon)
     pc_cdo.set_editor_property("SwitchTargetAction", ia_switch)
+    pc_cdo.set_editor_property("ToggleMobilityStyleAction", ia_mob_style)
     unreal.BlueprintEditorLibrary.compile_blueprint(bp_pc)
     editor_asset_lib.save_loaded_asset(bp_pc, only_if_is_dirty=False)
 

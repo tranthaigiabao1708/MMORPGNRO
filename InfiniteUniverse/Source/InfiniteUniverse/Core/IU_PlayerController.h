@@ -45,7 +45,8 @@ public:
 		UInputAction* InKiBlast = nullptr,
 		UInputAction* InDodge = nullptr,
 		UInputAction* InLockOn = nullptr,
-		UInputAction* InSwitchTarget = nullptr);
+		UInputAction* InSwitchTarget = nullptr,
+		UInputAction* InToggleMobilityStyle = nullptr);
 
 	// ========================================================================
 	// Remappable Enhanced Input Assets
@@ -93,6 +94,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
 	TObjectPtr<UInputAction> SwitchTargetAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> ToggleMobilityStyleAction;
+
 	// ========================================================================
 	// Camera Pitch Clamp Limits
 	// ========================================================================
@@ -123,4 +127,5 @@ private:
 	void HandleDodge(const FInputActionValue& Value);
 	void HandleLockOn(const FInputActionValue& Value);
 	void HandleSwitchTarget(const FInputActionValue& Value);
+	void HandleToggleMobilityStyle(const FInputActionValue& Value);
 };

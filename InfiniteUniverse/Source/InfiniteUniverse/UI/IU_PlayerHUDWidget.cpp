@@ -93,8 +93,10 @@ void UIU_PlayerHUDWidget::BindToPlayerPawn(APawn* NewPawn)
 		BoundCombatComp = Combat;
 		Combat->OnCombatStateChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleCombatStateChanged);
 		Combat->OnComboStepExecuted.AddDynamic(this, &UIU_PlayerHUDWidget::HandleComboStepExecuted);
+		Combat->OnMobilityStyleChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleMobilityStyleChanged);
 		DisplayedCombatState = Combat->GetCombatState();
 		DisplayedComboStep = Combat->GetCurrentComboStep();
+		DisplayedMobilityStyle = Combat->GetMobilityStyle();
 	}
 
 	if (UIU_FlightComponent* Flight = NewPawn->FindComponentByClass<UIU_FlightComponent>())
@@ -118,6 +120,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 	{
 		Combat->OnCombatStateChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCombatStateChanged);
 		Combat->OnComboStepExecuted.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleComboStepExecuted);
+		Combat->OnMobilityStyleChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleMobilityStyleChanged);
 	}
 	if (UIU_FlightComponent* Flight = BoundFlightComp.Get())
 	{
@@ -175,6 +178,12 @@ void UIU_PlayerHUDWidget::HandleFlightStateChanged(bool bIsFlying)
 	RefreshStatusText();
 }
 
+void UIU_PlayerHUDWidget::HandleMobilityStyleChanged(EIU_MobilityStepStyle NewStyle)
+{
+	DisplayedMobilityStyle = NewStyle;
+	RefreshStatusText();
+}
+
 void UIU_PlayerHUDWidget::RefreshStatusText()
 {
 	if (!StatusReadoutText)
@@ -183,6 +192,10 @@ void UIU_PlayerHUDWidget::RefreshStatusText()
 	}
 
 	const TCHAR* MoveLabel = bDisplayedFlying ? TEXT("FLIGHT 3D") : TEXT("GROUND");
+	const TCHAR* StyleLabel = (DisplayedMobilityStyle == EIU_MobilityStepStyle::InstantBlink)
+		? TEXT("ALIEN BLINK")
+		: TEXT("EARTH DASH");
+
 	FString CombatLabel = TEXT("READY");
 	if (DisplayedCombatState == EIU_CombatState::Attacking && DisplayedComboStep > 0)
 	{
@@ -191,7 +204,16 @@ void UIU_PlayerHUDWidget::RefreshStatusText()
 	else if (DisplayedCombatState == EIU_CombatState::Dodging)
 	{
 		const bool bCombatEvade = (BoundCombatComp.IsValid() && BoundCombatComp->IsLastDodgeCombatEvade());
-		CombatLabel = bCombatEvade ? TEXT("VANISH EVADE") : TEXT("FLASH DASH");
+		if (bCombatEvade)
+		{
+			CombatLabel = TEXT("MIRAGE EVADE (AFTERIMAGE)");
+		}
+		else
+		{
+			CombatLabel = (DisplayedMobilityStyle == EIU_MobilityStepStyle::InstantBlink)
+				? TEXT("INSTANT BLINK")
+				: TEXT("QUICK DASH");
+		}
 	}
 	else if (DisplayedCombatState == EIU_CombatState::HitReaction)
 	{
@@ -202,5 +224,5 @@ void UIU_PlayerHUDWidget::RefreshStatusText()
 		CombatLabel = TEXT("DEFEATED");
 	}
 
-	StatusReadoutText->SetText(FText::FromString(FString::Printf(TEXT("[%s]  %s"), MoveLabel, *CombatLabel)));
+	StatusReadoutText->SetText(FText::FromString(FString::Printf(TEXT("[%s | %s]  %s"), MoveLabel, StyleLabel, *CombatLabel)));
 }

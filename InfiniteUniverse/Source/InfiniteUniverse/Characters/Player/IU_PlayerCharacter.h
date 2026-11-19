@@ -60,6 +60,7 @@ public:
 	void MeleeAttackInput();
 	void KiBlastInput();
 	void DodgeInput();
+	void ToggleMobilityStyleInput();
 	void ToggleLockOnInput();
 	void SwitchTargetInput(float Direction);
 

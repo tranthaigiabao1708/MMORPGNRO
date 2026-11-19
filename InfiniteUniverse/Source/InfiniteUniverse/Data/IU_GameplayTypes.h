@@ -31,6 +31,20 @@ enum class EIU_CharacterRotationMode : uint8
 };
 
 /**
+ * Archetype mobility style for Right-Mouse-Button (RMB) A -> B traversal:
+ * - Dash: Continuous high-speed burst dash from A to B (e.g., Earthling martial artist).
+ * - InstantBlink: Instantaneous relocation from A to B (e.g., Off-world / Cosmic race).
+ * Note: Both styles cover the exact same A -> B vector & distance; when an enemy is nearby,
+ * Combat Evade leaves a Wukong-style phantom afterimage at A and relocates to that exact same B.
+ */
+UENUM(BlueprintType)
+enum class EIU_MobilityStepStyle : uint8
+{
+	Dash         UMETA(DisplayName = "Dash (Earthling Burst)"),
+	InstantBlink UMETA(DisplayName = "Instant Blink (Alien Teleport)")
+};
+
+/**
  * Combat state machine states (Milestone 3 Specification).
  */
 UENUM(BlueprintType)

@@ -29,7 +29,8 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	UInputAction* InKiBlast,
 	UInputAction* InDodge,
 	UInputAction* InLockOn,
-	UInputAction* InSwitchTarget)
+	UInputAction* InSwitchTarget,
+	UInputAction* InToggleMobilityStyle)
 {
 	if (!TargetIMC)
 	{
@@ -123,6 +124,11 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	{
 		TargetIMC->MapKey(InSwitchTarget, EKeys::E);
 	}
+	if (InToggleMobilityStyle)
+	{
+		// V: Switch RMB Archetype between Earthling Dash and Alien InstantBlink
+		TargetIMC->MapKey(InToggleMobilityStyle, EKeys::V);
+	}
 }
 
 void AIU_PlayerController::BeginPlay()
@@ -211,6 +217,10 @@ void AIU_PlayerController::SetupInputComponent()
 	{
 		SwitchTargetAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_SwitchTarget.IA_SwitchTarget"));
 	}
+	if (!ToggleMobilityStyleAction)
+	{
+		ToggleMobilityStyleAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_ToggleMobilityStyle.IA_ToggleMobilityStyle"));
+	}
 
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
 	{
@@ -269,6 +279,10 @@ void AIU_PlayerController::SetupInputComponent()
 		if (SwitchTargetAction)
 		{
 			EnhancedInput->BindAction(SwitchTargetAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleSwitchTarget);
+		}
+		if (ToggleMobilityStyleAction)
+		{
+			EnhancedInput->BindAction(ToggleMobilityStyleAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleToggleMobilityStyle);
 		}
 	}
 }
@@ -412,5 +426,13 @@ void AIU_PlayerController::HandleSwitchTarget(const FInputActionValue& Value)
 	{
 		const float Axis = Value.Get<float>();
 		IUChar->SwitchTargetInput(FMath::IsNearlyZero(Axis) ? 1.0f : Axis);
+	}
+}
+
+void AIU_PlayerController::HandleToggleMobilityStyle(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->ToggleMobilityStyleInput();
 	}
 }

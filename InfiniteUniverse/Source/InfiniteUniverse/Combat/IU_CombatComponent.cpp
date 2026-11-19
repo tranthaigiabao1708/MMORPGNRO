@@ -4,18 +4,24 @@
 #include "Combat/IU_DamageComponent.h"
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_KiProjectile.h"
+#include "Combat/IU_AfterimageGhost.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
 UIU_CombatComponent::UIU_CombatComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// Zero-Tick at rest; enabled dynamically ONLY during a 0.20s Earthling kinematic Dash
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
+
 	KiProjectileClass = AIU_KiProjectile::StaticClass();
+	AfterimageGhostClass = AIU_AfterimageGhost::StaticClass();
 }
 
 void UIU_CombatComponent::BeginPlay()
@@ -57,6 +63,8 @@ void UIU_CombatComponent::EnsureComponentsCached()
 
 void UIU_CombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	SetDashZeroGravityOverride(false);
+	SetOwnerPawnCollisionIgnored(false);
 	if (UWorld* World = GetWorld())
 	{
 		FTimerManager& TM = World->GetTimerManager();
@@ -69,11 +77,68 @@ void UIU_CombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void UIU_CombatComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bActiveKinematicDash || CurrentCombatState != EIU_CombatState::Dodging)
+	{
+		bActiveKinematicDash = false;
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	AActor* Owner = GetOwner();
+	if (!Owner || RemainingDashDistance <= KINDA_SMALL_NUMBER)
+	{
+		bActiveKinematicDash = false;
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	const float StepDist = FMath::Min(RemainingDashDistance, ActiveDashSpeed * DeltaTime);
+	FHitResult SweepHit;
+	Owner->SetActorLocation(Owner->GetActorLocation() + (ActiveDashDirection * StepDist), /*bSweep=*/true, &SweepHit);
+	RemainingDashDistance -= StepDist;
+
+	if (ACharacter* OwnerChar = Cast<ACharacter>(Owner))
+	{
+		if (UCharacterMovementComponent* MoveComp = OwnerChar->GetCharacterMovement())
+		{
+			MoveComp->Velocity = FVector::ZeroVector;
+		}
+	}
+
+	if (SweepHit.bBlockingHit || RemainingDashDistance <= KINDA_SMALL_NUMBER)
+	{
+		RemainingDashDistance = 0.0f;
+		bActiveKinematicDash = false;
+		SetComponentTickEnabled(false);
+	}
+}
+
+void UIU_CombatComponent::SetMobilityStyle(EIU_MobilityStepStyle NewStyle)
+{
+	if (MobilityStyle != NewStyle)
+	{
+		MobilityStyle = NewStyle;
+		OnMobilityStyleChanged.Broadcast(MobilityStyle);
+	}
+}
+
+EIU_MobilityStepStyle UIU_CombatComponent::ToggleMobilityStyle()
+{
+	const EIU_MobilityStepStyle NextStyle = (MobilityStyle == EIU_MobilityStepStyle::Dash)
+		? EIU_MobilityStepStyle::InstantBlink
+		: EIU_MobilityStepStyle::Dash;
+	SetMobilityStyle(NextStyle);
+	return MobilityStyle;
+}
+
 bool UIU_CombatComponent::RequestMeleeAttack()
 {
 	EnsureComponentsCached();
 
-	// Block invalid overlapping states
 	if (CurrentCombatState == EIU_CombatState::Defeated ||
 		CurrentCombatState == EIU_CombatState::Dodging ||
 		CurrentCombatState == EIU_CombatState::HitReaction)
@@ -85,7 +150,6 @@ bool UIU_CombatComponent::RequestMeleeAttack()
 
 	if (CurrentCombatState == EIU_CombatState::Attacking)
 	{
-		// Queue sequential next hit cleanly instead of overlapping attacks
 		if (CurrentComboStep < MaxComboSteps)
 		{
 			bQueuedNextComboHit = true;
@@ -94,7 +158,6 @@ bool UIU_CombatComponent::RequestMeleeAttack()
 		return false;
 	}
 
-	// Currently Idle: advance sequential combo if inside grace window, else start at 1
 	int32 NextStep = 1;
 	if (UWorld* World = GetWorld())
 	{
@@ -134,7 +197,6 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 		return nullptr;
 	}
 
-	// Determine muzzle spawn location (SkeletalMesh socket if present, else character offset)
 	FVector MuzzleLocation = Owner->GetActorLocation() + Owner->GetActorRotation().RotateVector(FallbackMuzzleOffset);
 	if (const ACharacter* OwnerChar = Cast<ACharacter>(Owner))
 	{
@@ -190,26 +252,53 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		return false;
 	}
 
-	// Cancel any active attack step cleanly into Dodging / Vanish-Evade
 	World->GetTimerManager().ClearTimer(AttackStepTimerHandle);
 	bQueuedNextComboHit = false;
+	LastSpawnedAfterimage.Reset();
 
-	SetCombatState(EIU_CombatState::Dodging);
-	bDodgeOnCooldown = true;
+	ACharacter* OwnerChar = Cast<ACharacter>(Owner);
+	UCharacterMovementComponent* MoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
+	const bool bGrounded = (MoveComp && MoveComp->IsMovingOnGround());
+	const FTransform OriginTransform = Owner->GetActorTransform();
 
-	if (DamageComp)
+	// 1. Compute unified A -> B direction (strictly identical whether an enemy is present or not!)
+	FVector TravelDir = DesiredWorldDirection.GetSafeNormal();
+	if (TravelDir.IsNearlyZero())
 	{
-		DamageComp->SetInvulnerable(true);
+		if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+		{
+			if (const AController* Ctrl = OwnerPawn->GetController())
+			{
+				const FRotator AimRot = bGrounded
+					? FRotator(0.0f, Ctrl->GetControlRotation().Yaw, 0.0f)
+					: Ctrl->GetControlRotation();
+				TravelDir = AimRot.Vector();
+			}
+		}
+		if (TravelDir.IsNearlyZero())
+		{
+			TravelDir = Owner->GetActorForwardVector();
+		}
 	}
 
-	// 1. Detect contextual enemy presence ("né nếu có quái"): Locked target in range OR nearest living enemy in proximity
+	if (bGrounded)
+	{
+		TravelDir.Z = 0.0f;
+		TravelDir = TravelDir.GetSafeNormal();
+	}
+	if (TravelDir.IsNearlyZero())
+	{
+		TravelDir = Owner->GetActorForwardVector();
+	}
+
+	// 2. Detect nearby / locked enemy for Black Myth: Wukong style Mirage Evade
 	AActor* ThreatTarget = nullptr;
 	if (TargetingComp)
 	{
 		if (TargetingComp->IsLockedOn())
 		{
 			AActor* Locked = TargetingComp->GetLockedTarget();
-			if (Locked && FVector::DistSquared(Owner->GetActorLocation(), Locked->GetActorLocation()) <= FMath::Square((double)CombatEvadeMaxLockDistance))
+			if (Locked && FVector::DistSquared(OriginTransform.GetLocation(), Locked->GetActorLocation()) <= FMath::Square((double)CombatEvadeMaxLockDistance))
 			{
 				ThreatTarget = Locked;
 			}
@@ -219,102 +308,57 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 			ThreatTarget = TargetingComp->FindNearestLivingTarget(CombatEvadeSenseRadius);
 		}
 	}
+
 	bLastDodgeWasCombatEvade = (ThreatTarget != nullptr);
+	bLastDodgeBlinkedInstantly = (bLastDodgeWasCombatEvade || MobilityStyle == EIU_MobilityStepStyle::InstantBlink);
 
-	ACharacter* OwnerChar = Cast<ACharacter>(Owner);
-	UCharacterMovementComponent* MoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
-	const bool bGrounded = (MoveComp && MoveComp->IsMovingOnGround());
-
-	FVector EvadeDir = DesiredWorldDirection.GetSafeNormal();
-	float BlinkDist = ShortBlinkDistance;
-
-	if (ThreatTarget)
+	// 3. If evading near an enemy, leave a glowing phantom afterimage decoy right at origin A BEFORE moving!
+	if (bLastDodgeWasCombatEvade)
 	{
-		// Contextual Combat Evade / Short Vanish around Enemy
-		FVector ToThreat = ThreatTarget->GetActorLocation() - Owner->GetActorLocation();
-		if (bGrounded)
-		{
-			ToThreat.Z = 0.0f;
-		}
-		const float DistToThreat = ToThreat.Size();
-		const FVector DirToThreat = (DistToThreat > 1.0f) ? (ToThreat / DistToThreat) : Owner->GetActorForwardVector();
+		LastSpawnedAfterimage = SpawnMirageAfterimageAt(OriginTransform);
+	}
 
-		if (!EvadeDir.IsNearlyZero())
-		{
-			// Directional Combat Step: clamp forward blink so we stop right at strike distance instead of colliding face-first
-			if (FVector::DotProduct(EvadeDir, DirToThreat) > 0.50f)
-			{
-				BlinkDist = FMath::Clamp(DistToThreat - 145.0f, 0.0f, ShortBlinkDistance);
-			}
-			else
-			{
-				BlinkDist = CombatEvadeBlinkDistance;
-			}
-		}
-		else
-		{
-			// No WASD held near an enemy:
-			if (DistToThreat <= 450.0f)
-			{
-				// Close-quarters automatic flank/backstep evade out of enemy attack zone!
-				const float SideSign = bEvadeSideFlip ? -1.0f : 1.0f;
-				bEvadeSideFlip = !bEvadeSideFlip;
-				const FVector RightPerp(-DirToThreat.Y, DirToThreat.X, 0.0f);
-				EvadeDir = (-DirToThreat * 0.55f + RightPerp * SideSign * 0.83f).GetSafeNormal();
-				BlinkDist = CombatEvadeBlinkDistance;
-			}
-			else
-			{
-				// Mid-range locked enemy -> instant short-range vanish gap-closer up to melee strike distance!
-				EvadeDir = DirToThreat;
-				BlinkDist = FMath::Clamp(DistToThreat - 150.0f, 0.0f, ShortBlinkDistance * 1.25f);
-			}
-		}
+	// 4. Activate i-frames and temporarily ignore Pawn-vs-Pawn blocking so A -> B never snags on enemy capsules
+	if (DamageComp)
+	{
+		DamageComp->SetInvulnerable(true);
+	}
+	SetOwnerPawnCollisionIgnored(true);
+	bDodgeOnCooldown = true;
+	SetCombatState(EIU_CombatState::Dodging);
+
+	if (MoveComp)
+	{
+		MoveComp->Velocity = FVector::ZeroVector;
+	}
+
+	// 5. Execute A -> B traversal:
+	//    - Mirage Evade (enemy nearby) OR Alien InstantBlink: relocate immediately to B
+	//    - Earthling Dash (no enemy nearby): streak smoothly across A -> B over DodgeDuration
+	if (bLastDodgeBlinkedInstantly)
+	{
+		bActiveKinematicDash = false;
+		SetComponentTickEnabled(false);
+
+		FHitResult SweepHit;
+		Owner->SetActorLocation(OriginTransform.GetLocation() + (TravelDir * MobilityTravelDistance), /*bSweep=*/true, &SweepHit);
 	}
 	else
 	{
-		// Free-Roam Quick Dash / Short Blink ("lướt / dịch chuyển ngắn"): default FORWARD along camera aim when no WASD held
-		if (EvadeDir.IsNearlyZero())
-		{
-			if (const APawn* OwnerPawn = Cast<APawn>(Owner))
-			{
-				if (const AController* Ctrl = OwnerPawn->GetController())
-				{
-					const FRotator AimRot = bGrounded
-						? FRotator(0.0f, Ctrl->GetControlRotation().Yaw, 0.0f)
-						: Ctrl->GetControlRotation();
-					EvadeDir = AimRot.Vector();
-				}
-			}
-			if (EvadeDir.IsNearlyZero())
-			{
-				EvadeDir = Owner->GetActorForwardVector();
-			}
-		}
-		BlinkDist = ShortBlinkDistance;
+		bActiveKinematicDash = true;
+		ActiveDashDirection = TravelDir;
+		RemainingDashDistance = MobilityTravelDistance;
+		ActiveDashSpeed = MobilityTravelDistance / FMath::Max(DodgeDuration, 0.05f);
+		SetDashZeroGravityOverride(true);
+		SetComponentTickEnabled(true);
 	}
 
-	if (bGrounded)
-	{
-		EvadeDir.Z = 0.0f;
-		EvadeDir = EvadeDir.GetSafeNormal();
-	}
-	if (EvadeDir.IsNearlyZero())
-	{
-		EvadeDir = Owner->GetActorForwardVector();
-	}
-
-	// 2. Execute collision-swept short-range flash displacement (never clips walls, floors, or capsules)
-	if (BlinkDist > 1.0f)
-	{
-		FHitResult SweepHit;
-		Owner->SetActorLocation(Owner->GetActorLocation() + (EvadeDir * BlinkDist), /*bSweep=*/true, &SweepHit);
-	}
-
-	// 3. Orient character: face ThreatTarget for instant counterattack if evading enemy, else face dash direction
+	// 6. Orient character yaw (does not alter destination B coordinates)
 	if (ThreatTarget)
 	{
-		const FVector PostEvadeToThreat = ThreatTarget->GetActorLocation() - Owner->GetActorLocation();
+		const FVector TargetLoc = ThreatTarget->GetActorLocation();
+		const FVector ExpectedEndLoc = OriginTransform.GetLocation() + (TravelDir * MobilityTravelDistance);
+		const FVector PostEvadeToThreat = TargetLoc - ExpectedEndLoc;
 		if (!PostEvadeToThreat.IsNearlyZero(1.0f))
 		{
 			Owner->SetActorRotation(FRotator(0.0f, PostEvadeToThreat.Rotation().Yaw, 0.0f));
@@ -322,17 +366,11 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 	}
 	else
 	{
-		const FVector PlanarDash(EvadeDir.X, EvadeDir.Y, 0.0f);
-		if (!PlanarDash.IsNearlyZero(0.01f))
+		const FVector PlanarDir(TravelDir.X, TravelDir.Y, 0.0f);
+		if (!PlanarDir.IsNearlyZero(0.01f))
 		{
-			Owner->SetActorRotation(FRotator(0.0f, PlanarDash.Rotation().Yaw, 0.0f));
+			Owner->SetActorRotation(FRotator(0.0f, PlanarDir.Rotation().Yaw, 0.0f));
 		}
-	}
-
-	// 4. Apply high-speed follow-through glide velocity
-	if (MoveComp)
-	{
-		MoveComp->Velocity = EvadeDir * DodgeBurstSpeed;
 	}
 
 	World->GetTimerManager().SetTimer(
@@ -350,6 +388,77 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		false);
 
 	return true;
+}
+
+void UIU_CombatComponent::SetOwnerPawnCollisionIgnored(bool bIgnorePawns)
+{
+	ACharacter* OwnerChar = Cast<ACharacter>(GetOwner());
+	UCapsuleComponent* Capsule = OwnerChar ? OwnerChar->GetCapsuleComponent() : nullptr;
+	if (!Capsule)
+	{
+		return;
+	}
+
+	if (bIgnorePawns && !bPawnCollisionTemporarilyIgnored)
+	{
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		bPawnCollisionTemporarilyIgnored = true;
+	}
+	if (!bIgnorePawns && bPawnCollisionTemporarilyIgnored)
+	{
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		bPawnCollisionTemporarilyIgnored = false;
+	}
+}
+
+void UIU_CombatComponent::SetDashZeroGravityOverride(bool bEnableZeroGravity)
+{
+	ACharacter* OwnerChar = Cast<ACharacter>(GetOwner());
+	UCharacterMovementComponent* MoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
+	if (!MoveComp)
+	{
+		return;
+	}
+
+	if (bEnableZeroGravity && !bDashGravityOverridden)
+	{
+		SavedDashGravityScale = MoveComp->GravityScale;
+		MoveComp->GravityScale = 0.0f;
+		MoveComp->Velocity = FVector::ZeroVector;
+		bDashGravityOverridden = true;
+	}
+	else if (!bEnableZeroGravity && bDashGravityOverridden)
+	{
+		MoveComp->GravityScale = SavedDashGravityScale;
+		bDashGravityOverridden = false;
+	}
+}
+
+AIU_AfterimageGhost* UIU_CombatComponent::SpawnMirageAfterimageAt(const FTransform& OriginTransform)
+{
+	UWorld* World = GetWorld();
+	ACharacter* OwnerChar = Cast<ACharacter>(GetOwner());
+	if (!World || !OwnerChar)
+	{
+		return nullptr;
+	}
+
+	TSubclassOf<AIU_AfterimageGhost> GhostClassToSpawn = AfterimageGhostClass;
+	if (!GhostClassToSpawn)
+	{
+		GhostClassToSpawn = AIU_AfterimageGhost::StaticClass();
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = OwnerChar;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AIU_AfterimageGhost* Ghost = World->SpawnActor<AIU_AfterimageGhost>(GhostClassToSpawn, OriginTransform, SpawnParams);
+	if (Ghost)
+	{
+		Ghost->InitializeFromCharacter(OwnerChar, MirageAfterimageLifetime);
+	}
+	return Ghost;
 }
 
 void UIU_CombatComponent::SetCombatState(EIU_CombatState NewState)
@@ -375,7 +484,6 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 	bQueuedNextComboHit = false;
 	SetCombatState(EIU_CombatState::Attacking);
 
-	// Orient toward locked target or controller yaw and apply subtle strike lunge (Ground & Air!)
 	FVector StrikeDir = Owner->GetActorForwardVector();
 	if (TargetingComp && TargetingComp->IsLockedOn())
 	{
@@ -490,7 +598,6 @@ FVector UIU_CombatComponent::ComputeCombatAimDirection(const FVector& MuzzleOrig
 		return FVector::ForwardVector;
 	}
 
-	// Priority 1: Homing aim directly onto locked 3D target
 	if (TargetingComp && TargetingComp->IsLockedOn())
 	{
 		const FVector AimDir = (TargetingComp->GetLockedTargetAimLocation() - MuzzleOrigin).GetSafeNormal();
@@ -500,7 +607,6 @@ FVector UIU_CombatComponent::ComputeCombatAimDirection(const FVector& MuzzleOrig
 		}
 	}
 
-	// Priority 2: Camera center raycast convergence point
 	if (const APawn* OwnerPawn = Cast<APawn>(Owner))
 	{
 		if (const AController* Ctrl = OwnerPawn->GetController())
@@ -567,6 +673,23 @@ void UIU_CombatComponent::OnComboResetTimerExpired()
 
 void UIU_CombatComponent::OnDodgeFinished()
 {
+	// Flush any tiny sub-frame remainder of an Earthling Dash so destination B matches InstantBlink/Evade to the millimeter
+	if (bActiveKinematicDash && RemainingDashDistance > 0.01f)
+	{
+		if (AActor* Owner = GetOwner())
+		{
+			FHitResult SweepHit;
+			Owner->SetActorLocation(Owner->GetActorLocation() + (ActiveDashDirection * RemainingDashDistance), /*bSweep=*/true, &SweepHit);
+		}
+	}
+
+	bActiveKinematicDash = false;
+	RemainingDashDistance = 0.0f;
+	SetComponentTickEnabled(false);
+
+	SetDashZeroGravityOverride(false);
+	SetOwnerPawnCollisionIgnored(false);
+
 	if (DamageComp)
 	{
 		DamageComp->SetInvulnerable(false);
@@ -576,7 +699,7 @@ void UIU_CombatComponent::OnDodgeFinished()
 	{
 		if (UCharacterMovementComponent* MoveComp = OwnerChar->GetCharacterMovement())
 		{
-			MoveComp->Velocity *= 0.35f;
+			MoveComp->Velocity = FVector::ZeroVector;
 		}
 	}
 
@@ -627,6 +750,11 @@ void UIU_CombatComponent::HandleOwnerHealthDepleted(AActor* DepletedActor)
 		World->GetTimerManager().ClearTimer(ComboResetTimerHandle);
 		World->GetTimerManager().ClearTimer(DodgeTimerHandle);
 	}
+	bActiveKinematicDash = false;
+	RemainingDashDistance = 0.0f;
+	SetComponentTickEnabled(false);
+	SetDashZeroGravityOverride(false);
+	SetOwnerPawnCollisionIgnored(false);
 	if (DamageComp)
 	{
 		DamageComp->SetInvulnerable(false);
