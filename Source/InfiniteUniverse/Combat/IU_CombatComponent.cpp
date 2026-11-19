@@ -190,7 +190,7 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		return false;
 	}
 
-	// Cancel any active attack step cleanly into Dodging
+	// Cancel any active attack step cleanly into Dodging / Vanish-Evade
 	World->GetTimerManager().ClearTimer(AttackStepTimerHandle);
 	bQueuedNextComboHit = false;
 
@@ -202,23 +202,137 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		DamageComp->SetInvulnerable(true);
 	}
 
-	FVector EvadeDir = DesiredWorldDirection.GetSafeNormal();
-	if (EvadeDir.IsNearlyZero())
+	// 1. Detect contextual enemy presence ("né nếu có quái"): Locked target in range OR nearest living enemy in proximity
+	AActor* ThreatTarget = nullptr;
+	if (TargetingComp)
 	{
-		EvadeDir = -Owner->GetActorForwardVector();
+		if (TargetingComp->IsLockedOn())
+		{
+			AActor* Locked = TargetingComp->GetLockedTarget();
+			if (Locked && FVector::DistSquared(Owner->GetActorLocation(), Locked->GetActorLocation()) <= FMath::Square((double)CombatEvadeMaxLockDistance))
+			{
+				ThreatTarget = Locked;
+			}
+		}
+		if (!ThreatTarget)
+		{
+			ThreatTarget = TargetingComp->FindNearestLivingTarget(CombatEvadeSenseRadius);
+		}
+	}
+	bLastDodgeWasCombatEvade = (ThreatTarget != nullptr);
+
+	ACharacter* OwnerChar = Cast<ACharacter>(Owner);
+	UCharacterMovementComponent* MoveComp = OwnerChar ? OwnerChar->GetCharacterMovement() : nullptr;
+	const bool bGrounded = (MoveComp && MoveComp->IsMovingOnGround());
+
+	FVector EvadeDir = DesiredWorldDirection.GetSafeNormal();
+	float BlinkDist = ShortBlinkDistance;
+
+	if (ThreatTarget)
+	{
+		// Contextual Combat Evade / Short Vanish around Enemy
+		FVector ToThreat = ThreatTarget->GetActorLocation() - Owner->GetActorLocation();
+		if (bGrounded)
+		{
+			ToThreat.Z = 0.0f;
+		}
+		const float DistToThreat = ToThreat.Size();
+		const FVector DirToThreat = (DistToThreat > 1.0f) ? (ToThreat / DistToThreat) : Owner->GetActorForwardVector();
+
+		if (!EvadeDir.IsNearlyZero())
+		{
+			// Directional Combat Step: clamp forward blink so we stop right at strike distance instead of colliding face-first
+			if (FVector::DotProduct(EvadeDir, DirToThreat) > 0.50f)
+			{
+				BlinkDist = FMath::Clamp(DistToThreat - 145.0f, 0.0f, ShortBlinkDistance);
+			}
+			else
+			{
+				BlinkDist = CombatEvadeBlinkDistance;
+			}
+		}
+		else
+		{
+			// No WASD held near an enemy:
+			if (DistToThreat <= 450.0f)
+			{
+				// Close-quarters automatic flank/backstep evade out of enemy attack zone!
+				const float SideSign = bEvadeSideFlip ? -1.0f : 1.0f;
+				bEvadeSideFlip = !bEvadeSideFlip;
+				const FVector RightPerp(-DirToThreat.Y, DirToThreat.X, 0.0f);
+				EvadeDir = (-DirToThreat * 0.55f + RightPerp * SideSign * 0.83f).GetSafeNormal();
+				BlinkDist = CombatEvadeBlinkDistance;
+			}
+			else
+			{
+				// Mid-range locked enemy -> instant short-range vanish gap-closer up to melee strike distance!
+				EvadeDir = DirToThreat;
+				BlinkDist = FMath::Clamp(DistToThreat - 150.0f, 0.0f, ShortBlinkDistance * 1.25f);
+			}
+		}
+	}
+	else
+	{
+		// Free-Roam Quick Dash / Short Blink ("lướt / dịch chuyển ngắn"): default FORWARD along camera aim when no WASD held
+		if (EvadeDir.IsNearlyZero())
+		{
+			if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+			{
+				if (const AController* Ctrl = OwnerPawn->GetController())
+				{
+					const FRotator AimRot = bGrounded
+						? FRotator(0.0f, Ctrl->GetControlRotation().Yaw, 0.0f)
+						: Ctrl->GetControlRotation();
+					EvadeDir = AimRot.Vector();
+				}
+			}
+			if (EvadeDir.IsNearlyZero())
+			{
+				EvadeDir = Owner->GetActorForwardVector();
+			}
+		}
+		BlinkDist = ShortBlinkDistance;
 	}
 
-	if (ACharacter* OwnerChar = Cast<ACharacter>(Owner))
+	if (bGrounded)
 	{
-		if (UCharacterMovementComponent* MoveComp = OwnerChar->GetCharacterMovement())
+		EvadeDir.Z = 0.0f;
+		EvadeDir = EvadeDir.GetSafeNormal();
+	}
+	if (EvadeDir.IsNearlyZero())
+	{
+		EvadeDir = Owner->GetActorForwardVector();
+	}
+
+	// 2. Execute collision-swept short-range flash displacement (never clips walls, floors, or capsules)
+	if (BlinkDist > 1.0f)
+	{
+		FHitResult SweepHit;
+		Owner->SetActorLocation(Owner->GetActorLocation() + (EvadeDir * BlinkDist), /*bSweep=*/true, &SweepHit);
+	}
+
+	// 3. Orient character: face ThreatTarget for instant counterattack if evading enemy, else face dash direction
+	if (ThreatTarget)
+	{
+		const FVector PostEvadeToThreat = ThreatTarget->GetActorLocation() - Owner->GetActorLocation();
+		if (!PostEvadeToThreat.IsNearlyZero(1.0f))
 		{
-			if (MoveComp->IsMovingOnGround())
-			{
-				EvadeDir.Z = 0.0f;
-				EvadeDir = EvadeDir.GetSafeNormal();
-			}
-			MoveComp->Velocity = EvadeDir * DodgeBurstSpeed;
+			Owner->SetActorRotation(FRotator(0.0f, PostEvadeToThreat.Rotation().Yaw, 0.0f));
 		}
+	}
+	else
+	{
+		const FVector PlanarDash(EvadeDir.X, EvadeDir.Y, 0.0f);
+		if (!PlanarDash.IsNearlyZero(0.01f))
+		{
+			Owner->SetActorRotation(FRotator(0.0f, PlanarDash.Rotation().Yaw, 0.0f));
+		}
+	}
+
+	// 4. Apply high-speed follow-through glide velocity
+	if (MoveComp)
+	{
+		MoveComp->Velocity = EvadeDir * DodgeBurstSpeed;
 	}
 
 	World->GetTimerManager().SetTimer(

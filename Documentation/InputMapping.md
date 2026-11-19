@@ -16,8 +16,8 @@ All player controls use Unreal Engine 5's **Enhanced Input** subsystem (`IMC_Pla
 | `IA_FlightToggle` | `Digital (bool)` | `F` *(Cancel only)* | Cancels active `Flying` mode if pressed in air (entering flight requires airborne `Space`). |
 | `IA_Sprint` | `Digital (bool)` | `Left Ctrl` | **Ground:** Fast Run (`880 cm/s`).<br>**While Flying:** **`x2.0`** high-speed Flight Boost (`3150 cm/s` planar / `2550 cm/s` vertical). |
 | `IA_MeleeAttack` | `Digital (bool)` | `Left Mouse Button` | Executes basic melee & advances `Combo 1 → 2 → 3` inside valid combo window (Ground & Air). |
-| `IA_KiBlast` | `Digital (bool)` | `Right Mouse Button` | Fires `AIU_KiProjectile` from hand socket toward locked target or camera aim point (consumes `Ki`). |
-| `IA_Dodge` | `Digital (bool)` | `Q` | Directional evade burst on ground or in mid-air with brief invulnerability (`i-frames`); cleanly exits back to `Idle` / `Flying`. |
+| `IA_KiBlast` | `Digital (bool)` | `Q` | Fires `AIU_KiProjectile` ("Chưởng") from hand socket toward locked target or camera aim point (consumes `Ki`). |
+| `IA_Dodge` | `Digital (bool)` | `Right Mouse Button` | **No Enemy Nearby:** Quick Dash + Short-Range Blink (`Lướt / Dịch chuyển ngắn`) forward or along `WASD` (Ground & 3D Flight).<br>**Enemy Nearby / Locked-On:** Contextual Combat Evade / Vanish-Step (`Né nếu có quái`) with `i-frames`, keeping character facing the enemy. |
 | `IA_LockOn` | `Digital (bool)` | `Middle Mouse Button` / `C` | Acquires nearest valid living target in range or releases current lock-on. |
 | `IA_SwitchTarget` | `Digital (bool)` | `E` | Cycles lock-on among valid living targets in range. |
 | `IA_ToggleRotationMode` | `Digital (bool)` | `Tab` | Toggles ground rotation mode between `OrientToCamera` (default) and `OrientToMovement`. |

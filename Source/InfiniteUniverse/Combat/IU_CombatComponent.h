@@ -82,17 +82,33 @@ public:
 	FVector FallbackMuzzleOffset = FVector(75.0f, 22.0f, 25.0f);
 
 	// ========================================================================
-	// Tunable Dodge Parameters
+	// Tunable Dash / Short-Blink / Contextual Combat Evade Parameters (RMB)
 	// ========================================================================
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "300.0", ClampMax = "5000.0"))
-	float DodgeBurstSpeed = 1650.0f;
+	float DodgeBurstSpeed = 1750.0f;
+
+	/** Swept short-range flash-step distance when dashing freely (cm). Swept with collision so it never clips walls. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "0.0", ClampMax = "800.0"))
+	float ShortBlinkDistance = 240.0f;
+
+	/** Proximity radius (cm) to automatically sense nearby living enemies and trigger Combat Evade even without Lock-On. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+	float CombatEvadeSenseRadius = 750.0f;
+
+	/** Maximum lock-on distance (cm) for contextual vanish/gap-close or flank evade around a locked target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "300.0", ClampMax = "3000.0"))
+	float CombatEvadeMaxLockDistance = 1350.0f;
+
+	/** Swept vanish-evade offset distance (cm) when flanking/evading a nearby enemy. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "50.0", ClampMax = "600.0"))
+	float CombatEvadeBlinkDistance = 190.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "0.08", ClampMax = "1.0"))
 	float DodgeDuration = 0.22f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge", meta = (ClampMin = "0.10", ClampMax = "5.0"))
-	float DodgeCooldown = 0.50f;
+	float DodgeCooldown = 0.45f;
 
 	// ========================================================================
 	// Combat Actions & State Queries
@@ -115,6 +131,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|Combat")
 	int32 GetCurrentComboStep() const { return CurrentComboStep; }
+
+	/** True when the most recent RMB dash/dodge detected a nearby/locked enemy and executed a Combat Evade. */
+	UFUNCTION(BlueprintPure, Category = "IU|Combat")
+	bool IsLastDodgeCombatEvade() const { return bLastDodgeWasCombatEvade; }
 
 	UPROPERTY(BlueprintAssignable, Category = "IU|Combat|Events")
 	FIU_OnCombatStateChangedSignature OnCombatStateChanged;
@@ -158,6 +178,8 @@ private:
 	bool bQueuedNextComboHit = false;
 	bool bKiBlastOnCooldown = false;
 	bool bDodgeOnCooldown = false;
+	bool bLastDodgeWasCombatEvade = false;
+	bool bEvadeSideFlip = false;
 
 	FTimerHandle AttackStepTimerHandle;
 	FTimerHandle ComboResetTimerHandle;

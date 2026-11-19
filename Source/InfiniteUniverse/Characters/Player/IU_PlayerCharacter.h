@@ -178,10 +178,15 @@ private:
 	UFUNCTION()
 	void HandleComboVisualPulse(int32 ComboStep);
 
+	UFUNCTION()
+	void HandleCombatStateVisuals(EIU_CombatState PreviousState, EIU_CombatState NewState);
+
 	float DesiredCameraArmLength = 360.0f;
 	FVector2D LastMoveAxisInput = FVector2D::ZeroVector;
 	bool bFlightDashCameraActive = false;
 	FTimerHandle StrikePulseResetTimerHandle;
+	FTimerHandle VanishFlickerTimerHandle;
 	void ResetStrikeVisualPulse();
+	void RestoreVanishVisibility();
 	void UpdatePlaceholderVisibility();
 };

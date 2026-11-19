@@ -1,6 +1,6 @@
 """
 Milestone 3 Asset, HUD & Combat Target Setup Script
-- Creates IA_MeleeAttack (LMB), IA_KiBlast (RMB), IA_Dodge (Q), IA_LockOn (MiddleMouse / C), IA_SwitchTarget (E)
+- Creates IA_MeleeAttack (LMB), IA_KiBlast (Q), IA_Dodge (RMB - Contextual Dash / Short Blink / Combat Evade), IA_LockOn (MiddleMouse / C), IA_SwitchTarget (E)
 - Updates IMC_Player, BP_PlayerController, BP_PlayerCharacter, BP_GameMode, and creates WBP_PlayerHUD + BP_KiProjectile
 - Places 2 Ground Practice Dummies and 1 Sky Platform Practice Dummy in M_Prototype for immediate combat testing
 """

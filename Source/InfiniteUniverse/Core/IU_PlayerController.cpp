@@ -106,11 +106,13 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	}
 	if (InKiBlast)
 	{
-		TargetIMC->MapKey(InKiBlast, EKeys::RightMouseButton);
+		// Q: Ki Blast Energy Projectile ("Chưởng")
+		TargetIMC->MapKey(InKiBlast, EKeys::Q);
 	}
 	if (InDodge)
 	{
-		TargetIMC->MapKey(InDodge, EKeys::Q);
+		// Right Mouse Button: Contextual Dash / Short Blink / Combat Evade if Enemy Present
+		TargetIMC->MapKey(InDodge, EKeys::RightMouseButton);
 	}
 	if (InLockOn)
 	{

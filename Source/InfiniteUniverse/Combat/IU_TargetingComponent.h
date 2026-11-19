@@ -60,6 +60,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Targeting")
 	FVector GetLockedTargetAimLocation() const;
 
+	/** Finds the closest living combat target within MaxSearchRadius (used for contextual proximity evade). */
+	UFUNCTION(BlueprintPure, Category = "IU|Targeting")
+	AActor* FindNearestLivingTarget(float MaxSearchRadius) const;
+
 	bool IsValidLockCandidate(const AActor* Candidate) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "IU|Targeting|Events")

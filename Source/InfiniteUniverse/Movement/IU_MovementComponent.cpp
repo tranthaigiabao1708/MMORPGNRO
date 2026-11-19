@@ -2,6 +2,7 @@
 
 #include "Movement/IU_MovementComponent.h"
 #include "Movement/IU_FlightComponent.h"
+#include "Combat/IU_CombatComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 
@@ -204,6 +205,12 @@ void UIU_MovementComponent::PhysCustom_FreeFlight(float DeltaTime, int32 Iterati
 
 	RestorePreAdditiveRootMotionVelocity();
 
+	if (!CachedCombatComponent && GetOwner())
+	{
+		CachedCombatComponent = GetOwner()->FindComponentByClass<UIU_CombatComponent>();
+	}
+	const bool bInAerialFlashDodge = (CachedCombatComponent && CachedCombatComponent->GetCombatState() == EIU_CombatState::Dodging);
+
 	// Advance 2-stage physical ascent timers in lockstep with physics DeltaTime
 	CachedFlightComponent->StepFlightPhysicsTimers(DeltaTime);
 
@@ -213,7 +220,7 @@ void UIU_MovementComponent::PhysCustom_FreeFlight(float DeltaTime, int32 Iterati
 		? CachedFlightComponent->FlightDeceleration
 		: CachedFlightComponent->GetEffectiveFlightAcceleration();
 
-	if (!HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity())
+	if (!bInAerialFlashDodge && !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity())
 	{
 		Velocity = FMath::VInterpConstantTo(Velocity, DesiredVel, DeltaTime, Rate);
 	}

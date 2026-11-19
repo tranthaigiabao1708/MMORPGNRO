@@ -17,6 +17,9 @@
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_PracticeDummy.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "InputMappingContext.h"
+#include "InputAction.h"
+#include "InputCoreTypes.h"
 
 namespace IU_M3TestHelpers
 {
@@ -249,6 +252,26 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 {
+	// 0. Verify Q -> KiBlast and RightMouseButton -> Dodge/Dash/Evade mapping in IMC_Player
+	if (UInputMappingContext* DiskIMC = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Input/IMC_Player.IMC_Player")))
+	{
+		bool bFoundQKiBlast = false;
+		bool bFoundRMBDodge = false;
+		for (const FEnhancedActionKeyMapping& Mapping : DiskIMC->GetMappings())
+		{
+			if (Mapping.Action && Mapping.Action->GetName() == TEXT("IA_KiBlast") && Mapping.Key == EKeys::Q)
+			{
+				bFoundQKiBlast = true;
+			}
+			if (Mapping.Action && Mapping.Action->GetName() == TEXT("IA_Dodge") && Mapping.Key == EKeys::RightMouseButton)
+			{
+				bFoundRMBDodge = true;
+			}
+		}
+		TestTrue(TEXT("IMC_Player binds Q to IA_KiBlast"), bFoundQKiBlast);
+		TestTrue(TEXT("IMC_Player binds RightMouseButton to IA_Dodge"), bFoundRMBDodge);
+	}
+
 	IU_M3TestHelpers::FScopedCombatTestWorld ScopeWorld;
 
 	AIU_PlayerCharacter* Player = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>(FVector::ZeroVector, FRotator::ZeroRotator);
@@ -259,16 +282,31 @@ bool FIU_M3_DodgeStateAndInvulnerabilityTest::RunTest(const FString& Parameters)
 	UIU_DamageComponent* DmgComp = Player->GetDamageComponent();
 	UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
 
-	TestTrue(TEXT("RequestDodge succeeded"), Combat->RequestDodge(FVector(0.0, 1.0, 0.0)));
-	TestEqual(TEXT("CombatState is Dodging"), Combat->GetCombatState(), EIU_CombatState::Dodging);
-	TestTrue(TEXT("Player is invulnerable during Dodge"), DmgComp->IsInvulnerable());
+	// 1. Free-roam RMB ("Lướt / dịch chuyển ngắn" - no enemy nearby, no WASD): blinks & dashes forward (+X)
+	Player->DodgeInput();
+	TestEqual(TEXT("CombatState is Dodging during Free-Roam Flash Dash"), Combat->GetCombatState(), EIU_CombatState::Dodging);
+	TestFalse(TEXT("No enemy nearby -> Free-Roam Flash Dash mode"), Combat->IsLastDodgeCombatEvade());
+	TestTrue(TEXT("Short blink moved player forward > 200 cm"), Player->GetActorLocation().X > 200.0);
 
-	// Incoming attack during Dodge must be evaded (0 HP lost)
-	AIU_PracticeDummy* Attacker = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(100.0, 0.0, 0.0), FRotator::ZeroRotator);
+	// Wait for DodgeDuration + DodgeCooldown to reset
+	ScopeWorld.TickSimulation(Combat->DodgeCooldown + 0.08f, Player);
+	TestEqual(TEXT("Returned to Idle after Free-Roam Flash Dash"), Combat->GetCombatState(), EIU_CombatState::Idle);
+
+	// 2. Proximity Combat Evade ("Né nếu có quái" - living enemy nearby, even without manual Lock-On!)
+	Player->SetActorLocation(FVector::ZeroVector);
+	AIU_PracticeDummy* Attacker = ScopeWorld.World->SpawnActor<AIU_PracticeDummy>(FVector(220.0, 0.0, 0.0), FRotator::ZeroRotator);
+
+	Player->DodgeInput();
+	TestEqual(TEXT("CombatState is Dodging during Proximity Combat Evade"), Combat->GetCombatState(), EIU_CombatState::Dodging);
+	TestTrue(TEXT("Nearby enemy auto-detected -> Combat Evade mode active"), Combat->IsLastDodgeCombatEvade());
+	TestTrue(TEXT("Player is invulnerable during Combat Evade"), DmgComp->IsInvulnerable());
+	TestTrue(TEXT("Evaded laterally out of direct attack line"), FMath::Abs(Player->GetActorLocation().Y) > 80.0);
+
+	// Incoming attack during Combat Evade must be completely negated (0 HP lost)
 	FIU_DamageSpec IncomingHit;
 	IncomingHit.Amount = 35.0f;
 	IncomingHit.InstigatorActor = Attacker;
-	TestFalse(TEXT("Damage rejected while Dodging"), DmgComp->ApplyDamageSpec(IncomingHit));
+	TestFalse(TEXT("Damage rejected while Evading"), DmgComp->ApplyDamageSpec(IncomingHit));
 	TestEqual(TEXT("Player HP unchanged at 100"), Attr->GetHP(), 100.0f);
 
 	// Advance past DodgeDuration -> returns cleanly to Idle & vulnerable again

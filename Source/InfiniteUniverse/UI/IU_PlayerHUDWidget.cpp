@@ -190,7 +190,8 @@ void UIU_PlayerHUDWidget::RefreshStatusText()
 	}
 	else if (DisplayedCombatState == EIU_CombatState::Dodging)
 	{
-		CombatLabel = TEXT("DODGING");
+		const bool bCombatEvade = (BoundCombatComp.IsValid() && BoundCombatComp->IsLastDodgeCombatEvade());
+		CombatLabel = bCombatEvade ? TEXT("VANISH EVADE") : TEXT("FLASH DASH");
 	}
 	else if (DisplayedCombatState == EIU_CombatState::HitReaction)
 	{

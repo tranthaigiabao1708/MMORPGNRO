@@ -237,6 +237,36 @@ FVector UIU_TargetingComponent::GetLockedTargetAimLocation() const
 	return FVector::ZeroVector;
 }
 
+AActor* UIU_TargetingComponent::FindNearestLivingTarget(float MaxSearchRadius) const
+{
+	UWorld* World = GetWorld();
+	const AActor* Owner = GetOwner();
+	if (!World || !Owner || MaxSearchRadius <= 0.0f)
+	{
+		return nullptr;
+	}
+
+	const FVector Origin = Owner->GetActorLocation();
+	double BestDistSq = FMath::Square((double)MaxSearchRadius);
+	AActor* Nearest = nullptr;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (IsValidLockCandidate(Actor))
+		{
+			const double DistSq = FVector::DistSquared(Origin, Actor->GetActorLocation());
+			if (DistSq <= BestDistSq)
+			{
+				BestDistSq = DistSq;
+				Nearest = Actor;
+			}
+		}
+	}
+
+	return Nearest;
+}
+
 bool UIU_TargetingComponent::IsValidLockCandidate(const AActor* Candidate) const
 {
 	if (!IsValid(Candidate) || Candidate == GetOwner() || Candidate->IsActorBeingDestroyed())

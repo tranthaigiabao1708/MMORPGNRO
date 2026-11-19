@@ -110,6 +110,7 @@ void AIU_PlayerCharacter::BeginPlay()
 	if (CombatComponent)
 	{
 		CombatComponent->OnComboStepExecuted.AddDynamic(this, &AIU_PlayerCharacter::HandleComboVisualPulse);
+		CombatComponent->OnCombatStateChanged.AddDynamic(this, &AIU_PlayerCharacter::HandleCombatStateVisuals);
 	}
 
 	UpdatePlaceholderVisibility();
@@ -388,9 +389,12 @@ void AIU_PlayerCharacter::DodgeInput()
 	FVector EvadeWorldDir = FVector::ZeroVector;
 	if (!LastMoveAxisInput.IsNearlyZero(0.1f) && Controller)
 	{
-		const FRotator YawRot(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
-		const FVector Fwd = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
-		const FVector Right = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
+		const bool bFlying3D = (FlightComponent && FlightComponent->IsFlying());
+		const FRotator RefRot = bFlying3D
+			? Controller->GetControlRotation()
+			: FRotator(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+		const FVector Fwd = FRotationMatrix(RefRot).GetUnitAxis(EAxis::X);
+		const FVector Right = FRotationMatrix(RefRot).GetUnitAxis(EAxis::Y);
 		EvadeWorldDir = (Fwd * LastMoveAxisInput.Y + Right * LastMoveAxisInput.X).GetSafeNormal();
 	}
 	CombatComponent->RequestDodge(EvadeWorldDir);
@@ -439,6 +443,45 @@ void AIU_PlayerCharacter::ResetStrikeVisualPulse()
 		PlaceholderFacingVisor->SetRelativeLocation(FVector(42.0f, 0.0f, 32.0f));
 		PlaceholderFacingVisor->SetRelativeScale3D(FVector(0.45f, 0.70f, 0.12f));
 	}
+}
+
+void AIU_PlayerCharacter::HandleCombatStateVisuals(EIU_CombatState PreviousState, EIU_CombatState NewState)
+{
+	if (NewState == EIU_CombatState::Dodging)
+	{
+		// Brief anime Z-Vanish / Short-Teleport flicker (0.065s)
+		if (PlaceholderBodyMesh)
+		{
+			PlaceholderBodyMesh->SetVisibility(false, true);
+		}
+		if (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr)
+		{
+			GetMesh()->SetVisibility(false, true);
+		}
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				VanishFlickerTimerHandle,
+				this,
+				&AIU_PlayerCharacter::RestoreVanishVisibility,
+				0.065f,
+				false);
+		}
+	}
+	else if (PreviousState == EIU_CombatState::Dodging)
+	{
+		RestoreVanishVisibility();
+	}
+}
+
+void AIU_PlayerCharacter::RestoreVanishVisibility()
+{
+	const bool bHasSkeletalMesh = (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr);
+	if (bHasSkeletalMesh)
+	{
+		GetMesh()->SetVisibility(true, true);
+	}
+	UpdatePlaceholderVisibility();
 }
 
 void AIU_PlayerCharacter::UpdatePlaceholderVisibility()

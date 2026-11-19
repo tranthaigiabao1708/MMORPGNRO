@@ -8,6 +8,7 @@
 #include "IU_MovementComponent.generated.h"
 
 class UIU_FlightComponent;
+class UIU_CombatComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FIU_OnMovementModeChangedSignature,
@@ -120,6 +121,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_FlightComponent> CachedFlightComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_CombatComponent> CachedCombatComponent;
 
 	bool bIsSprinting = false;
 
