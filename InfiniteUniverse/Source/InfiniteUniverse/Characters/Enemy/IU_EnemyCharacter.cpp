@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/World.h"
@@ -108,6 +109,14 @@ void AIU_EnemyCharacter::BeginPlay()
 		if (USkeletalMesh* DefaultEnemyMesh = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Enemy/Meshes/SK_Enemy.SK_Enemy")))
 		{
 			GetMesh()->SetSkeletalMeshAsset(DefaultEnemyMesh);
+		}
+	}
+
+	if (StrikeFistMesh)
+	{
+		if (UMaterialInterface* CrimsonGlowMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Characters/Enemy/Materials/M_EnemyVisor.M_EnemyVisor")))
+		{
+			StrikeFistMesh->SetMaterial(0, CrimsonGlowMat);
 		}
 	}
 

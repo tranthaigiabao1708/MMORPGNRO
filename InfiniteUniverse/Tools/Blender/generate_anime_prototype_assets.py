@@ -153,11 +153,11 @@ def build_stylized_anime_mesh(scene, arm_obj: bpy.types.Object, mesh_name: str, 
     mesh_obj = bpy.data.objects.new(mesh_name, mesh_data)
     scene.collection.objects.link(mesh_obj)
 
-    # Material slots: 0=Skin, 1=GiPrimary, 2=AccentSash, 3=Hair, 4=Boots
+    # Material slots: 0=Skin, 1=GiPrimary/Armor, 2=AccentSash/Trim, 3=Hair/Crest, 4=Boots, 5=Eyes/Visor
     mat_names = (
-        ("M_EnemySkin", "M_EnemyArmor", "M_EnemyCrimsonTrim", "M_EnemyCrest", "M_EnemyBoots")
+        ("M_EnemySkin", "M_EnemyArmor", "M_EnemyCrimsonTrim", "M_EnemyCrest", "M_EnemyBoots", "M_EnemyVisor")
         if is_enemy
-        else ("M_PlayerSkin", "M_PlayerGi", "M_PlayerSash", "M_PlayerHair", "M_PlayerBoots")
+        else ("M_PlayerSkin", "M_PlayerGi", "M_PlayerSash", "M_PlayerHair", "M_PlayerBoots", "M_PlayerEyes")
     )
     for m_name in mat_names:
         mat = bpy.data.materials.new(name=m_name)
@@ -166,57 +166,95 @@ def build_stylized_anime_mesh(scene, arm_obj: bpy.types.Object, mesh_name: str, 
     bm = bmesh.new()
     uv_layer = bm.loops.layers.uv.new("UVMap")
 
-    # 1. Pelvis & Martial Arts Gi Tunic + Obi Belt Sash
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 90)), Vector((0, 0, 108)), 14.5, 10.5, 13.0, 9.5, 3, 14, 1)
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 105)), Vector((0, 0, 114)), 14.2, 10.6, 14.0, 10.4, 2, 14, 2)  # Belt sash
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 112)), Vector((0, 0, 146)), 13.2, 9.5, 17.5, 11.2, 5, 16, 1)  # Athletic chest
+    # 1. Pelvis, Martial Arts Gi Tunic / Battle Armor, Obi Belt Knot & Hanging Sash Tails
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 88)), Vector((0, 0, 108)), 15.0, 10.8, 13.2, 9.6, 4, 16, 1)
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 104.5)), Vector((0, 0, 114.5)), 14.6, 11.0, 14.3, 10.8, 3, 16, 2)  # Obi sash / belt
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 112)), Vector((0, 0, 146)), 13.4, 9.6, 18.0, 11.6, 6, 18, 1)  # Sculpted V-taper chest
 
-    # 2. Neck & Stylized Anime Head + Front Eye/Visor Band (-Y is front face!)
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 145)), Vector((0, 0, 156)), 5.6, 5.4, 5.2, 5.0, 2, 10, 0)
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, -1.0, 154)), Vector((0, -0.5, 173)), 8.2, 9.2, 9.5, 10.2, 4, 14, 0)
-    # Brow / Scouter visor accent on the -Y front face so orientation is unmistakable
-    add_tapered_limb_segment(bm, uv_layer, Vector((-6.5, -9.8, 163.5)), Vector((6.5, -9.8, 163.5)), 1.6, 1.8, 1.6, 1.8, 2, 8, 2)
+    if is_enemy:
+        # Raider armored hip tassets (left/right battle plates) & chest core emblem
+        for sx in (1.0, -1.0):
+            add_tapered_limb_segment(bm, uv_layer, Vector((sx * 14.2, -1.0, 108)), Vector((sx * 17.5, -1.5, 84)), 2.2, 7.8, 1.6, 6.2, 3, 10, 2)
+        add_tapered_limb_segment(bm, uv_layer, Vector((0, -10.8, 126)), Vector((0, -11.6, 138)), 4.8, 1.8, 6.2, 2.0, 2, 10, 5)
+    else:
+        # Martial Artist V-neck blue undershirt + skin clavicle wedge + Obi knot & 2 flowing belt ribbons
+        add_tapered_limb_segment(bm, uv_layer, Vector((0, -9.2, 132)), Vector((0, -8.5, 145.5)), 3.2, 2.2, 5.8, 2.5, 2, 10, 2)
+        add_tapered_limb_segment(bm, uv_layer, Vector((0, -9.5, 137)), Vector((0, -8.2, 146.5)), 2.2, 2.0, 4.2, 2.2, 2, 10, 0)
+        add_tapered_limb_segment(bm, uv_layer, Vector((-5.5, -10.8, 109)), Vector((-5.8, -11.2, 104)), 3.2, 2.6, 2.8, 2.2, 2, 8, 2)  # Obi knot
+        add_tapered_limb_segment(bm, uv_layer, Vector((-5.5, -11.0, 105)), Vector((-8.5, -12.0, 80)), 2.4, 1.1, 3.0, 0.9, 4, 8, 2)   # Ribbon 1
+        add_tapered_limb_segment(bm, uv_layer, Vector((-3.0, -11.0, 105)), Vector((-3.8, -12.4, 83)), 2.2, 1.1, 2.7, 0.9, 4, 8, 2)   # Ribbon 2
 
-    # 3. Iconic Spiky Shonen Hair Crown (reaches exact Z = 180.0 cm!)
-    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0.5, 165)), Vector((0, 1.5, 176)), 10.4, 11.0, 7.5, 8.0, 2, 12, 3)
+    # 2. Neck, Stylized Anime Jaw/Cranium & Expressive Eyes / Scouter Visor (-Y is front face!)
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0, 145)), Vector((0, 0, 156)), 5.6, 5.4, 5.1, 5.0, 3, 12, 0)
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, -1.2, 154)), Vector((0, -0.6, 172.8)), 7.8, 8.8, 9.6, 10.4, 5, 16, 0)
+    # Subtle anime nose bridge on -Y front face
+    add_hair_spike(bm, uv_layer, Vector((0, -9.6, 161.2)), Vector((0, -11.4, 159.8)), 1.3, 0)
+
+    if is_enemy:
+        # Glowing wraparound Crimson Scouter / Visor across face
+        add_tapered_limb_segment(bm, uv_layer, Vector((-7.6, -9.4, 163.5)), Vector((7.6, -9.4, 163.5)), 1.9, 2.2, 1.9, 2.2, 3, 10, 5)
+    else:
+        # Luminous Cyan-Azure Anime Eyes + Sharp Shonen Eyebrows
+        for sx in (1.0, -1.0):
+            add_tapered_limb_segment(bm, uv_layer, Vector((sx * 2.4, -9.9, 162.4)), Vector((sx * 5.2, -9.2, 162.9)), 1.35, 0.9, 1.25, 0.9, 2, 8, 5)
+            add_tapered_limb_segment(bm, uv_layer, Vector((sx * 2.0, -10.1, 164.6)), Vector((sx * 5.8, -9.3, 165.4)), 0.65, 0.65, 0.50, 0.55, 2, 6, 3)
+
+    # 3. Iconic Multi-Tier Spiky Shonen Hair Crown / Horned Raider Crest (strictly 180-182 cm!)
+    add_tapered_limb_segment(bm, uv_layer, Vector((0, 0.6, 164.5)), Vector((0, 1.6, 175.8)), 10.6, 11.2, 7.8, 8.2, 3, 14, 3)
     spikes = (
         [
-            (Vector((0, 0, 173)), Vector((0, -5, 181.5)), 5.2),
-            (Vector((6, 0, 171)), Vector((16, 4, 180.0)), 4.6),
-            (Vector((-6, 0, 171)), Vector((-16, 4, 180.0)), 4.6),
-            (Vector((0, 5, 170)), Vector((0, 16, 177.0)), 4.8),
+            (Vector((0, -1, 173)), Vector((0, -6, 181.6)), 5.2),
+            (Vector((6, 0, 171)), Vector((16.5, 3, 180.4)), 4.6),
+            (Vector((-6, 0, 171)), Vector((-16.5, 3, 180.4)), 4.6),
+            (Vector((7, 4, 168)), Vector((18, 10, 175.0)), 4.2),
+            (Vector((-7, 4, 168)), Vector((-18, 10, 175.0)), 4.2),
+            (Vector((0, 6, 169)), Vector((0, 17, 176.5)), 4.8),
         ]
         if is_enemy
         else [
-            (Vector((0, -1, 172)), Vector((0, -7, 180.0)), 5.0),
-            (Vector((5, -1, 171)), Vector((15, -2, 179.2)), 4.8),
-            (Vector((-5, -1, 171)), Vector((-15, -2, 179.2)), 4.8),
-            (Vector((6, 3, 169)), Vector((17, 9, 175.5)), 4.5),
-            (Vector((-6, 3, 169)), Vector((-17, 9, 175.5)), 4.5),
-            (Vector((0, 6, 168)), Vector((0, 17, 173.0)), 4.6),
-            (Vector((3, -6, 169)), Vector((6, -14, 165.0)), 3.2),
+            # Upper dramatic hero crown spikes
+            (Vector((0, -1, 172.5)), Vector((0, -7.5, 180.2)), 5.0),
+            (Vector((5.2, -1, 171.5)), Vector((15.8, -2.5, 179.4)), 4.8),
+            (Vector((-5.2, -1, 171.5)), Vector((-15.8, -2.5, 179.4)), 4.8),
+            # Mid-tier swept side spikes (classic Dragon Ball / Shonen silhouette)
+            (Vector((7.5, 1.5, 168.5)), Vector((19.5, 5.5, 174.5)), 4.5),
+            (Vector((-7.5, 1.5, 168.5)), Vector((-19.5, 5.5, 174.5)), 4.5),
+            (Vector((7.0, 4.5, 165.0)), Vector((17.5, 11.5, 168.5)), 4.0),
+            (Vector((-7.0, 4.5, 165.0)), Vector((-17.5, 11.5, 168.5)), 4.0),
+            # Rear spikes
+            (Vector((0, 6.5, 168.5)), Vector((0, 18.0, 173.5)), 4.7),
+            (Vector((4.0, 6.5, 164.0)), Vector((8.5, 16.0, 165.5)), 3.8),
+            (Vector((-4.0, 6.5, 164.0)), Vector((-8.5, 16.0, 165.5)), 3.8),
+            # Forehead bangs framing the anime eyes
+            (Vector((2.5, -6.5, 169.5)), Vector((5.2, -13.2, 163.8)), 3.0),
+            (Vector((-2.2, -6.5, 169.5)), Vector((-4.5, -13.0, 164.2)), 2.8),
+            (Vector((0.0, -7.0, 170.0)), Vector((0.5, -13.6, 164.5)), 2.6),
         ]
     )
     for b_pos, t_pos, rad in spikes:
         add_hair_spike(bm, uv_layer, b_pos, t_pos, rad, 3)
 
-    # 4. Left & Right Arms (Gi shoulder caps + muscular skin arms + wristbands + fists)
+    # 4. Left & Right Arms (Winged Raider Pauldrons / Gi Sleeves + Muscular Arms + Wristbands + Fists)
     for sx in (1.0, -1.0):
         shoulder_mat = 2 if is_enemy else 1
-        sh_rad = 7.8 if is_enemy else 6.4
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 13, 0, 143)), Vector((sx * 23, 0, 142.5)), sh_rad, sh_rad, 5.5, 5.5, 2, 10, shoulder_mat)
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 22, 0, 142.5)), Vector((sx * 42, 0, 141)), 5.0, 5.0, 4.4, 4.4, 4, 10, 0)
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 42, 0, 141)), Vector((sx * 58, -0.8, 140.2)), 4.5, 4.5, 3.8, 3.8, 4, 10, 0)
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 57.5, -0.8, 140.2)), Vector((sx * 65.5, -1.0, 140.0)), 4.2, 4.2, 4.0, 4.0, 2, 10, 2)  # Wristband
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 65.0, -1.0, 140.0)), Vector((sx * 74.5, -1.5, 139.2)), 3.9, 3.2, 3.6, 2.9, 2, 10, 0)  # Fist
+        sh_rad = 8.4 if is_enemy else 6.6
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 12.5, 0, 143.5)), Vector((sx * 23.5, 0, 142.5)), sh_rad, sh_rad, 5.6, 5.6, 3, 12, shoulder_mat)
+        if is_enemy:
+            # Swept winged shoulder armor fin
+            add_hair_spike(bm, uv_layer, Vector((sx * 18.0, 0, 145.0)), Vector((sx * 29.0, 3.0, 151.5)), 5.2, 2)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 22, 0, 142.5)), Vector((sx * 42, 0, 141)), 5.1, 5.1, 4.5, 4.5, 4, 12, 0)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 42, 0, 141)), Vector((sx * 58, -0.8, 140.2)), 4.6, 4.6, 3.9, 3.9, 4, 12, 0)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 57.2, -0.8, 140.2)), Vector((sx * 65.8, -1.0, 140.0)), 4.35, 4.35, 4.15, 4.15, 2, 12, 2)  # Wristband
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 65.0, -1.0, 140.0)), Vector((sx * 74.8, -1.5, 139.2)), 4.0, 3.3, 3.7, 3.0, 2, 12, 0)  # Fist
 
-    # 5. Baggy Martial-Arts Pants (Thighs + Calves) & Combat Boots (Feet resting cleanly at Z = 0.0 cm!)
+    # 5. Baggy Martial-Arts Pants (Thighs + Calves) & Cuffed Combat Boots (Feet resting cleanly at Z = 0.0 cm!)
     for sx in (1.0, -1.0):
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 10.5, 0, 96)), Vector((sx * 11.0, -0.5, 52)), 9.2, 9.5, 8.2, 8.5, 5, 12, 1)
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, -0.5, 52)), Vector((sx * 11.0, 0.8, 22)), 7.8, 8.0, 5.4, 5.6, 4, 12, 1)
-        # Tall anime martial-arts boot shaft + sole resting at exact Z = 0.0 cm!
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, 0.8, 23)), Vector((sx * 11.0, 1.0, 5.0)), 5.0, 5.2, 4.5, 4.8, 3, 10, 4)
-        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, 4.5, 4.2)), Vector((sx * 11.0, -19.5, 3.5)), 4.6, 4.2, 3.8, 3.5, 3, 10, 4)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 10.5, 0, 96)), Vector((sx * 11.0, -0.5, 52)), 9.5, 9.8, 8.5, 8.8, 5, 14, 1)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, -0.5, 52)), Vector((sx * 11.0, 0.8, 22)), 8.2, 8.4, 5.6, 5.8, 4, 14, 1)
+        # Folded ankle cuff + tall martial-arts boot shaft + sole resting at exact Z = 0.0 cm!
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, 0.8, 24.5)), Vector((sx * 11.0, 0.9, 20.5)), 5.8, 6.0, 5.3, 5.5, 2, 12, 2)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, 0.8, 21.5)), Vector((sx * 11.0, 1.0, 5.0)), 5.1, 5.3, 4.6, 4.9, 3, 12, 4)
+        add_tapered_limb_segment(bm, uv_layer, Vector((sx * 11.0, 4.5, 4.2)), Vector((sx * 11.0, -19.8, 3.5)), 4.7, 4.3, 3.9, 3.5, 3, 12, 4)
 
     # Recalculate outward normals and clamp exact ground plane Z = 0.0 cm
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])

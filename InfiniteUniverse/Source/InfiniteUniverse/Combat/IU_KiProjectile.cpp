@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "UObject/ConstructorHelpers.h"
@@ -29,7 +31,15 @@ AIU_KiProjectile::AIU_KiProjectile()
 	OrbMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OrbMesh"));
 	OrbMesh->SetupAttachment(CollisionSphere);
 	OrbMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	OrbMesh->SetRelativeScale3D(FVector(0.42f));
+	OrbMesh->CastShadow = false;
+	OrbMesh->SetRelativeScale3D(FVector(0.62f, 0.38f, 0.38f));
+
+	KiGlowLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("KiGlowLight"));
+	KiGlowLight->SetupAttachment(CollisionSphere);
+	KiGlowLight->Intensity = 3400.0f;
+	KiGlowLight->AttenuationRadius = 380.0f;
+	KiGlowLight->LightColor = FColor(75, 225, 255);
+	KiGlowLight->SetCastShadows(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereAsset(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (SphereAsset.Succeeded())
@@ -49,6 +59,14 @@ AIU_KiProjectile::AIU_KiProjectile()
 void AIU_KiProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (OrbMesh)
+	{
+		if (UMaterialInterface* KiMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Combat/VFX/M_KiEnergyOrb.M_KiEnergyOrb")))
+		{
+			OrbMesh->SetMaterial(0, KiMat);
+		}
+	}
 
 	CollisionSphere->SetSphereRadius(CollisionRadius);
 	CollisionSphere->OnComponentBeginOverlap.AddUniqueDynamic(this, &AIU_KiProjectile::HandleSphereOverlap);

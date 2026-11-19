@@ -149,9 +149,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "60.0", ClampMax = "120.0"))
 	float DefaultCameraFOV = 86.0f;
 
+	/** Subtle FOV expansion while sprinting on ground (Ctrl) for responsive anime dash sensation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "65.0", ClampMax = "125.0"))
+	float SprintCameraFOV = 91.0f;
+
 	/** Expanded camera field-of-view during Flight Dash for high-speed sensation. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "70.0", ClampMax = "130.0"))
 	float FlightDashCameraFOV = 100.0f;
+
+	/** Smoothly adjusts vertical socket height when pitching steeply up/down so spiky hair never blocks downward aim. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera")
+	bool bEnablePitchAdaptiveFraming = true;
+
+	/** Triggers a short, snappy FOV micro-pulse on heavy strikes, Ki Blast, and Perfect Evade. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Camera")
+	void TriggerCameraImpactKick(float FOVDeltaDegrees);
 
 	/** Extra camera arm distance added smoothly while Flight Dashing (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.0", ClampMax = "300.0"))
@@ -211,6 +223,9 @@ private:
 	void HandleComboVisualPulse(int32 ComboStep);
 
 	UFUNCTION()
+	void HandleKiBlastCameraKick();
+
+	UFUNCTION()
 	void HandleCombatStateVisuals(EIU_CombatState PreviousState, EIU_CombatState NewState);
 
 	UFUNCTION()
@@ -219,6 +234,7 @@ private:
 	FTransform InitialSpawnTransform;
 	bool bHasSavedInitialSpawn = false;
 	float DesiredCameraArmLength = 420.0f;
+	float ActiveCameraFOVKick = 0.0f;
 	FVector2D LastMoveAxisInput = FVector2D::ZeroVector;
 	bool bFlightDashCameraActive = false;
 	FTimerHandle StrikePulseResetTimerHandle;

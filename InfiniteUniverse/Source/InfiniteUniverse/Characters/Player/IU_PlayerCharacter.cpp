@@ -145,6 +145,7 @@ void AIU_PlayerCharacter::BeginPlay()
 	if (CombatComponent)
 	{
 		CombatComponent->OnComboStepExecuted.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleComboVisualPulse);
+		CombatComponent->OnKiBlastFired.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleKiBlastCameraKick);
 		CombatComponent->OnCombatStateChanged.AddUniqueDynamic(this, &AIU_PlayerCharacter::HandleCombatStateVisuals);
 	}
 	if (AttributeComponent)
@@ -183,10 +184,40 @@ void AIU_PlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	ActiveCameraFOVKick = FMath::FInterpTo(ActiveCameraFOVKick, 0.0f, DeltaTime, 14.0f);
+	if (FMath::Abs(ActiveCameraFOVKick) < 0.05f)
+	{
+		ActiveCameraFOVKick = 0.0f;
+	}
+
+	const bool bGroundSprinting = (IUMovementComponent && IUMovementComponent->IsSprinting() &&
+		!bFlightDashCameraActive && GetVelocity().SizeSquared2D() > FMath::Square(120.0f));
+
 	const float TargetArm = DesiredCameraArmLength + (bFlightDashCameraActive ? FlightDashArmLengthOffset : 0.0f);
-	const float TargetFOV = bFlightDashCameraActive ? FlightDashCameraFOV : DefaultCameraFOV;
+	const float BaseFOV = bFlightDashCameraActive
+		? FlightDashCameraFOV
+		: (bGroundSprinting ? SprintCameraFOV : DefaultCameraFOV);
+	const float TargetFOV = FMath::Clamp(BaseFOV + ActiveCameraFOVKick, 65.0f, 125.0f);
+
+	// Pitch-adaptive vertical socket framing: keeps exact Z=52 inside [-12..+12] deg, lifts on steep downward aim
+	float DesiredSocketZ = CameraSocketOffset.Z;
+	if (bEnablePitchAdaptiveFraming && Controller)
+	{
+		const float NormPitch = FRotator::NormalizeAxis(Controller->GetControlRotation().Pitch);
+		if (NormPitch < -12.0f)
+		{
+			const float Alpha = FMath::Clamp((-NormPitch - 12.0f) / 48.0f, 0.0f, 1.0f);
+			DesiredSocketZ = CameraSocketOffset.Z + (16.0f * Alpha);
+		}
+		else if (NormPitch > 12.0f)
+		{
+			const float Alpha = FMath::Clamp((NormPitch - 12.0f) / 48.0f, 0.0f, 1.0f);
+			DesiredSocketZ = CameraSocketOffset.Z - (16.0f * Alpha);
+		}
+	}
 
 	bool bArmSettled = true;
+	bool bSocketSettled = true;
 	bool bFOVSettled = true;
 
 	if (CameraBoom)
@@ -202,11 +233,19 @@ void AIU_PlayerCharacter::Tick(float DeltaTime)
 		{
 			CameraBoom->TargetArmLength = TargetArm;
 		}
+
+		const float NewSocketZ = FMath::FInterpTo(CameraBoom->SocketOffset.Z, DesiredSocketZ, DeltaTime, 10.0f);
+		CameraBoom->SocketOffset.Z = NewSocketZ;
+		bSocketSettled = FMath::IsNearlyEqual(NewSocketZ, DesiredSocketZ, 0.20f);
+		if (bSocketSettled)
+		{
+			CameraBoom->SocketOffset.Z = DesiredSocketZ;
+		}
 	}
 
 	if (FollowCamera)
 	{
-		const float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, 10.0f);
+		const float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, 12.0f);
 		FollowCamera->SetFieldOfView(NewFOV);
 		bFOVSettled = FMath::IsNearlyEqual(NewFOV, TargetFOV, 0.15f);
 		if (bFOVSettled)
@@ -215,7 +254,7 @@ void AIU_PlayerCharacter::Tick(float DeltaTime)
 		}
 	}
 
-	if (bArmSettled && bFOVSettled)
+	if (bArmSettled && bSocketSettled && bFOVSettled && FMath::IsNearlyZero(ActiveCameraFOVKick) && !bGroundSprinting)
 	{
 		SetActorTickEnabled(false);
 	}
@@ -282,6 +321,16 @@ void AIU_PlayerCharacter::ApplyLookInput(const FVector2D& LookAxis)
 
 	AddControllerYawInput(LookAxis.X * LookSensitivity);
 	AddControllerPitchInput(LookAxis.Y * LookSensitivity);
+	if (bEnablePitchAdaptiveFraming)
+	{
+		SetActorTickEnabled(true);
+	}
+}
+
+void AIU_PlayerCharacter::TriggerCameraImpactKick(float FOVDeltaDegrees)
+{
+	ActiveCameraFOVKick = FMath::Clamp(ActiveCameraFOVKick + FOVDeltaDegrees, -6.0f, 8.0f);
+	SetActorTickEnabled(true);
 }
 
 void AIU_PlayerCharacter::AdjustCameraZoom(float ZoomAxisValue)
@@ -437,6 +486,7 @@ void AIU_PlayerCharacter::StartSprintInput()
 	{
 		FlightComponent->SetFlightDashActive(true);
 	}
+	SetActorTickEnabled(true);
 }
 
 void AIU_PlayerCharacter::StopSprintInput()
@@ -449,6 +499,7 @@ void AIU_PlayerCharacter::StopSprintInput()
 	{
 		FlightComponent->SetFlightDashActive(false);
 	}
+	SetActorTickEnabled(true);
 }
 
 void AIU_PlayerCharacter::ApplyVisualFlightLean(const FRotator& LeanRotator)
@@ -548,6 +599,8 @@ void AIU_PlayerCharacter::SwitchTargetInput(float Direction)
 
 void AIU_PlayerCharacter::HandleComboVisualPulse(int32 ComboStep)
 {
+	TriggerCameraImpactKick(ComboStep >= 3 ? -3.0f : -1.2f);
+
 	if (PlaceholderFacingVisor)
 	{
 		// Extend forward visor punch indicator dynamically by combo step (1 -> 2 -> 3)
@@ -575,10 +628,18 @@ void AIU_PlayerCharacter::ResetStrikeVisualPulse()
 	}
 }
 
+void AIU_PlayerCharacter::HandleKiBlastCameraKick()
+{
+	TriggerCameraImpactKick(2.0f);
+}
+
 void AIU_PlayerCharacter::HandleCombatStateVisuals(EIU_CombatState PreviousState, EIU_CombatState NewState)
 {
 	if (NewState == EIU_CombatState::Dodging)
 	{
+		const bool bCombatEvade = (CombatComponent && CombatComponent->IsLastDodgeCombatEvade());
+		TriggerCameraImpactKick(bCombatEvade ? 4.8f : 1.6f);
+
 		const bool bInstantBlinkOrMirage = (CombatComponent && CombatComponent->DidLastDodgeBlinkInstantly());
 		if (bInstantBlinkOrMirage)
 		{

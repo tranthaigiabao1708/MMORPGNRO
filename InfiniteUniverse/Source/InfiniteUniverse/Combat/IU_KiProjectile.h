@@ -9,6 +9,7 @@
 
 class USphereComponent;
 class UStaticMeshComponent;
+class UPointLightComponent;
 class UProjectileMovementComponent;
 class UNiagaraSystem;
 
@@ -60,6 +61,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|KiBlast")
 	TObjectPtr<UStaticMeshComponent> OrbMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|KiBlast")
+	TObjectPtr<UPointLightComponent> KiGlowLight;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|KiBlast")
 	TObjectPtr<UProjectileMovementComponent> ProjectileMovement;

@@ -1,6 +1,7 @@
 param(
     [ValidateSet("Development", "Shipping")]
-    [string]$Configuration = "Development"
+    [string]$Configuration = "Development",
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,27 +12,32 @@ $UEPath = "C:\Program Files\Epic Games\UE_5.8"
 $BuildBat = Join-Path $UEPath "Engine\Build\BatchFiles\Build.bat"
 $RunUAT = Join-Path $UEPath "Engine\Build\BatchFiles\RunUAT.bat"
 
-Write-Host "[1/2] Compiling InfiniteUniverse Win64 $Configuration..." -ForegroundColor Cyan
-& $BuildBat InfiniteUniverse Win64 $Configuration -Project="$UProjectPath" -WaitMutex -FromMsBuild
-if ($LASTEXITCODE -ne 0) {
-    throw "UnrealBuildTool failed with exit code $LASTEXITCODE"
+if (-not $SkipBuild) {
+    Write-Host "[1/2] Compiling InfiniteUniverse Win64 $Configuration..." -ForegroundColor Cyan
+    & $BuildBat InfiniteUniverse Win64 $Configuration "-Project=$UProjectPath" -WaitMutex -FromMsBuild
+    if ($LASTEXITCODE -ne 0) {
+        throw "UnrealBuildTool failed with exit code $LASTEXITCODE"
+    }
 }
 
 Write-Host "[2/2] Cooking, Staging, Pak & Archiving Standalone Build to $ArchiveDir..." -ForegroundColor Cyan
-& $RunUAT BuildCookRun `
-    -project="$UProjectPath" `
-    -noP4 `
-    -platform=Win64 `
-    -clientconfig=$Configuration `
-    -skipbuild `
-    -cook `
-    -map=/Game/Maps/Prototype/Lvl_Greybox_Prototype+/Game/Maps/Prototype/M_Prototype `
-    -stage `
-    -pak `
-    -archive `
-    -archivedirectory="$ArchiveDir" `
-    -unattended `
-    -utf8output
+$UATArgs = @(
+    "BuildCookRun",
+    "-project=$UProjectPath",
+    "-noP4",
+    "-platform=Win64",
+    "-clientconfig=$Configuration",
+    "-skipbuild",
+    "-cook",
+    "-map=/Game/Maps/Prototype/Lvl_Greybox_Prototype+/Game/Maps/Prototype/M_Prototype",
+    "-stage",
+    "-pak",
+    "-archive",
+    "-archivedirectory=$ArchiveDir",
+    "-unattended",
+    "-utf8output"
+)
+& $RunUAT @UATArgs
 if ($LASTEXITCODE -ne 0) {
     throw "RunUAT BuildCookRun failed with exit code $LASTEXITCODE"
 }

@@ -173,10 +173,10 @@ bool FIUM6AnimeMeshesSkeletonAndSocketTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Socket_KiMuzzle_R must be attached to hand_r"), KiSocket->BoneName, FName(TEXT("hand_r")));
 	}
 
-	// Stylized anime material slots check
-	TestTrue(TEXT("SK_Player must have 5 stylized material slots"), PlayerMesh->GetMaterials().Num() >= 5);
-	TestTrue(TEXT("SK_Enemy must have 5 stylized material slots"), EnemyMesh->GetMaterials().Num() >= 5);
-	for (int32 i = 0; i < FMath::Min(5, PlayerMesh->GetMaterials().Num()); ++i)
+	// Stylized anime cel-toon material slots check (6 slots: Skin, Gi/Armor, Sash/Trim, Hair/Crest, Boots, Eyes/Visor)
+	TestTrue(TEXT("SK_Player must have 6 stylized cel-toon material slots"), PlayerMesh->GetMaterials().Num() >= 6);
+	TestTrue(TEXT("SK_Enemy must have 6 stylized cel-toon material slots"), EnemyMesh->GetMaterials().Num() >= 6);
+	for (int32 i = 0; i < FMath::Min(6, PlayerMesh->GetMaterials().Num()); ++i)
 	{
 		TestNotNull(FString::Printf(TEXT("SK_Player material slot %d assigned"), i), PlayerMesh->GetMaterials()[i].MaterialInterface.Get());
 	}

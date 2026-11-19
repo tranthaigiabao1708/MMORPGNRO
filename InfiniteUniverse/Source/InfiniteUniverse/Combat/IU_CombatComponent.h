@@ -67,6 +67,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Melee", meta = (ClampMin = "0.0", ClampMax = "1500.0"))
 	float MeleeStepLungeSpeed = 360.0f;
 
+	/** Genshin/Wukong style close-range soft melee magnetism range (cm) when NOT locked-on. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Melee", meta = (ClampMin = "0.0", ClampMax = "600.0"))
+	float MeleeSoftAssistRange = 280.0f;
+
+	/** Minimum forward dot product (~70 deg half-cone) to soft-snap unlocked melee toward a nearby enemy. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Melee", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float MeleeSoftAssistMinDot = 0.34f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Melee")
 	TArray<TObjectPtr<UAnimMontage>> MeleeComboMontages;
 

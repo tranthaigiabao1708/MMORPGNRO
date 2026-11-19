@@ -27,8 +27,15 @@ def is_package_file_unlocked(disk_path: str) -> bool:
         return False
 
 
-def create_anime_stylized_material(folder: str, name: str, base_rgb: tuple, roughness_val: float, rim_rgb: tuple):
-    """Creates a clean Anime 3D material with crisp base tint and Fresnel silhouette rim-light."""
+def create_anime_stylized_material(
+    folder: str,
+    name: str,
+    base_rgb: tuple,
+    roughness_val: float,
+    rim_rgb: tuple,
+    core_emissive_rgb: tuple = (0.0, 0.0, 0.0),
+):
+    """Creates a 2-Band Anime Cel-Shaded material with crisp shadow step, Fresnel rim-light, and optional core glow."""
     full_path = f"{folder}/{name}"
     if editor_asset_lib.does_asset_exist(full_path):
         mat = editor_asset_lib.load_asset(full_path)
@@ -36,30 +43,67 @@ def create_anime_stylized_material(folder: str, name: str, base_rgb: tuple, roug
     else:
         mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
 
-    base_col = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -420, -140)
+    # 2-Band Anime Cel-Toon Shading: SmoothStep(Dot(VertexNormalWS, KeyLightDir)) -> Lerp(ShadowTint,LitTint)
+    normal_ws = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, -920, -240)
+    light_dir = mat_lib.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -920, -100)
+    light_dir.set_editor_property("constant", unreal.LinearColor(0.42, -0.35, 0.84, 1.0))
+
+    ndotl = mat_lib.create_material_expression(mat, unreal.MaterialExpressionDotProduct, -700, -180)
+    mat_lib.connect_material_expressions(normal_ws, "", ndotl, "A")
+    mat_lib.connect_material_expressions(light_dir, "", ndotl, "B")
+
+    toon_band = mat_lib.create_material_expression(mat, unreal.MaterialExpressionSmoothStep, -520, -180)
+    mat_lib.connect_material_expressions(ndotl, "", toon_band, "Value")
+
+    shadow_col = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -680, -380)
+    shadow_col.set_editor_property("parameter_name", "ShadowTint")
+    shadow_col.set_editor_property(
+        "default_value",
+        unreal.LinearColor(base_rgb[0] * 0.56, base_rgb[1] * 0.52, min(1.0, base_rgb[2] * 0.64 + 0.02), 1.0),
+    )
+
+    base_col = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -680, -40)
     base_col.set_editor_property("parameter_name", "BaseTint")
     base_col.set_editor_property("default_value", unreal.LinearColor(base_rgb[0], base_rgb[1], base_rgb[2], 1.0))
-    mat_lib.connect_material_property(base_col, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    cel_lerp = mat_lib.create_material_expression(mat, unreal.MaterialExpressionLinearInterpolate, -280, -160)
+    mat_lib.connect_material_expressions(shadow_col, "", cel_lerp, "A")
+    mat_lib.connect_material_expressions(base_col, "", cel_lerp, "B")
+    mat_lib.connect_material_expressions(toon_band, "", cel_lerp, "Alpha")
+    mat_lib.connect_material_property(cel_lerp, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     rough = mat_lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -320, 60)
     rough.set_editor_property("r", roughness_val)
     mat_lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
 
     spec = mat_lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -320, 140)
-    spec.set_editor_property("r", 0.35)
+    spec.set_editor_property("r", 0.22)
     mat_lib.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
 
-    # Stylized Anime Fresnel Rim Highlight (uses crisp built-in Exponent=5.0 silhouette falloff)
-    fresnel = mat_lib.create_material_expression(mat, unreal.MaterialExpressionFresnel, -520, 260)
+    # Stylized Anime Fresnel Rim Highlight + Optional Core Glow (for Eyes / Scouter / Ki Orb)
+    fresnel = mat_lib.create_material_expression(mat, unreal.MaterialExpressionFresnel, -620, 260)
 
-    rim_col = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -520, 420)
+    rim_col = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -620, 420)
     rim_col.set_editor_property("parameter_name", "AnimeRimGlow")
     rim_col.set_editor_property("default_value", unreal.LinearColor(rim_rgb[0], rim_rgb[1], rim_rgb[2], 1.0))
 
-    rim_mul = mat_lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -260, 310)
+    rim_mul = mat_lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -380, 310)
     mat_lib.connect_material_expressions(fresnel, "", rim_mul, "A")
     mat_lib.connect_material_expressions(rim_col, "", rim_mul, "B")
-    mat_lib.connect_material_property(rim_mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+    if any(v > 0.0 for v in core_emissive_rgb):
+        core_glow = mat_lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -620, 580)
+        core_glow.set_editor_property("parameter_name", "CoreEmissive")
+        core_glow.set_editor_property(
+            "default_value",
+            unreal.LinearColor(core_emissive_rgb[0], core_emissive_rgb[1], core_emissive_rgb[2], 1.0),
+        )
+        emis_add = mat_lib.create_material_expression(mat, unreal.MaterialExpressionAdd, -200, 360)
+        mat_lib.connect_material_expressions(rim_mul, "", emis_add, "A")
+        mat_lib.connect_material_expressions(core_glow, "", emis_add, "B")
+        mat_lib.connect_material_property(emis_add, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    else:
+        mat_lib.connect_material_property(rim_mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
     mat_lib.recompile_material(mat)
     editor_asset_lib.save_loaded_asset(mat, only_if_is_dirty=False)
@@ -238,24 +282,35 @@ def main():
     if not os.path.exists(player_fbx) or not os.path.exists(enemy_fbx):
         raise RuntimeError(f"Missing Blender FBX exports in {export_dir}")
 
-    # 1. Create 5 Stylized Anime Player Materials & 5 Anime Raider Enemy Materials
+    # 1. Create 6 Stylized Cel-Toon Player Materials, 6 Raider Enemy Materials & Luminous Ki Orb Material
     p_mat_folder = "/Game/Characters/Player/Materials"
     player_mats = [
-        create_anime_stylized_material(p_mat_folder, "M_PlayerSkin", (0.95, 0.70, 0.54), 0.62, (0.12, 0.07, 0.05)),
-        create_anime_stylized_material(p_mat_folder, "M_PlayerGi", (0.96, 0.30, 0.04), 0.70, (0.22, 0.08, 0.02)),
-        create_anime_stylized_material(p_mat_folder, "M_PlayerSash", (0.05, 0.22, 0.82), 0.52, (0.05, 0.14, 0.35)),
-        create_anime_stylized_material(p_mat_folder, "M_PlayerHair", (0.03, 0.04, 0.09), 0.36, (0.08, 0.12, 0.28)),
-        create_anime_stylized_material(p_mat_folder, "M_PlayerBoots", (0.05, 0.08, 0.18), 0.48, (0.04, 0.07, 0.15)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerSkin", (0.96, 0.72, 0.56), 0.65, (0.14, 0.08, 0.06)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerGi", (0.98, 0.32, 0.04), 0.72, (0.26, 0.10, 0.02)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerSash", (0.05, 0.24, 0.86), 0.54, (0.06, 0.18, 0.42)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerHair", (0.03, 0.04, 0.09), 0.38, (0.10, 0.16, 0.36)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerBoots", (0.05, 0.08, 0.18), 0.50, (0.05, 0.08, 0.18)),
+        create_anime_stylized_material(p_mat_folder, "M_PlayerEyes", (0.12, 0.82, 1.0), 0.20, (0.30, 0.90, 1.0), (0.35, 1.45, 2.20)),
     ]
 
     e_mat_folder = "/Game/Characters/Enemy/Materials"
     enemy_mats = [
-        create_anime_stylized_material(e_mat_folder, "M_EnemySkin", (0.60, 0.52, 0.70), 0.56, (0.10, 0.06, 0.14)),
-        create_anime_stylized_material(e_mat_folder, "M_EnemyArmor", (0.06, 0.05, 0.08), 0.35, (0.16, 0.02, 0.03)),
-        create_anime_stylized_material(e_mat_folder, "M_EnemyCrimsonTrim", (0.78, 0.06, 0.09), 0.42, (0.32, 0.03, 0.04)),
-        create_anime_stylized_material(e_mat_folder, "M_EnemyCrest", (0.95, 0.12, 0.06), 0.30, (0.48, 0.06, 0.02)),
-        create_anime_stylized_material(e_mat_folder, "M_EnemyBoots", (0.04, 0.04, 0.06), 0.38, (0.10, 0.02, 0.02)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemySkin", (0.62, 0.54, 0.72), 0.58, (0.12, 0.07, 0.16)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemyArmor", (0.06, 0.05, 0.08), 0.35, (0.18, 0.03, 0.04)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemyCrimsonTrim", (0.82, 0.06, 0.09), 0.42, (0.38, 0.04, 0.05)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemyCrest", (0.96, 0.12, 0.06), 0.30, (0.55, 0.08, 0.02)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemyBoots", (0.04, 0.04, 0.06), 0.38, (0.12, 0.02, 0.02)),
+        create_anime_stylized_material(e_mat_folder, "M_EnemyVisor", (1.0, 0.08, 0.12), 0.15, (1.0, 0.20, 0.10), (2.60, 0.18, 0.22)),
     ]
+
+    create_anime_stylized_material(
+        "/Game/Combat/VFX",
+        "M_KiEnergyOrb",
+        (0.25, 0.90, 1.0),
+        0.10,
+        (1.0, 0.88, 0.35),
+        (1.40, 3.80, 5.20),
+    )
 
     # 2. Import SK_Player + Skeleton + Socket_KiMuzzle_R
     sk_player = import_skeletal_mesh_fbx(player_fbx, "/Game/Characters/Player/Meshes", "SK_Player", shared_skeleton=None)

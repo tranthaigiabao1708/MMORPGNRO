@@ -14,6 +14,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 
 UIU_CombatComponent::UIU_CombatComponent()
@@ -494,6 +495,70 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 		{
 			StrikeDir = ToTarget;
 			Owner->SetActorRotation(FRotator(0.0f, StrikeDir.Rotation().Yaw, 0.0f));
+		}
+	}
+	else if (MeleeSoftAssistRange > 10.0f)
+	{
+		// Soft close-range melee magnetism when unlocked (Genshin / Wukong style)
+		FVector ReferenceDir = StrikeDir;
+		if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+		{
+			if (const AController* Ctrl = OwnerPawn->GetController())
+			{
+				const FVector CamFwd = FRotator(0.0f, Ctrl->GetControlRotation().Yaw, 0.0f).Vector();
+				if (!CamFwd.IsNearlyZero())
+				{
+					ReferenceDir = CamFwd;
+				}
+			}
+		}
+
+		AActor* BestSoftTarget = nullptr;
+		float BestScore = -FLT_MAX;
+		const double MaxRangeSq = FMath::Square((double)MeleeSoftAssistRange);
+
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Cand = *It;
+			if (!IsValid(Cand) || Cand == Owner || Cand->IsActorBeingDestroyed())
+			{
+				continue;
+			}
+			const UIU_AttributeComponent* CandAttr = Cand->FindComponentByClass<UIU_AttributeComponent>();
+			const UIU_DamageComponent* CandDmg = Cand->FindComponentByClass<UIU_DamageComponent>();
+			if (!CandAttr || !CandDmg || CandAttr->IsDead())
+			{
+				continue;
+			}
+
+			const FVector ToCand = Cand->GetActorLocation() - Owner->GetActorLocation();
+			const double DistSq = ToCand.SizeSquared();
+			if (DistSq > MaxRangeSq || DistSq < 1.0)
+			{
+				continue;
+			}
+
+			const FVector PlanarDir = FVector(ToCand.X, ToCand.Y, 0.0f).GetSafeNormal();
+			const float Dot = PlanarDir.IsNearlyZero() ? 1.0f : FVector::DotProduct(ReferenceDir, PlanarDir);
+			if (Dot >= MeleeSoftAssistMinDot)
+			{
+				const float Score = (Dot * 0.65f) + (1.0f - FMath::Sqrt((float)DistSq) / MeleeSoftAssistRange) * 0.35f;
+				if (Score > BestScore)
+				{
+					BestScore = Score;
+					BestSoftTarget = Cand;
+				}
+			}
+		}
+
+		if (BestSoftTarget)
+		{
+			const FVector ToSoft = (BestSoftTarget->GetActorLocation() - Owner->GetActorLocation()).GetSafeNormal();
+			if (!ToSoft.IsNearlyZero())
+			{
+				StrikeDir = ToSoft;
+				Owner->SetActorRotation(FRotator(0.0f, StrikeDir.Rotation().Yaw, 0.0f));
+			}
 		}
 	}
 
