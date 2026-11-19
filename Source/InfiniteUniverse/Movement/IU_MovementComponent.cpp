@@ -5,8 +5,8 @@
 
 UIU_MovementComponent::UIU_MovementComponent()
 {
-	bOrientRotationToMovement = true;
-	bUseControllerDesiredRotation = false;
+	bOrientRotationToMovement = false;
+	bUseControllerDesiredRotation = true;
 	NavAgentProps.bCanCrouch = false;
 	NavAgentProps.bCanFly = true;
 

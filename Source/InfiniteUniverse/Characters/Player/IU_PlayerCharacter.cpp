@@ -55,10 +55,12 @@ AIU_PlayerCharacter::AIU_PlayerCharacter(const FObjectInitializer& ObjectInitial
 		PlaceholderFacingVisor->SetStaticMesh(CubeAsset.Object);
 	}
 
-	// Third-person SpringArm with terrain/wall collision protection
+	// Third-person SpringArm centered strictly on the character's spine axis (X=0, Y=0)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->SetRelativeLocation(FVector::ZeroVector);
 	CameraBoom->TargetArmLength = DefaultCameraArmLength;
+	CameraBoom->TargetOffset = CameraTargetOffset;
 	CameraBoom->SocketOffset = CameraSocketOffset;
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = true;
@@ -82,6 +84,7 @@ void AIU_PlayerCharacter::BeginPlay()
 	if (CameraBoom)
 	{
 		CameraBoom->TargetArmLength = DesiredCameraArmLength;
+		CameraBoom->TargetOffset = CameraTargetOffset;
 		CameraBoom->SocketOffset = CameraSocketOffset;
 	}
 
@@ -129,9 +132,9 @@ void AIU_PlayerCharacter::ApplyMovementInput(const FVector2D& MoveAxis)
 		return;
 	}
 
-	// Project movement onto horizontal plane aligned with Camera/Controller Yaw
-	const FRotator ControlRot = Controller->GetControlRotation();
-	const FRotator YawRot(0.0f, ControlRot.Yaw, 0.0f);
+	// Derive horizontal basis directly from FollowCamera view direction (with Controller yaw fallback)
+	const float ViewYaw = FollowCamera ? FollowCamera->GetComponentRotation().Yaw : Controller->GetControlRotation().Yaw;
+	const FRotator YawRot(0.0f, ViewYaw, 0.0f);
 
 	const FVector ForwardDir = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 	const FVector RightDir = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);

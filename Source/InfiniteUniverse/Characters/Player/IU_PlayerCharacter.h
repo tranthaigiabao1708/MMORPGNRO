@@ -83,8 +83,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "1.0", ClampMax = "30.0"))
 	float CameraZoomInterpSpeed = 12.0f;
 
+	/** Pivot offset on the character's central vertical axis (X=0, Y=0 keeps character as pure orbit center). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera")
-	FVector CameraSocketOffset = FVector(0.0f, 45.0f, 65.0f);
+	FVector CameraTargetOffset = FVector(0.0f, 0.0f, 55.0f);
+
+	/** Camera socket offset (Y=0 ensures camera looks straight along character axis without shoulder skew). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera")
+	FVector CameraSocketOffset = FVector(0.0f, 0.0f, 20.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.1", ClampMax = "5.0"))
 	float LookSensitivity = 1.0f;

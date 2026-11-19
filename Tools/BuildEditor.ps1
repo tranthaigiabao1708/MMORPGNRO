@@ -39,10 +39,32 @@ if (-not $ueDir) {
         Sort-Object Name -Descending | Select-Object -First 1).FullName
 }
 
+# Clean up any leftover headless UnrealEditor-Cmd test workers holding DLL locks (leaves GUI UnrealEditor untouched)
+Get-Process -Name "UnrealEditor-Cmd" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 300
+
 $buildBat = Join-Path $ueDir "Engine\Build\BatchFiles\Build.bat"
+$dllPath = Join-Path $ProjectRoot "Binaries\Win64\UnrealEditor-InfiniteUniverse.dll"
+$suffixArg = ""
+
+if (Test-Path $dllPath) {
+    try {
+        $fs = [System.IO.File]::Open($dllPath, 'Open', 'ReadWrite', 'None')
+        $fs.Close()
+    } catch {
+        $randId = Get-Random -Minimum 1000 -Maximum 9999
+        $suffixArg = "-ModuleWithSuffix=InfiniteUniverse,$randId"
+        Write-Host "[INFO] Base DLL is locked by an active Editor process; using UE5 Hot-Reload suffix ($suffixArg)" -ForegroundColor Yellow
+    }
+}
+
 Write-Host "[BUILD] Running UnrealBuildTool: InfiniteUniverseEditor Win64 $Configuration..." -ForegroundColor Cyan
 
-& $buildBat InfiniteUniverseEditor Win64 $Configuration -Project="$UProjectPath" -WaitMutex -FromMsBuild
+if ($suffixArg) {
+    & $buildBat InfiniteUniverseEditor Win64 $Configuration -Project="$UProjectPath" $suffixArg -WaitMutex -FromMsBuild
+} else {
+    & $buildBat InfiniteUniverseEditor Win64 $Configuration -Project="$UProjectPath" -WaitMutex -FromMsBuild
+}
 if ($LASTEXITCODE -ne 0) {
     throw "UnrealBuildTool failed with exit code $LASTEXITCODE"
 }

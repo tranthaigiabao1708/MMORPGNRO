@@ -12,6 +12,9 @@
 #include "Core/IU_GameMode.h"
 #include "Core/IU_PlayerController.h"
 #include "Movement/IU_MovementComponent.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "InputCoreTypes.h"
 
 namespace IU_TestHelpers
 {
@@ -67,6 +70,8 @@ bool FIU_M1_CharacterCameraAndZoomTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Camera collision test enabled (P1-06)"), Boom->bDoCollisionTest);
 	TestTrue(TEXT("SpringArm uses pawn control rotation (360 orbit)"), Boom->bUsePawnControlRotation);
 	TestFalse(TEXT("FollowCamera does not double-apply control rotation"), Cam->bUsePawnControlRotation);
+	TestEqual(TEXT("Camera TargetOffset Y is centered on character axis (0)"), Boom->TargetOffset.Y, 0.0);
+	TestEqual(TEXT("Camera SocketOffset Y is centered on character axis (0)"), Boom->SocketOffset.Y, 0.0);
 
 	// Test camera zoom clamping within [MinCameraArmLength, MaxCameraArmLength]
 	PlayerChar->AdjustCameraZoom(100.0f); // Zoom way in
@@ -112,16 +117,52 @@ bool FIU_M1_WalkSprintAndRotationModesTest::RunTest(const FString& Parameters)
 	MoveComp->RefreshMovementSettings();
 	TestEqual(TEXT("Modified WalkSpeed UPROPERTY applies immediately"), MoveComp->MaxWalkSpeed, 615.0f);
 
-	// 3. Rotation Mode switching (P1-05)
-	TestEqual(TEXT("Default rotation mode is OrientToMovement"), MoveComp->GetCharacterRotationMode(), EIU_CharacterRotationMode::OrientToMovement);
-	TestTrue(TEXT("bOrientRotationToMovement active"), MoveComp->bOrientRotationToMovement);
-	TestFalse(TEXT("bUseControllerDesiredRotation inactive"), MoveComp->bUseControllerDesiredRotation);
+	// 3. Rotation Mode switching (Default = OrientToCamera per user specification)
+	TestEqual(TEXT("Default rotation mode is OrientToCamera"), MoveComp->GetCharacterRotationMode(), EIU_CharacterRotationMode::OrientToCamera);
+	TestFalse(TEXT("bOrientRotationToMovement inactive in default camera mode"), MoveComp->bOrientRotationToMovement);
+	TestTrue(TEXT("Smooth bUseControllerDesiredRotation active in default camera mode"), MoveComp->bUseControllerDesiredRotation);
+	TestFalse(TEXT("Direct instant yaw snap remains off to prevent abnormal snapping"), PlayerChar->bUseControllerRotationYaw);
 
 	PlayerChar->ToggleRotationModeInput();
-	TestEqual(TEXT("Switched rotation mode to OrientToCamera"), MoveComp->GetCharacterRotationMode(), EIU_CharacterRotationMode::OrientToCamera);
-	TestFalse(TEXT("bOrientRotationToMovement disabled in camera mode"), MoveComp->bOrientRotationToMovement);
-	TestTrue(TEXT("Smooth bUseControllerDesiredRotation active in camera mode"), MoveComp->bUseControllerDesiredRotation);
-	TestFalse(TEXT("Direct instant yaw snap remains off to prevent abnormal snapping"), PlayerChar->bUseControllerRotationYaw);
+	TestEqual(TEXT("Switched rotation mode to OrientToMovement"), MoveComp->GetCharacterRotationMode(), EIU_CharacterRotationMode::OrientToMovement);
+	TestTrue(TEXT("bOrientRotationToMovement active after toggle"), MoveComp->bOrientRotationToMovement);
+	TestFalse(TEXT("bUseControllerDesiredRotation inactive after toggle"), MoveComp->bUseControllerDesiredRotation);
+
+	// 4. Verify IMC_Player.uasset on disk actually persisted W/A/S/D & Mouse2D modifiers!
+	UInputMappingContext* LoadedIMC = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Input/IMC_Player.IMC_Player"));
+	TestNotNull(TEXT("IMC_Player loaded from /Game/Input/IMC_Player"), LoadedIMC);
+	if (LoadedIMC)
+	{
+		bool bFoundWWithSwizzle = false;
+		bool bFoundSWithSwizzleAndNegate = false;
+		bool bFoundAWithNegate = false;
+		bool bFoundDClean = false;
+
+		for (const FEnhancedActionKeyMapping& Mapping : LoadedIMC->GetMappings())
+		{
+			if (Mapping.Key == EKeys::W)
+			{
+				bFoundWWithSwizzle = (Mapping.Modifiers.Num() == 1);
+			}
+			else if (Mapping.Key == EKeys::S)
+			{
+				bFoundSWithSwizzleAndNegate = (Mapping.Modifiers.Num() == 2);
+			}
+			else if (Mapping.Key == EKeys::A)
+			{
+				bFoundAWithNegate = (Mapping.Modifiers.Num() == 1);
+			}
+			else if (Mapping.Key == EKeys::D)
+			{
+				bFoundDClean = (Mapping.Modifiers.Num() == 0);
+			}
+		}
+
+		TestTrue(TEXT("W key has Swizzle(YXZ) persisted (+Y Forward)"), bFoundWWithSwizzle);
+		TestTrue(TEXT("S key has Swizzle(YXZ)+Negate persisted (-Y Backward)"), bFoundSWithSwizzleAndNegate);
+		TestTrue(TEXT("A key has Negate persisted (-X Left)"), bFoundAWithNegate);
+		TestTrue(TEXT("D key has clean +X Right mapping"), bFoundDClean);
+	}
 
 	return true;
 }

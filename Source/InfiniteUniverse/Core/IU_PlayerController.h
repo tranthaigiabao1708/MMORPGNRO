@@ -26,6 +26,20 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
+	/**
+	 * Populates an InputMappingContext in C++ using direct FEnhancedActionKeyMapping& references
+	 * so axis swizzle/negate modifiers for W/A/S/D and Mouse2D are guaranteed persisted on the asset.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "IU|Input")
+	static void ConfigureStandardPlayerMappings(
+		UInputMappingContext* TargetIMC,
+		UInputAction* InMove,
+		UInputAction* InLook,
+		UInputAction* InJump,
+		UInputAction* InSprint,
+		UInputAction* InZoom,
+		UInputAction* InToggleRot);
+
 	// ========================================================================
 	// Remappable Enhanced Input Assets
 	// ========================================================================

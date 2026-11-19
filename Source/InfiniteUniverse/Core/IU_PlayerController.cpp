@@ -8,9 +8,81 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "InputCoreTypes.h"
 
 AIU_PlayerController::AIU_PlayerController()
 {
+}
+
+void AIU_PlayerController::ConfigureStandardPlayerMappings(
+	UInputMappingContext* TargetIMC,
+	UInputAction* InMove,
+	UInputAction* InLook,
+	UInputAction* InJump,
+	UInputAction* InSprint,
+	UInputAction* InZoom,
+	UInputAction* InToggleRot)
+{
+	if (!TargetIMC)
+	{
+		return;
+	}
+
+	TargetIMC->UnmapAll();
+
+	if (InMove)
+	{
+		// W -> +Y (Forward along Camera view)
+		FEnhancedActionKeyMapping& MapW = TargetIMC->MapKey(InMove, EKeys::W);
+		UInputModifierSwizzleAxis* SwizzleW = NewObject<UInputModifierSwizzleAxis>(TargetIMC);
+		SwizzleW->Order = EInputAxisSwizzle::YXZ;
+		MapW.Modifiers.Add(SwizzleW);
+
+		// S -> -Y (Backward)
+		FEnhancedActionKeyMapping& MapS = TargetIMC->MapKey(InMove, EKeys::S);
+		UInputModifierSwizzleAxis* SwizzleS = NewObject<UInputModifierSwizzleAxis>(TargetIMC);
+		SwizzleS->Order = EInputAxisSwizzle::YXZ;
+		UInputModifierNegate* NegateS = NewObject<UInputModifierNegate>(TargetIMC);
+		MapS.Modifiers.Add(SwizzleS);
+		MapS.Modifiers.Add(NegateS);
+
+		// D -> +X (Right)
+		TargetIMC->MapKey(InMove, EKeys::D);
+
+		// A -> -X (Left)
+		FEnhancedActionKeyMapping& MapA = TargetIMC->MapKey(InMove, EKeys::A);
+		UInputModifierNegate* NegateA = NewObject<UInputModifierNegate>(TargetIMC);
+		MapA.Modifiers.Add(NegateA);
+	}
+
+	if (InLook)
+	{
+		// Mouse2D -> +X Yaw (Orbit Left/Right), -Y Pitch (Mouse Up looks Up naturally)
+		FEnhancedActionKeyMapping& MapMouse = TargetIMC->MapKey(InLook, EKeys::Mouse2D);
+		UInputModifierNegate* NegatePitch = NewObject<UInputModifierNegate>(TargetIMC);
+		NegatePitch->bX = false;
+		NegatePitch->bY = true;
+		NegatePitch->bZ = false;
+		MapMouse.Modifiers.Add(NegatePitch);
+	}
+
+	if (InJump)
+	{
+		TargetIMC->MapKey(InJump, EKeys::SpaceBar);
+	}
+	if (InSprint)
+	{
+		TargetIMC->MapKey(InSprint, EKeys::LeftShift);
+	}
+	if (InZoom)
+	{
+		TargetIMC->MapKey(InZoom, EKeys::MouseWheelAxis);
+	}
+	if (InToggleRot)
+	{
+		TargetIMC->MapKey(InToggleRot, EKeys::Tab);
+	}
 }
 
 void AIU_PlayerController::BeginPlay()

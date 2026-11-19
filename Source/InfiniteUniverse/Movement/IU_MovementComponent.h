@@ -59,9 +59,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Jump", meta = (ClampMin = "0.5", ClampMax = "4.0"))
 	float DefaultGravityScale = 1.55f;
 
-	/** Yaw turn rate (deg/s) when orienting character toward movement direction. */
+	/** Yaw turn rate (deg/s) when orienting character toward camera or movement direction. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Rotation", meta = (ClampMin = "90.0", ClampMax = "1440.0"))
-	float MovementRotationRateYaw = 640.0f;
+	float MovementRotationRateYaw = 720.0f;
 
 	// ========================================================================
 	// Runtime Locomotion API
@@ -98,7 +98,7 @@ private:
 	bool bIsSprinting = false;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")
-	EIU_CharacterRotationMode CurrentRotationMode = EIU_CharacterRotationMode::OrientToMovement;
+	EIU_CharacterRotationMode CurrentRotationMode = EIU_CharacterRotationMode::OrientToCamera;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")
 	EIU_PlayerMovementMode CurrentIUMovementMode = EIU_PlayerMovementMode::Grounded;
