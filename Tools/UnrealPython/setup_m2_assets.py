@@ -42,6 +42,13 @@ def setup_m2_inputs_and_blueprints():
     editor_asset_lib.save_loaded_asset(imc, only_if_is_dirty=False)
 
     bp_char = editor_asset_lib.load_asset("/Game/Characters/Player/BP_PlayerCharacter")
+    char_cdo = unreal.get_default_object(bp_char.generated_class())
+    flight_comp = char_cdo.get_flight_component()
+    if flight_comp:
+        flight_comp.set_editor_property("FlightSpeed", 1575.0)
+        flight_comp.set_editor_property("VerticalFlightSpeed", 1275.0)
+        flight_comp.set_editor_property("FlightDashMultiplier", 2.0)
+        flight_comp.set_editor_property("InitialSlowAscentDuration", 1.0)
     unreal.BlueprintEditorLibrary.compile_blueprint(bp_char)
     editor_asset_lib.save_loaded_asset(bp_char, only_if_is_dirty=False)
 

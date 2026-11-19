@@ -14,9 +14,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnFlightStateChangedSignature, b
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnFlightDashChangedSignature, bool, bIsNowDashing);
 
 /**
- * Dedicated Free 3D Flight controller component (Milestone 2: P2-01 to P2-09).
- * Manages Ground <-> Flight <-> Landing state transitions, Space-hold activation,
- * 6-DOF camera-relative input blending, stationary Hover, and Flight Dash.
+ * Dedicated Free 3D Flight controller component (Milestone 2).
+ * - Activated EXCLUSIVELY by double-Space (pressing Space while airborne / Jumping).
+ * - Holding Space ascends with 2-stage physical momentum: slow anti-gravity gather in the first ~1.0s,
+ *   then rapidly accelerating up to terminal FlightSpeed / VerticalFlightSpeed (1.5x baseline).
+ * - Holding Left Shift descends (-Z) and auto-lands on walkable surfaces.
+ * - Holding Left Ctrl applies 2.0x Flight Dash speed multiplier.
  */
 UCLASS(ClassGroup = (InfiniteUniverse), meta = (BlueprintSpawnableComponent))
 class INFINITEUNIVERSE_API UIU_FlightComponent : public UActorComponent
@@ -30,48 +33,56 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// ========================================================================
-	// Mandatory Tunable Flight Parameters (Milestone 2 Specification)
+	// Tunable Flight Speed & Physics Parameters
 	// ========================================================================
 
-	/** Base 3D flight cruise speed (cm/s). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "200.0", ClampMax = "5000.0"))
-	float FlightSpeed = 1050.0f;
+	/** Max normal 3D planar flight speed (cm/s) — 1.5x of previous 1050 baseline = 1575 cm/s. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "200.0", ClampMax = "8000.0"))
+	float FlightSpeed = 1575.0f;
 
-	/** Acceleration when applying directional input in flight (cm/s^2). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "500.0", ClampMax = "15000.0"))
-	float FlightAcceleration = 3400.0f;
+	/** Base planar acceleration when flying (cm/s^2). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "400.0", ClampMax = "20000.0"))
+	float FlightAcceleration = 3200.0f;
 
-	/** Aerodynamic braking deceleration when releasing input -> smooth Hover (cm/s^2). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "500.0", ClampMax = "15000.0"))
+	/** Aerodynamic braking deceleration when releasing inputs -> smooth Hover (cm/s^2). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "400.0", ClampMax = "20000.0"))
 	float FlightDeceleration = 3000.0f;
 
-	/** Dedicated vertical ascend/descend speed on Space / Ctrl (cm/s). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "200.0", ClampMax = "4000.0"))
-	float VerticalFlightSpeed = 850.0f;
+	/** Max normal vertical flight speed (cm/s) — 1.5x of previous 850 baseline = 1275 cm/s. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "200.0", ClampMax = "6000.0"))
+	float VerticalFlightSpeed = 1275.0f;
 
-	/** Speed and acceleration multiplier during Flight Dash (Shift). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "1.1", ClampMax = "4.0"))
-	float FlightDashMultiplier = 1.85f;
+	/** Speed & thrust multiplier when holding Left Ctrl in flight (x2.0). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight", meta = (ClampMin = "1.1", ClampMax = "5.0"))
+	float FlightDashMultiplier = 2.0f;
 
 	// ========================================================================
-	// Transition & Visual Feel Tuning
+	// 2-Stage Physical Ascent Curve Parameters
 	// ========================================================================
 
-	/** Seconds to hold Space before smoothly engaging Free Flight (no teleport). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|Transition", meta = (ClampMin = "0.10", ClampMax = "1.0"))
-	float SpaceHoldActivationTime = 0.28f;
+	/** Duration (seconds) of the initial slow levitation phase right after double-Space activation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|PhysicsCurve", meta = (ClampMin = "0.1", ClampMax = "3.0"))
+	float InitialSlowAscentDuration = 1.0f;
 
-	/** Gentle initial upward velocity (cm/s) when lifting off from ground (not a position teleport). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|Transition", meta = (ClampMin = "0.0", ClampMax = "600.0"))
-	float GroundLiftoffUpwardVelocity = 220.0f;
+	/** Speed ratio at t = 0s when ascent begins (0.18 = gentle 18% initial upward drift). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|PhysicsCurve", meta = (ClampMin = "0.05", ClampMax = "0.6"))
+	float InitialAscentStartRatio = 0.18f;
+
+	/** Speed ratio reached at the end of the 1.0s slow phase before surging to 100%. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|PhysicsCurve", meta = (ClampMin = "0.15", ClampMax = "0.8"))
+	float SlowPhaseEndSpeedRatio = 0.38f;
+
+	/** Duration (seconds) after the 1.0s slow phase to surge from SlowPhaseEndSpeedRatio up to 100% terminal speed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|PhysicsCurve", meta = (ClampMin = "0.2", ClampMax = "4.0"))
+	float AscentSurgeRampDuration = 1.10f;
 
 	/** Trace distance below capsule (cm) to smoothly transition from descending flight into Landing/Grounded. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|Transition", meta = (ClampMin = "2.0", ClampMax = "100.0"))
 	float AutoLandFloorTraceDistance = 16.0f;
 
-	/** Max forward pitch tilt (degrees) applied to visual mesh during Flight Dash. */
+	/** Max forward pitch tilt (degrees) applied to visual mesh during high-speed flight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|Visuals", meta = (ClampMin = "0.0", ClampMax = "60.0"))
-	float MaxVisualPitchLeanDegrees = 28.0f;
+	float MaxVisualPitchLeanDegrees = 30.0f;
 
 	/** Max roll bank angle (degrees) applied to visual mesh when strafing in air. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight|Visuals", meta = (ClampMin = "0.0", ClampMax = "45.0"))
@@ -88,9 +99,11 @@ public:
 	void SetMoveAxisInput(const FVector2D& InMoveAxis);
 	void SetFlightDashActive(bool bActive);
 
+	/** Cancels flight if currently flying (does NOT enter flight from ground; flight requires airborne Space). */
 	UFUNCTION(BlueprintCallable, Category = "Flight")
 	void ToggleFlightMode();
 
+	/** Enters flight mode (intended to be called when airborne on 2nd Space press). */
 	UFUNCTION(BlueprintCallable, Category = "Flight")
 	bool EnterFlight();
 
@@ -98,7 +111,7 @@ public:
 	void ExitFlight(bool bEnteredViaLandingTouchdown = false);
 
 	// ========================================================================
-	// State Queries (For Movement, Camera & Animation Blueprint)
+	// State & Physics Queries
 	// ========================================================================
 
 	UFUNCTION(BlueprintPure, Category = "Flight")
@@ -119,10 +132,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Flight")
 	float GetEffectiveFlightAcceleration() const;
 
-	/** Computes desired 3D world-space velocity vector based on Camera orientation and 6-DOF inputs. */
+	/** Evaluates the non-linear [0..1] ascent speed envelope at current hold time. */
+	UFUNCTION(BlueprintPure, Category = "Flight|PhysicsCurve")
+	float EvaluateAscentSpeedCurveFactor() const;
+
+	/** Advances internal flight & ascent timers cleanly during physics simulation. */
+	void StepFlightPhysicsTimers(float DeltaTime);
+
+	/** Computes desired 3D world-space velocity vector with physical ascent curve & Ctrl x2 cap. */
 	FVector ComputeDesiredFlightVelocity() const;
 
-	/** Visual-only mesh pitch/roll lean rotator (capsule remains upright). */
 	UFUNCTION(BlueprintPure, Category = "Flight|Visuals")
 	FRotator GetVisualFlightLeanRotator() const { return CurrentVisualLean; }
 
@@ -134,7 +153,6 @@ public:
 
 private:
 	bool IsHoveringInputIdle() const;
-	void OnSpaceHoldTimerExpired();
 	void UpdateVisualFlightLean(float DeltaTime);
 
 	UPROPERTY(Transient)
@@ -149,6 +167,14 @@ private:
 	bool bWantsFlightDash = false;
 	bool bLastBroadcastDashState = false;
 
+	/** Elapsed seconds since entering flight via double-Space. */
+	float TimeSinceFlightEntered = 0.0f;
+
+	/** Elapsed seconds continuously holding Space to ascend. */
+	float ContinuousAscentHoldTime = 0.0f;
+
+	/** True during the initial uninterrupted Space hold right after double-Space activation. */
+	bool bInInitialActivationAscent = false;
+
 	FRotator CurrentVisualLean = FRotator::ZeroRotator;
-	FTimerHandle SpaceHoldTimerHandle;
 };

@@ -9,8 +9,9 @@ UIU_MovementComponent::UIU_MovementComponent()
 {
 	bOrientRotationToMovement = false;
 	bUseControllerDesiredRotation = true;
-	NavAgentProps.bCanCrouch = false;
+	NavAgentProps.bCanCrouch = true;
 	NavAgentProps.bCanFly = true;
+	bCanWalkOffLedgesWhenCrouching = true;
 
 	RefreshMovementSettings();
 }
@@ -28,7 +29,9 @@ void UIU_MovementComponent::BeginPlay()
 
 void UIU_MovementComponent::RefreshMovementSettings()
 {
-	MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	MaxWalkSpeed = (bIsSprinting && !IsCrouching()) ? SprintSpeed : WalkSpeed;
+	MaxWalkSpeedCrouched = CrouchWalkSpeed;
+	SetCrouchedHalfHeight(CrouchedCapsuleHalfHeight);
 	MaxAcceleration = GroundAcceleration;
 	BrakingDecelerationWalking = GroundBrakingDeceleration;
 	JumpZVelocity = JumpVelocity;
@@ -43,7 +46,7 @@ void UIU_MovementComponent::SetSprinting(bool bNewSprinting)
 	if (CurrentIUMovementMode == EIU_PlayerMovementMode::Grounded ||
 		CurrentIUMovementMode == EIU_PlayerMovementMode::Jumping)
 	{
-		MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+		MaxWalkSpeed = (bIsSprinting && !IsCrouching()) ? SprintSpeed : WalkSpeed;
 	}
 }
 
@@ -200,6 +203,9 @@ void UIU_MovementComponent::PhysCustom_FreeFlight(float DeltaTime, int32 Iterati
 	}
 
 	RestorePreAdditiveRootMotionVelocity();
+
+	// Advance 2-stage physical ascent timers in lockstep with physics DeltaTime
+	CachedFlightComponent->StepFlightPhysicsTimers(DeltaTime);
 
 	const FVector DesiredVel = CachedFlightComponent->ComputeDesiredFlightVelocity();
 	const bool bIdleHoverInput = DesiredVel.IsNearlyZero(1.0f);

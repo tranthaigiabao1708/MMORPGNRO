@@ -39,13 +39,21 @@ public:
 	// Tunable Ground Locomotion Parameters (Single Source of Truth)
 	// ========================================================================
 
+	/** Slow movement speed while crouching on ground with Left Shift (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "50.0", ClampMax = "1200.0"))
+	float CrouchWalkSpeed = 250.0f;
+
 	/** Standard jog/walk speed on ground (cm/s). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
 	float WalkSpeed = 520.0f;
 
-	/** Fast run/sprint speed when holding Sprint action (cm/s). */
+	/** Fast run/sprint speed when holding Left Ctrl on ground (cm/s). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "200.0", ClampMax = "3000.0"))
 	float SprintSpeed = 880.0f;
+
+	/** Capsule half-height when crouched on ground (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "30.0", ClampMax = "85.0"))
+	float CrouchedCapsuleHalfHeight = 56.0f;
 
 	/** Ground acceleration (cm/s^2). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "500.0", ClampMax = "10000.0"))

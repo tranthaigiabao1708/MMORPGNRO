@@ -75,7 +75,8 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	}
 	if (InSprint)
 	{
-		TargetIMC->MapKey(InSprint, EKeys::LeftShift);
+		// Left Ctrl: Fast Sprint on Ground + x2 Speed Boost in Flight
+		TargetIMC->MapKey(InSprint, EKeys::LeftControl);
 	}
 	if (InZoom)
 	{
@@ -87,7 +88,8 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	}
 	if (InDescend)
 	{
-		TargetIMC->MapKey(InDescend, EKeys::LeftControl);
+		// Left Shift: Crouch & Slow Walk on Ground + Descend Altitude in Flight
+		TargetIMC->MapKey(InDescend, EKeys::LeftShift);
 	}
 	if (InFlightToggle)
 	{

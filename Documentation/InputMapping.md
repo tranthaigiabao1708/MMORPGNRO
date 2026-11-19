@@ -11,10 +11,10 @@ All player controls use Unreal Engine 5's **Enhanced Input** subsystem (`IMC_Pla
 | `IA_Move` | `Axis2D (FVector2D)` | `W / S` (`Y`), `D / A` (`X`) | Ground: Camera-planar walk/run.<br>Flight: Camera-oriented 3D horizontal/forward flight. |
 | `IA_Look` | `Axis2D (FVector2D)` | `Mouse XY` | 360° SpringArm orbit & pitch control. |
 | `IA_CameraZoom` | `Axis1D (float)` | `Mouse Wheel Up / Down` | Smoothly adjusts `SpringArm->TargetArmLength` within `[220, 600] cm`. |
-| `IA_JumpOrFlyUp` | `Digital (bool)` | `Space` *(Tap vs Hold `0.30s`)* | Ground Tap: Jump.<br>Ground/Air Hold (`0.30s`): Smoothly enter `Flying` (`Hover`).<br>While `Flying`: Ascend (`+Z`). |
-| `IA_DescendOrCrouch` | `Digital (bool)` | `Left Ctrl` *(Remappable)* | While `Flying`: Descend (`-Z`); touching walkable floor transitions cleanly to `Landing → Grounded`. |
-| `IA_FlightToggle` | `Digital (bool)` | `F` *(Optional explicit toggle)* | Toggles `Flying ↔ Landing` cleanly without requiring hold. |
-| `IA_SprintOrFlightDash` | `Digital (bool)` | `Left Shift` | Ground: Run (`SprintSpeed`).<br>Flight: High-speed `FlightDashMultiplier` boost. |
+| `IA_Jump` | `Digital (bool)` | `Space` | **Ground (1st press):** Jump.<br>**Airborne (2nd press):** Activate Free Flight.<br>**Hold while Flying:** Ascend (`+Z`) with 1.0s slow gather → rapid surge up to 1.5x max flight speed. |
+| `IA_Descend` | `Digital (bool)` | `Left Shift` | **Ground:** Crouch & move slower (`250 cm/s`).<br>**While Flying:** Descend (`-Z`); touching walkable floor transitions cleanly to `Landing → Grounded`. |
+| `IA_FlightToggle` | `Digital (bool)` | `F` *(Cancel only)* | Cancels active `Flying` mode if pressed in air (entering flight requires airborne `Space`). |
+| `IA_Sprint` | `Digital (bool)` | `Left Ctrl` | **Ground:** Fast Run (`880 cm/s`).<br>**While Flying:** **`x2.0`** high-speed Flight Boost (`3150 cm/s` planar / `2550 cm/s` vertical). |
 | `IA_MeleeAttack` | `Digital (bool)` | `Left Mouse Button` | Executes basic melee & advances `Combo 1 → 2 → 3` inside valid combo window (Ground & Air). |
 | `IA_KiBlast` | `Digital (bool)` | `Right Mouse Button` | Fires `AIU_KiProjectile` from hand socket toward locked target or camera aim point (consumes `Ki`). |
 | `IA_Dodge` | `Digital (bool)` | `Q` *(or `Left Alt`)* | Directional evade burst on ground or in mid-air; cleanly exits back to `Idle` / `Flying`. |

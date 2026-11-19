@@ -101,16 +101,26 @@ bool FIU_M1_WalkSprintAndRotationModesTest::RunTest(const FString& Parameters)
 	UIU_MovementComponent* MoveComp = PlayerChar->GetIUMovementComponent();
 	TestNotNull(TEXT("UIU_MovementComponent valid"), MoveComp);
 
-	// 1. Default Walk Speed & Sprint toggle (P1-03)
+	// 1. Default Walk Speed, Ctrl Sprint & Shift Crouch Slow Walk
 	TestEqual(TEXT("Initial MaxWalkSpeed equals WalkSpeed"), MoveComp->MaxWalkSpeed, MoveComp->WalkSpeed);
+	TestTrue(TEXT("CrouchWalkSpeed is slower than WalkSpeed"), MoveComp->CrouchWalkSpeed < MoveComp->WalkSpeed);
+	TestEqual(TEXT("MaxWalkSpeedCrouched matches CrouchWalkSpeed"), MoveComp->MaxWalkSpeedCrouched, MoveComp->CrouchWalkSpeed);
 
-	PlayerChar->StartSprintInput();
-	TestTrue(TEXT("IsSprinting true after StartSprintInput"), MoveComp->IsSprinting());
+	PlayerChar->StartSprintInput(); // Left Ctrl
+	TestTrue(TEXT("IsSprinting true after StartSprintInput (Left Ctrl)"), MoveComp->IsSprinting());
 	TestEqual(TEXT("MaxWalkSpeed updates to SprintSpeed"), MoveComp->MaxWalkSpeed, MoveComp->SprintSpeed);
 
 	PlayerChar->StopSprintInput();
 	TestFalse(TEXT("IsSprinting false after StopSprintInput"), MoveComp->IsSprinting());
 	TestEqual(TEXT("MaxWalkSpeed restores to WalkSpeed"), MoveComp->MaxWalkSpeed, MoveComp->WalkSpeed);
+
+	// Verify Shift on Ground triggers Crouch
+	MoveComp->SetMovementMode(MOVE_Walking);
+	PlayerChar->StartDescendInput(); // Left Shift on ground = Crouch
+	PlayerChar->RecalculateBaseEyeHeight();
+	TestTrue(TEXT("Character wants to crouch on ground when Shift is held"), MoveComp->bWantsToCrouch);
+	PlayerChar->StopDescendInput();
+	TestFalse(TEXT("Character clears crouch intent when Shift is released"), MoveComp->bWantsToCrouch);
 
 	// 2. Editable config verification (No hardcoded movement lock)
 	MoveComp->WalkSpeed = 615.0f;

@@ -235,9 +235,17 @@ void AIU_PlayerCharacter::StopJumpInput()
 
 void AIU_PlayerCharacter::StartDescendInput()
 {
-	if (FlightComponent)
+	if (FlightComponent && FlightComponent->IsFlying())
 	{
 		FlightComponent->HandleDescendStarted();
+	}
+	else
+	{
+		Crouch();
+		if (IUMovementComponent)
+		{
+			IUMovementComponent->RefreshMovementSettings();
+		}
 	}
 }
 
@@ -246,6 +254,29 @@ void AIU_PlayerCharacter::StopDescendInput()
 	if (FlightComponent)
 	{
 		FlightComponent->HandleDescendCompleted();
+	}
+	UnCrouch();
+	if (IUMovementComponent)
+	{
+		IUMovementComponent->RefreshMovementSettings();
+	}
+}
+
+void AIU_PlayerCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	if (PlaceholderBodyMesh)
+	{
+		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.65f, 0.65f, 1.05f));
+	}
+}
+
+void AIU_PlayerCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	if (PlaceholderBodyMesh)
+	{
+		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.65f, 0.65f, 1.65f));
 	}
 }
 
