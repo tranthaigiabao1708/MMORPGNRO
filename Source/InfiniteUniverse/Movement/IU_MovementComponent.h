@@ -1,0 +1,105 @@
+// Copyright InfiniteUniverse Dev. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Data/IU_GameplayTypes.h"
+#include "IU_MovementComponent.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FIU_OnMovementModeChangedSignature,
+	EIU_PlayerMovementMode, PreviousMode,
+	EIU_PlayerMovementMode, NewMode);
+
+/**
+ * Custom CharacterMovementComponent centralizing all tunable ground locomotion parameters (M1)
+ * and extensible custom movement physics for Free 3D Flight (M2).
+ */
+UCLASS(ClassGroup = (InfiniteUniverse), meta = (BlueprintSpawnableComponent))
+class INFINITEUNIVERSE_API UIU_MovementComponent : public UCharacterMovementComponent
+{
+	GENERATED_BODY()
+
+public:
+	UIU_MovementComponent();
+
+	virtual void BeginPlay() override;
+	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
+
+	// ========================================================================
+	// Tunable Ground Locomotion Parameters (Single Source of Truth)
+	// ========================================================================
+
+	/** Standard jog/walk speed on ground (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+	float WalkSpeed = 520.0f;
+
+	/** Fast run/sprint speed when holding Sprint action (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "200.0", ClampMax = "3000.0"))
+	float SprintSpeed = 880.0f;
+
+	/** Ground acceleration (cm/s^2). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "500.0", ClampMax = "10000.0"))
+	float GroundAcceleration = 2400.0f;
+
+	/** Braking deceleration when releasing movement input on ground (cm/s^2). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Ground", meta = (ClampMin = "500.0", ClampMax = "10000.0"))
+	float GroundBrakingDeceleration = 2200.0f;
+
+	/** Initial vertical velocity on Jump (cm/s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Jump", meta = (ClampMin = "200.0", ClampMax = "2000.0"))
+	float JumpVelocity = 650.0f;
+
+	/** Directional air control multiplier while jumping/falling [0..1]. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Jump", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AirControlRatio = 0.50f;
+
+	/** Gravity scale tuned for crisp anime action jumps (avoids floaty descent). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Jump", meta = (ClampMin = "0.5", ClampMax = "4.0"))
+	float DefaultGravityScale = 1.55f;
+
+	/** Yaw turn rate (deg/s) when orienting character toward movement direction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Movement|Rotation", meta = (ClampMin = "90.0", ClampMax = "1440.0"))
+	float MovementRotationRateYaw = 640.0f;
+
+	// ========================================================================
+	// Runtime Locomotion API
+	// ========================================================================
+
+	/** Re-applies tunable UPROPERTY parameters to the underlying CMC fields. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Movement")
+	void RefreshMovementSettings();
+
+	/** Enables or disables ground sprinting and updates MaxWalkSpeed accordingly. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Movement")
+	void SetSprinting(bool bNewSprinting);
+
+	UFUNCTION(BlueprintPure, Category = "IU|Movement")
+	bool IsSprinting() const { return bIsSprinting; }
+
+	/** Switches between movement-oriented rotation and camera-facing rotation. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Movement")
+	void SetCharacterRotationMode(EIU_CharacterRotationMode NewRotationMode);
+
+	UFUNCTION(BlueprintPure, Category = "IU|Movement")
+	EIU_CharacterRotationMode GetCharacterRotationMode() const { return CurrentRotationMode; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Movement")
+	EIU_PlayerMovementMode GetIUMovementMode() const { return CurrentIUMovementMode; }
+
+	/** Explicit hook for M2 FlightComponent to transition high-level movement state. */
+	void SetIUMovementMode(EIU_PlayerMovementMode NewMode);
+
+	UPROPERTY(BlueprintAssignable, Category = "IU|Movement|Events")
+	FIU_OnMovementModeChangedSignature OnIUMovementModeChanged;
+
+private:
+	bool bIsSprinting = false;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")
+	EIU_CharacterRotationMode CurrentRotationMode = EIU_CharacterRotationMode::OrientToMovement;
+
+	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")
+	EIU_PlayerMovementMode CurrentIUMovementMode = EIU_PlayerMovementMode::Grounded;
+};

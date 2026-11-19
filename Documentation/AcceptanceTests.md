@@ -17,7 +17,21 @@
 
 ---
 
-## 2. Master 26-Point Core Prototype Acceptance Checklist (`2 / 26` — Updated Only on Runtime Proof)
+## 1B. Milestone 1 Task Status Ledger (`Player Character & Third-Person Movement`)
+
+| Task ID | Task Name | Status | Evidence / Test Proof |
+| :---: | :--- | :---: | :--- |
+| `P1-01` | Player Character (`AIU_PlayerCharacter`) | `PASSED` | Built `IU_PlayerCharacter.h/.cpp` + `BP_PlayerCharacter.uasset`; verified via `CharacterCameraAndZoom` test. |
+| `P1-02` | Third-Person Camera (`CameraBoom` + `FollowCamera`) | `PASSED` | `SpringArm` (`360 cm` default, lag `14.0`, offset `(0,45,65)`) verified in `CharacterCameraAndZoom`. |
+| `P1-03` | Walk & Sprint Movement (`UIU_MovementComponent`) | `PASSED` | Configurable `WalkSpeed (520)` & `SprintSpeed (880)` verified in `WalkSprintAndRotationModes`. |
+| `P1-04` | Jump & Landing (`Grounded ↔ Jumping`) | `PASSED` | `JumpVelocity (650)`, `GravityScale (1.55)` & `Landed()` state restore verified in `GameModeAndJumpState`. |
+| `P1-05` | Smooth Character Rotation (`OrientToMovement / Camera`) | `PASSED` | Smooth `RotationRate (640 deg/s)` & mode toggle (`Tab`) verified in `WalkSprintAndRotationModes`. |
+| `P1-06` | Mouse Look, Zoom & Wall Collision | `PASSED` | Pitch clamp `[-75, +75]`, zoom clamp `[180, 620]`, `bDoCollisionTest=true` verified in `CharacterCameraAndZoom`. |
+| `P1-07` | Remappable Enhanced Input (`IMC_Player` + `IA_*`) | `PASSED` | Decoupled `AIU_PlayerController` + `IMC_Player` & 6 `IA_*` assets saved cleanly (`0 errors`). |
+
+---
+
+## 2. Master 26-Point Core Prototype Acceptance Checklist (`5 / 26` — Updated Only on Runtime Proof)
 
 ### Project Foundation (3)
 - [x] **01.** UE5 C++ project (`InfiniteUniverse.uproject`) opens cleanly in Unreal Editor without errors (`0 error(s)` verified).
@@ -25,9 +39,9 @@
 - [x] **03.** Git + Git LFS repository and complete `Documentation/` suite are active and up to date.
 
 ### Player Movement (3)
-- [ ] **04.** Walk, Run (`Shift`), and Jump (`Space` tap) + Landing operate smoothly without jitter.
-- [ ] **05.** Third-person `SpringArm` camera rotates 360° smoothly with mouse wheel zoom.
-- [ ] **06.** Camera collision prevents clipping through walls, pillars, and ground surfaces.
+- [x] **04.** Walk, Run (`Shift`), and Jump (`Space` tap) + Landing operate smoothly without jitter (`GameModeAndJumpState` & `WalkSprintAndRotationModes` PASSED).
+- [x] **05.** Third-person `SpringArm` camera rotates 360° smoothly with mouse wheel zoom (`CharacterCameraAndZoom` PASSED).
+- [x] **06.** Camera collision (`bDoCollisionTest=true`, `ECC_Camera`, `ProbeSize=12`) prevents clipping through walls, pillars, and ground surfaces.
 
 ### Free 3D Flight (4)
 - [ ] **07.** Smooth state transitions: `Grounded → Flying → Landing → Grounded` (including from mid-jump/fall).
