@@ -28,8 +28,9 @@ void AIU_EnemyAIController::OnPossess(APawn* InPawn)
 	{
 		HomeLocation = ControlledEnemy->GetActorLocation();
 		CurrentState = ControlledEnemy->IsDead() ? EIU_EnemyAIState::Dead : EIU_EnemyAIState::Idle;
+		ControlledEnemy->SetReplicatedAIState(CurrentState);
 		StateElapsedSeconds = 0.0f;
-		SetActorTickEnabled(!ControlledEnemy->IsDead());
+		SetActorTickEnabled(HasAuthority() && !ControlledEnemy->IsDead());
 	}
 }
 
@@ -43,6 +44,12 @@ void AIU_EnemyAIController::OnUnPossess()
 void AIU_EnemyAIController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (!HasAuthority())
+	{
+		SetActorTickEnabled(false);
+		return;
+	}
 
 	if (!ControlledEnemy || ControlledEnemy->IsDead() || CurrentState == EIU_EnemyAIState::Dead)
 	{
@@ -189,6 +196,8 @@ void AIU_EnemyAIController::TransitionToState(EIU_EnemyAIState NewState)
 
 	if (ControlledEnemy)
 	{
+		ControlledEnemy->SetReplicatedAIState(CurrentState);
+
 		if (UCharacterMovementComponent* CMC = ControlledEnemy->GetCharacterMovement())
 		{
 			if (NewState == EIU_EnemyAIState::Idle ||
@@ -221,6 +230,7 @@ void AIU_EnemyAIController::TransitionToState(EIU_EnemyAIState NewState)
 			{
 				// Fallback to Recover if target vanished right at state entry
 				CurrentState = EIU_EnemyAIState::Recover;
+				ControlledEnemy->SetReplicatedAIState(CurrentState);
 			}
 		}
 	}
@@ -271,9 +281,17 @@ void AIU_EnemyAIController::TickChaseState(float DeltaSeconds)
 	AActor* Target = CurrentTarget.Get();
 	if (!IsValidHostileTarget(Target))
 	{
-		CurrentTarget.Reset();
-		TransitionToState(EIU_EnemyAIState::Idle);
-		return;
+		if (AActor* NextTarget = ScanForHostileTarget())
+		{
+			CurrentTarget = NextTarget;
+			Target = NextTarget;
+		}
+		else
+		{
+			CurrentTarget.Reset();
+			TransitionToState(EIU_EnemyAIState::Idle);
+			return;
+		}
 	}
 
 	const float DistToTarget = ComputeEngagementDistance(Target);
@@ -281,6 +299,14 @@ void AIU_EnemyAIController::TickChaseState(float DeltaSeconds)
 
 	if (DistToTarget > ControlledEnemy->LeashDisengageRange || DistFromHome > (ControlledEnemy->LeashDisengageRange * 1.35f))
 	{
+		if (DistFromHome <= (ControlledEnemy->LeashDisengageRange * 1.35f))
+		{
+			if (AActor* CloserTarget = ScanForHostileTarget())
+			{
+				CurrentTarget = CloserTarget;
+				return;
+			}
+		}
 		CurrentTarget.Reset();
 		TransitionToState(EIU_EnemyAIState::Idle);
 		return;
@@ -356,9 +382,17 @@ void AIU_EnemyAIController::TickRecoverState(float DeltaSeconds)
 
 	if (!IsValidHostileTarget(Target) || ComputeEngagementDistance(Target) > ControlledEnemy->LeashDisengageRange)
 	{
-		CurrentTarget.Reset();
-		TransitionToState(EIU_EnemyAIState::Idle);
-		return;
+		if (AActor* NextTarget = ScanForHostileTarget())
+		{
+			CurrentTarget = NextTarget;
+			Target = NextTarget;
+		}
+		else
+		{
+			CurrentTarget.Reset();
+			TransitionToState(EIU_EnemyAIState::Idle);
+			return;
+		}
 	}
 
 	if (ComputeEngagementDistance(Target) <= ControlledEnemy->AttackRange)
@@ -396,22 +430,31 @@ AActor* AIU_EnemyAIController::ScanForHostileTarget() const
 		return nullptr;
 	}
 
-	// Fast path: check possessed player controllers first (O(1) in single-player prototype)
+	AActor* NearestCandidate = nullptr;
+	float BestDist = MaxDetectRange;
+
+	// Evaluate ALL possessed PlayerControllers so multi-player Dedicated Server sessions always aggro the closest living player!
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
 		const APlayerController* PC = It->Get();
 		APawn* CandidatePawn = PC ? PC->GetPawn() : nullptr;
-		if (IsValidHostileTarget(CandidatePawn) &&
-			ComputeEngagementDistance(CandidatePawn) <= MaxDetectRange &&
-			HasVisibilityToTarget(CandidatePawn))
+		if (IsValidHostileTarget(CandidatePawn))
 		{
-			return CandidatePawn;
+			const float Dist = ComputeEngagementDistance(CandidatePawn);
+			if (Dist <= BestDist && HasVisibilityToTarget(CandidatePawn))
+			{
+				BestDist = Dist;
+				NearestCandidate = CandidatePawn;
+			}
 		}
 	}
 
+	if (NearestCandidate)
+	{
+		return NearestCandidate;
+	}
+
 	// Fallback for headless unit tests where AIU_PlayerCharacter may be spawned without a PlayerController
-	AActor* NearestCandidate = nullptr;
-	float BestDist = MaxDetectRange;
 	for (TActorIterator<AIU_PlayerCharacter> It(World); It; ++It)
 	{
 		AIU_PlayerCharacter* Candidate = *It;

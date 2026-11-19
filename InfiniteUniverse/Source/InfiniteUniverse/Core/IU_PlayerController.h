@@ -118,6 +118,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IU|Camera")
 	void ApplyInitialGameplayCameraAngle();
 
+	/** Requests Server Authority to toggle global PvP sparring mode (F4 shortcut in Development). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Multiplayer")
+	void Server_ToggleGlobalPvPSparring();
+
 private:
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;
 
@@ -140,4 +144,5 @@ private:
 	void HandleSwitchTarget(const FInputActionValue& Value);
 	void HandleToggleMobilityStyle(const FInputActionValue& Value);
 	void HandleToggleDebugHUD();
+	void HandleToggleGlobalPvP();
 };

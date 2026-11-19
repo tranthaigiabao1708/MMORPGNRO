@@ -2,18 +2,41 @@
 
 #include "Attributes/IU_AttributeComponent.h"
 #include "InfiniteUniverse.h"
+#include "GameFramework/Character.h"
+#include "Components/CapsuleComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
 UIU_AttributeComponent::UIU_AttributeComponent()
 {
+	SetIsReplicatedByDefault(true);
 	PrimaryComponentTick.bCanEverTick = false;
+}
+
+void UIU_AttributeComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UIU_AttributeComponent, MaxHP);
+	DOREPLIFETIME(UIU_AttributeComponent, MaxKi);
+	DOREPLIFETIME(UIU_AttributeComponent, AttackPowerMultiplier);
+	DOREPLIFETIME(UIU_AttributeComponent, CurrentHP);
+	DOREPLIFETIME(UIU_AttributeComponent, CurrentKi);
+	DOREPLIFETIME(UIU_AttributeComponent, bIsDead);
 }
 
 void UIU_AttributeComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	ResetAttributesToFull();
+	if (!GetOwner() || GetOwner()->HasAuthority())
+	{
+		ResetAttributesToFull();
+	}
+	else
+	{
+		OnHPChanged.Broadcast(CurrentHP, MaxHP, 0.0f);
+		OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
+	}
 }
 
 void UIU_AttributeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -27,6 +50,10 @@ void UIU_AttributeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 float UIU_AttributeComponent::ModifyHP(float Delta)
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return 0.0f;
+	}
 	if (bIsDead || FMath::IsNearlyZero(Delta))
 	{
 		return 0.0f;
@@ -54,6 +81,10 @@ float UIU_AttributeComponent::ModifyHP(float Delta)
 
 bool UIU_AttributeComponent::TryConsumeKi(float Cost)
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
 	if (bIsDead || Cost < 0.0f)
 	{
 		return false;
@@ -77,6 +108,10 @@ bool UIU_AttributeComponent::TryConsumeKi(float Cost)
 
 float UIU_AttributeComponent::RestoreKi(float Amount)
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return 0.0f;
+	}
 	if (bIsDead || Amount <= 0.0f)
 	{
 		return 0.0f;
@@ -97,6 +132,11 @@ float UIU_AttributeComponent::RestoreKi(float Amount)
 
 void UIU_AttributeComponent::ResetAttributesToFull()
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
 	bIsDead = false;
 	CurrentHP = MaxHP;
 	CurrentKi = MaxKi;
@@ -108,6 +148,11 @@ void UIU_AttributeComponent::ResetAttributesToFull()
 
 void UIU_AttributeComponent::UpdateKiRegenTimerState()
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -146,5 +191,38 @@ void UIU_AttributeComponent::OnKiRegenTimerTick()
 
 void UIU_AttributeComponent::SetAttackPowerMultiplier(float NewMultiplier)
 {
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return;
+	}
 	AttackPowerMultiplier = FMath::Clamp(NewMultiplier, 0.1f, 100.0f);
+}
+
+void UIU_AttributeComponent::OnRep_CurrentHP(float OldHP)
+{
+	OnHPChanged.Broadcast(CurrentHP, MaxHP, CurrentHP - OldHP);
+}
+
+void UIU_AttributeComponent::OnRep_CurrentKi(float OldKi)
+{
+	OnKiChanged.Broadcast(CurrentKi, MaxKi, CurrentKi - OldKi);
+}
+
+void UIU_AttributeComponent::OnRep_IsDead(bool bWasDead)
+{
+	if (!bWasDead && bIsDead)
+	{
+		OnHealthDepleted.Broadcast(GetOwner());
+	}
+	else if (bWasDead && !bIsDead)
+	{
+		if (ACharacter* OwnerChar = Cast<ACharacter>(GetOwner()))
+		{
+			if (UCapsuleComponent* Cap = OwnerChar->GetCapsuleComponent())
+			{
+				Cap->SetCollisionProfileName(TEXT("Pawn"));
+				Cap->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			}
+		}
+	}
 }

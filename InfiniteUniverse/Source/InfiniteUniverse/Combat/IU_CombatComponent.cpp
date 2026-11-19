@@ -6,12 +6,15 @@
 #include "Combat/IU_KiProjectile.h"
 #include "Combat/IU_AfterimageGhost.h"
 #include "Combat/IU_CombatThreatSubsystem.h"
+#include "Core/IU_GameState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "InfiniteUniverse.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerState.h"
+#include "Net/UnrealNetwork.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -20,11 +23,20 @@
 
 UIU_CombatComponent::UIU_CombatComponent()
 {
+	SetIsReplicatedByDefault(true);
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	KiProjectileClass = AIU_KiProjectile::StaticClass();
 	AfterimageGhostClass = AIU_AfterimageGhost::StaticClass();
+}
+
+void UIU_CombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UIU_CombatComponent, CurrentCombatState);
+	DOREPLIFETIME(UIU_CombatComponent, CurrentComboStep);
+	DOREPLIFETIME(UIU_CombatComponent, MobilityStyle);
 }
 
 void UIU_CombatComponent::BeginPlay()
@@ -128,7 +140,26 @@ void UIU_CombatComponent::SetMobilityStyle(EIU_MobilityStepStyle NewStyle)
 	{
 		MobilityStyle = NewStyle;
 		OnMobilityStyleChanged.Broadcast(MobilityStyle);
+		if (GetOwner() && !GetOwner()->HasAuthority())
+		{
+			Server_SetMobilityStyle(NewStyle);
+		}
 	}
+}
+
+void UIU_CombatComponent::Server_SetMobilityStyle_Implementation(EIU_MobilityStepStyle NewStyle)
+{
+	SetMobilityStyle(NewStyle);
+}
+
+void UIU_CombatComponent::OnRep_MobilityStyle()
+{
+	OnMobilityStyleChanged.Broadcast(MobilityStyle);
+}
+
+void UIU_CombatComponent::OnRep_CombatState(EIU_CombatState OldState)
+{
+	OnCombatStateChanged.Broadcast(OldState, CurrentCombatState);
 }
 
 EIU_MobilityStepStyle UIU_CombatComponent::ToggleMobilityStyle()
@@ -149,6 +180,21 @@ bool UIU_CombatComponent::RequestMeleeAttack()
 		CurrentCombatState == EIU_CombatState::HitReaction)
 	{
 		return false;
+	}
+
+	AActor* Owner = GetOwner();
+	if (Owner && !Owner->HasAuthority())
+	{
+		float Yaw = Owner->GetActorRotation().Yaw;
+		if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+		{
+			if (const AController* Ctrl = OwnerPawn->GetController())
+			{
+				Yaw = Ctrl->GetControlRotation().Yaw;
+			}
+		}
+		Server_RequestMeleeAttack(Yaw);
+		return true;
 	}
 
 	const int32 MaxComboSteps = FMath::Max(1, ComboStepDamages.Num());
@@ -177,6 +223,18 @@ bool UIU_CombatComponent::RequestMeleeAttack()
 	return true;
 }
 
+void UIU_CombatComponent::Server_RequestMeleeAttack_Implementation(float ClientControlYaw)
+{
+	if (AActor* Owner = GetOwner())
+	{
+		if (!TargetingComp || !TargetingComp->IsLockedOn())
+		{
+			Owner->SetActorRotation(FRotator(0.0f, ClientControlYaw, 0.0f));
+		}
+	}
+	RequestMeleeAttack();
+}
+
 AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 {
 	EnsureComponentsCached();
@@ -187,8 +245,53 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 	}
 
 	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return nullptr;
+	}
+
+	if (!Owner->HasAuthority())
+	{
+		if (AttributeComp && AttributeComp->GetKi() + KINDA_SMALL_NUMBER < KiBlastKiCost)
+		{
+			return nullptr;
+		}
+		FVector MuzzleLocation = Owner->GetActorLocation() + Owner->GetActorRotation().RotateVector(FallbackMuzzleOffset);
+		if (const ACharacter* OwnerChar = Cast<ACharacter>(Owner))
+		{
+			if (const USkeletalMeshComponent* Mesh = OwnerChar->GetMesh())
+			{
+				if (Mesh->GetSkeletalMeshAsset() && Mesh->DoesSocketExist(KiMuzzleSocketName))
+				{
+					MuzzleLocation = Mesh->GetSocketLocation(KiMuzzleSocketName);
+				}
+			}
+		}
+		const FVector ClientAimDir = ComputeCombatAimDirection(MuzzleLocation);
+		Server_RequestKiBlast(ClientAimDir);
+		return nullptr;
+	}
+
+	return ExecuteAuthoritativeKiBlast(FVector::ZeroVector);
+}
+
+void UIU_CombatComponent::Server_RequestKiBlast_Implementation(FVector ClientAimDirection)
+{
+	ExecuteAuthoritativeKiBlast(ClientAimDirection.GetSafeNormal());
+}
+
+AIU_KiProjectile* UIU_CombatComponent::ExecuteAuthoritativeKiBlast(const FVector& ExplicitAimDirOverride)
+{
+	EnsureComponentsCached();
+
+	if (CurrentCombatState != EIU_CombatState::Idle || bKiBlastOnCooldown)
+	{
+		return nullptr;
+	}
+
+	AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
-	if (!Owner || !World || !KiProjectileClass)
+	if (!Owner || !Owner->HasAuthority() || !World || !KiProjectileClass)
 	{
 		return nullptr;
 	}
@@ -221,7 +324,30 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 		}
 	}
 
-	const FVector ShootDir = ComputeCombatAimDirection(MuzzleLocation);
+	FVector ShootDir = ExplicitAimDirOverride.IsNearlyZero()
+		? ComputeCombatAimDirection(MuzzleLocation)
+		: ExplicitAimDirOverride.GetSafeNormal();
+
+	// Anti-spoof sanity validation: reject reverse/NaN client aim vectors when unlocked
+	if (ShootDir.ContainsNaN() || ShootDir.IsNearlyZero())
+	{
+		ShootDir = Owner->GetActorForwardVector();
+	}
+	else if (!TargetingComp || !TargetingComp->IsLockedOn())
+	{
+		if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+		{
+			if (const AController* Ctrl = OwnerPawn->GetController())
+			{
+				const FVector AuthLookDir = Ctrl->GetControlRotation().Vector();
+				if (FVector::DotProduct(ShootDir, AuthLookDir) < -0.15f)
+				{
+					ShootDir = ComputeCombatAimDirection(MuzzleLocation);
+				}
+			}
+		}
+	}
+
 	const FTransform SpawnTM(ShootDir.Rotation(), MuzzleLocation);
 
 	FActorSpawnParameters SpawnParams;
@@ -242,9 +368,21 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 			KiBlastCooldown,
 			false);
 		OnKiBlastFired.Broadcast();
+		if (Owner->GetNetMode() != NM_Standalone)
+		{
+			Multicast_OnKiBlastCosmetics();
+		}
 	}
 
 	return Projectile;
+}
+
+void UIU_CombatComponent::Multicast_OnKiBlastCosmetics_Implementation()
+{
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		OnKiBlastFired.Broadcast();
+	}
 }
 
 bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
@@ -264,6 +402,12 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 	if (!Owner || !World)
 	{
 		return false;
+	}
+
+	if (!Owner->HasAuthority())
+	{
+		Server_RequestDodge(DesiredWorldDirection);
+		return true;
 	}
 
 	// Cancel any active melee windup/swing cleanly when cancelling into Dash/Evade
@@ -308,10 +452,19 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 	}
 
 	// 2. Check STRICT Imminent-Damage Condition ("sắp gây sát thương" from Monster, Boss, OR Rival Player):
-	//    True ONLY if an active attack is <= PerfectEvadeTimeWindow (0.30s) from hitting OR < PerfectEvadePhysicalGapCm (20 cm)!
+	//    Includes bounded half-RTT ping compensation (<= 120 ms) on Server so WAN clients get fair Perfect Evade validation!
+	float PingCompensationSec = 0.0f;
+	if (const APawn* OwnerPawn = Cast<APawn>(Owner))
+	{
+		if (const APlayerState* PS = OwnerPawn->GetPlayerState())
+		{
+			PingCompensationSec = FMath::Clamp(PS->GetPingInMilliseconds() * 0.0005f, 0.0f, 0.12f);
+		}
+	}
+
 	UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>();
 	const bool bImminentIncomingAttack = (ThreatSubsys != nullptr) &&
-		ThreatSubsys->HasImminentThreatAgainstActor(Owner, PerfectEvadeTimeWindow, PerfectEvadePhysicalGapCm);
+		ThreatSubsys->HasImminentThreatAgainstActor(Owner, PerfectEvadeTimeWindow + PingCompensationSec, PerfectEvadePhysicalGapCm);
 
 	bLastDodgeWasCombatEvade = bImminentIncomingAttack;
 	bLastDodgeBlinkedInstantly = (bImminentIncomingAttack || MobilityStyle == EIU_MobilityStepStyle::InstantBlink);
@@ -391,7 +544,58 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 		DodgeCooldown,
 		false);
 
+	if (Owner->GetNetMode() != NM_Standalone)
+	{
+		Multicast_OnDodgeCosmetics(
+			OriginTransform,
+			Owner->GetActorLocation(),
+			Owner->GetActorRotation().Yaw,
+			bLastDodgeWasCombatEvade,
+			bLastDodgeBlinkedInstantly);
+	}
+
 	return true;
+}
+
+void UIU_CombatComponent::Server_RequestDodge_Implementation(FVector DesiredWorldDirection)
+{
+	RequestDodge(DesiredWorldDirection);
+}
+
+void UIU_CombatComponent::Multicast_OnDodgeCosmetics_Implementation(
+	FTransform OriginTransform,
+	FVector EndLocation,
+	float EndYaw,
+	bool bWasCombatEvade,
+	bool bBlinkedInstantly)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || Owner->HasAuthority())
+	{
+		return;
+	}
+
+	bLastDodgeWasCombatEvade = bWasCombatEvade;
+	bLastDodgeBlinkedInstantly = bBlinkedInstantly;
+
+	if (bWasCombatEvade)
+	{
+		// Spawn Wukong UPoseableMeshComponent Afterimage Ghost at Origin A on every Client screen!
+		LastSpawnedAfterimage = SpawnMirageAfterimageAt(OriginTransform);
+	}
+
+	if (bBlinkedInstantly)
+	{
+		Owner->SetActorLocationAndRotation(EndLocation, FRotator(0.0f, EndYaw, 0.0f), false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	else
+	{
+		Owner->SetActorRotation(FRotator(0.0f, EndYaw, 0.0f));
+	}
+
+	const EIU_CombatState Prev = CurrentCombatState;
+	CurrentCombatState = EIU_CombatState::Dodging;
+	OnCombatStateChanged.Broadcast(Prev, CurrentCombatState);
 }
 
 void UIU_CombatComponent::SetOwnerPawnCollisionIgnored(bool bIgnorePawns)
@@ -532,6 +736,16 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 			{
 				continue;
 			}
+			if (Owner->IsA<AIU_PlayerCharacter>() && Cand->IsA<AIU_PlayerCharacter>())
+			{
+				if (const AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+				{
+					if (!GS->ArePlayersAllowedToSpar(Owner, Cand))
+					{
+						continue;
+					}
+				}
+			}
 
 			const FVector ToCand = Cand->GetActorLocation() - Owner->GetActorLocation();
 			const double DistSq = ToCand.SizeSquared();
@@ -594,6 +808,10 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 	const float EffectiveWindup = FMath::Clamp(RawWindup, 0.0f, FMath::Max(0.0f, AttackStepDuration - 0.03f));
 
 	OnComboStepExecuted.Broadcast(CurrentComboStep);
+	if (Owner->GetNetMode() != NM_Standalone)
+	{
+		Multicast_OnComboStepCosmetics(CurrentComboStep, Owner->GetActorRotation().Yaw);
+	}
 
 	if (EffectiveWindup > KINDA_SMALL_NUMBER)
 	{
@@ -784,6 +1002,16 @@ FVector UIU_CombatComponent::ComputeCombatAimDirection(const FVector& MuzzleOrig
 					const UIU_DamageComponent* CandDmg = Cand->FindComponentByClass<UIU_DamageComponent>();
 					if (CandAttr && CandDmg && !CandAttr->IsDead())
 					{
+						if (Owner->IsA<AIU_PlayerCharacter>() && Cand->IsA<AIU_PlayerCharacter>())
+						{
+							if (const AIU_GameState* GS = GetWorld()->GetGameState<AIU_GameState>())
+							{
+								if (!GS->ArePlayersAllowedToSpar(Owner, Cand))
+								{
+									continue;
+								}
+							}
+						}
 						TargetPoint = Cand->GetActorLocation() + FVector(0.0f, 0.0f, 30.0f);
 						bSnappedToLivingEnemy = true;
 						break;
@@ -977,4 +1205,17 @@ void UIU_CombatComponent::ResetCombatState()
 	LastSpawnedAfterimage.Reset();
 
 	SetCombatState(EIU_CombatState::Idle);
+}
+
+void UIU_CombatComponent::Multicast_OnComboStepCosmetics_Implementation(int32 StepIndex, float FacingYaw)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || Owner->HasAuthority())
+	{
+		return;
+	}
+
+	CurrentComboStep = StepIndex;
+	Owner->SetActorRotation(FRotator(0.0f, FacingYaw, 0.0f));
+	OnComboStepExecuted.Broadcast(StepIndex);
 }

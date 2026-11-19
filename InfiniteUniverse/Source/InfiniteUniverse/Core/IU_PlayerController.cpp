@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "Core/IU_PlayerController.h"
+#include "Core/IU_GameState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "UI/IU_HUDManager.h"
 #include "Camera/PlayerCameraManager.h"
@@ -300,6 +301,7 @@ void AIU_PlayerController::SetupInputComponent()
 	if (InputComponent)
 	{
 		InputComponent->BindKey(EKeys::F3, IE_Pressed, this, &AIU_PlayerController::HandleToggleDebugHUD);
+		InputComponent->BindKey(EKeys::F4, IE_Pressed, this, &AIU_PlayerController::HandleToggleGlobalPvP);
 	}
 }
 
@@ -458,5 +460,21 @@ void AIU_PlayerController::HandleToggleDebugHUD()
 	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
 	{
 		IUHUD->ToggleDebugTelemetry();
+	}
+}
+
+void AIU_PlayerController::HandleToggleGlobalPvP()
+{
+	Server_ToggleGlobalPvPSparring();
+}
+
+void AIU_PlayerController::Server_ToggleGlobalPvPSparring_Implementation()
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+		{
+			GS->SetAllowGlobalPvPSparring(!GS->bAllowGlobalPvPSparring);
+		}
 	}
 }

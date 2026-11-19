@@ -22,16 +22,17 @@ public:
 	UIU_AttributeComponent();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// ========================================================================
 	// Tunable Attribute Parameters
 	// ========================================================================
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "1.0", ClampMax = "100000.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "1.0", ClampMax = "100000.0"))
 	float MaxHP = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "10000.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "10000.0"))
 	float MaxKi = 100.0f;
 
 	/** Passive Ki regenerated per second when Ki < MaxKi. */
@@ -39,7 +40,7 @@ public:
 	float PassiveKiRegenPerSecond = 8.0f;
 
 	/** Outgoing combat damage multiplier attribute (1.0 = baseline 100% damage, editable in Blueprint/runtime). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "100.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "100.0"))
 	float AttackPowerMultiplier = 1.0f;
 
 	/** Timer interval for smooth Ki regeneration (seconds). */
@@ -114,13 +115,22 @@ private:
 	void UpdateKiRegenTimerState();
 	void OnKiRegenTimerTick();
 
-	UPROPERTY(VisibleInstanceOnly, Category = "IU|Attributes|State")
+	UFUNCTION()
+	void OnRep_CurrentHP(float OldHP);
+
+	UFUNCTION()
+	void OnRep_CurrentKi(float OldKi);
+
+	UFUNCTION()
+	void OnRep_IsDead(bool bWasDead);
+
+	UPROPERTY(VisibleInstanceOnly, ReplicatedUsing = OnRep_CurrentHP, Category = "IU|Attributes|State")
 	float CurrentHP = 100.0f;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "IU|Attributes|State")
+	UPROPERTY(VisibleInstanceOnly, ReplicatedUsing = OnRep_CurrentKi, Category = "IU|Attributes|State")
 	float CurrentKi = 100.0f;
 
-	UPROPERTY(VisibleInstanceOnly, Category = "IU|Attributes|State")
+	UPROPERTY(VisibleInstanceOnly, ReplicatedUsing = OnRep_IsDead, Category = "IU|Attributes|State")
 	bool bIsDead = false;
 
 	FTimerHandle KiRegenTimerHandle;

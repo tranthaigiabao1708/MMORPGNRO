@@ -29,6 +29,7 @@ class INFINITEUNIVERSE_API AIU_EnemyCharacter : public ACharacter
 public:
 	AIU_EnemyCharacter();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -55,7 +56,7 @@ public:
 	float ChaseMoveSpeed = 480.0f;
 
 	/** If true, enemy switches to 3D flying locomotion to pursue airborne players. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Enemy|Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Enemy|Movement")
 	bool bCanFlyChase = false;
 
 	/** If true, requires unobstructed visibility line-of-sight to acquire target from Idle. */
@@ -140,6 +141,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Enemy")
 	EIU_EnemyAIState GetEnemyAIState() const;
 
+	void SetReplicatedAIState(EIU_EnemyAIState NewState) { ReplicatedAIState = NewState; }
+
 	UFUNCTION(BlueprintPure, Category = "IU|Enemy")
 	bool IsDead() const;
 
@@ -189,6 +192,12 @@ private:
 	UFUNCTION()
 	void HandleHealthDepleted(AActor* DepletedActor);
 
+	UFUNCTION()
+	void OnRep_WindingUpAttack();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_OnEnemyReset(FVector NewLocation, FRotator NewRotation);
+
 	void ExecuteAttackImpact();
 	void ApplyDefaultMovementConfig();
 	void UpdatePlaceholderVisibility();
@@ -196,11 +205,23 @@ private:
 	FTransform HomeSpawnTransform;
 	TWeakObjectPtr<AActor> LastDamageInstigator = nullptr;
 
+	UPROPERTY(Replicated)
+	EIU_EnemyAIState ReplicatedAIState = EIU_EnemyAIState::Idle;
+
+	UPROPERTY(ReplicatedUsing = OnRep_WindingUpAttack)
 	bool bWindingUpAttack = false;
+
 	int32 ActiveThreatId = 0;
+
+	UPROPERTY(Replicated)
 	float ActiveWindupTotal = 0.45f;
+
 	float ActiveWindupElapsed = 0.0f;
+
+	UPROPERTY(Replicated)
 	FVector StrikeStartWorldPos = FVector::ZeroVector;
+
+	UPROPERTY(Replicated)
 	FVector StrikeImpactWorldPos = FVector::ZeroVector;
 
 	FTimerHandle AttackWindupTimerHandle;

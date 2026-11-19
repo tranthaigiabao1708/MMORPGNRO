@@ -2,6 +2,8 @@
 
 #include "UI/IU_HUDManager.h"
 #include "UI/IU_PlayerHUDWidget.h"
+#include "Core/IU_GameState.h"
+#include "Core/IU_PlayerState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
 #include "Movement/IU_MovementComponent.h"
@@ -40,7 +42,11 @@ void AIU_HUDManager::BeginPlay()
 		if (ActiveHUDWidget)
 		{
 			ActiveHUDWidget->AddToViewport(0);
-			ActiveHUDWidget->BindToPlayerPawn(PC->GetPawn());
+			if (APawn* InitialPawn = PC->GetPawn())
+			{
+				ActiveHUDWidget->BindToPlayerPawn(InitialPawn);
+				BoundHUDWidgetPawn = InitialPawn;
+			}
 		}
 	}
 
@@ -54,6 +60,12 @@ void AIU_HUDManager::SetShowcaseStepBanner(const FString& InBannerText)
 
 void AIU_HUDManager::RefreshCombatEventBindings(APawn* OwningPawn)
 {
+	if (ActiveHUDWidget && OwningPawn && BoundHUDWidgetPawn.Get() != OwningPawn)
+	{
+		ActiveHUDWidget->BindToPlayerPawn(OwningPawn);
+		BoundHUDWidgetPawn = OwningPawn;
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -154,6 +166,21 @@ void AIU_HUDManager::HandleAnyActorHealthDepleted(AActor* DepletedActor)
 		ActiveCenterToastColor = FLinearColor(1.0f, 0.22f, 0.20f, 1.0f);
 		CenterToastExpireTime = Now + 3.0;
 	}
+	else if (DepletedActor->IsA<AIU_PlayerCharacter>())
+	{
+		ActiveCenterToastText = TEXT("[ SPAR RIVAL DEFEATED ]  Opponent Knocked Out in Martial Arena!");
+		ActiveCenterToastColor = FLinearColor(1.0f, 0.78f, 0.18f, 1.0f);
+		CenterToastExpireTime = Now + 2.4;
+
+		FIU_FloatingCombatText RivalPopup;
+		RivalPopup.WorldLocation = DepletedActor->GetActorLocation() + FVector(0.0f, 0.0f, 95.0f);
+		RivalPopup.Label = TEXT("RIVAL DEFEATED!");
+		RivalPopup.Color = FLinearColor(1.0f, 0.80f, 0.20f, 1.0f);
+		RivalPopup.SpawnWorldTime = Now;
+		RivalPopup.Duration = 1.25f;
+		RivalPopup.Scale = 1.45f;
+		FloatingTexts.Add(RivalPopup);
+	}
 	else
 	{
 		++DefeatedEnemyCount;
@@ -242,7 +269,15 @@ void AIU_HUDManager::DrawHUD()
 				{
 					const UIU_AttributeComponent* HitAttr = HitActor->FindComponentByClass<UIU_AttributeComponent>();
 					const UIU_DamageComponent* HitDmg = HitActor->FindComponentByClass<UIU_DamageComponent>();
-					bEnemyInCrosshair = (HitAttr && HitDmg && !HitAttr->IsDead());
+					bool bHostileTarget = (HitAttr && HitDmg && !HitAttr->IsDead());
+					if (bHostileTarget && HitActor->IsA<AIU_PlayerCharacter>())
+					{
+						if (const AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+						{
+							bHostileTarget = GS->ArePlayersAllowedToSpar(PlayerChar, HitActor);
+						}
+					}
+					bEnemyInCrosshair = bHostileTarget;
 				}
 			}
 		}
@@ -331,6 +366,59 @@ void AIU_HUDManager::DrawHUD()
 		}
 	}
 
+	// 2b. World-Space Overhead HP Bars & Co-op / PvP Sparring Tags for Remote Players (Step 2 Multiplayer)
+	const AIU_GameState* GameState = World->GetGameState<AIU_GameState>();
+	for (TActorIterator<AIU_PlayerCharacter> It(World); It; ++It)
+	{
+		AIU_PlayerCharacter* OtherPlayer = *It;
+		if (!IsValid(OtherPlayer) || OtherPlayer == OwningPawn)
+		{
+			continue;
+		}
+		const UIU_AttributeComponent* PAttr = OtherPlayer->GetAttributeComponent();
+		if (!PAttr || PAttr->IsDead() || OtherPlayer == LockedTarget)
+		{
+			continue;
+		}
+
+		const double DistSq = FVector::DistSquared(PlayerPos, OtherPlayer->GetActorLocation());
+		if (DistSq > FMath::Square(3500.0))
+		{
+			continue;
+		}
+
+		const FVector HeadProj = Project(OtherPlayer->GetActorLocation() + FVector(0.0f, 0.0f, 116.0f));
+		if (HeadProj.Z <= 0.0f || HeadProj.X < 0.0f || HeadProj.X > Canvas->ClipX)
+		{
+			continue;
+		}
+
+		const bool bCanSpar = GameState ? GameState->ArePlayersAllowedToSpar(OwningPawn, OtherPlayer) : true;
+		const float BarW = 84.0f;
+		const float BarH = 7.0f;
+		const float BarX = HeadProj.X - (BarW * 0.5f);
+		const float BarY = HeadProj.Y;
+
+		DrawRect(FLinearColor(0.03f, 0.04f, 0.06f, 0.80f), BarX - 1.0f, BarY - 1.0f, BarW + 2.0f, BarH + 2.0f);
+		const FLinearColor PlayerBarCol = bCanSpar
+			? FLinearColor(1.0f, 0.55f, 0.12f, 0.95f)
+			: FLinearColor(0.15f, 0.90f, 0.85f, 0.92f);
+		DrawRect(PlayerBarCol, BarX, BarY, BarW * PAttr->GetHPPercent(), BarH);
+
+		if (HUDFont)
+		{
+			int32 PlayerID = 0;
+			if (const APlayerState* OtherPS = OtherPlayer->GetPlayerState())
+			{
+				PlayerID = OtherPS->GetPlayerId();
+			}
+			const FString RoleTag = bCanSpar
+				? FString::Printf(TEXT("[SPAR RIVAL #%d]"), PlayerID)
+				: FString::Printf(TEXT("[CO-OP ALLY #%d]"), PlayerID);
+			DrawText(RoleTag, PlayerBarCol, BarX - 18.0f, BarY - 20.0f, HUDFont, 0.88f);
+		}
+	}
+
 	// 3. 3D Target Lock-On Diamond Reticle & Locked Target HP Bar
 	if (LockedTarget)
 	{
@@ -378,15 +466,20 @@ void AIU_HUDManager::DrawHUD()
 	// 4. Center-Top Death / Victory Notification Banner & Optional Auto-Demo Stage Header
 	if (!ShowcaseStepBannerText.IsEmpty())
 	{
-		DrawRect(FLinearColor(0.02f, 0.06f, 0.14f, 0.82f), CenterX - 290.0f, 18.0f, 580.0f, 32.0f);
-		DrawText(ShowcaseStepBannerText, FLinearColor(0.45f, 0.92f, 1.0f, 1.0f), CenterX - 275.0f, 24.0f, HUDFont, 1.02f);
+		const float BannerW = FMath::Min(540.0f, Canvas->ClipX - 40.0f);
+		const float BannerX = (Canvas->ClipX < 1200.0f) ? 36.0f : (CenterX - BannerW * 0.5f);
+		const float BannerTopY = (Canvas->ClipX < 1200.0f) ? 148.0f : 18.0f;
+		DrawRect(FLinearColor(0.02f, 0.06f, 0.14f, 0.84f), BannerX, BannerTopY, BannerW, 28.0f);
+		DrawText(ShowcaseStepBannerText, FLinearColor(0.45f, 0.92f, 1.0f, 1.0f), BannerX + 10.0f, BannerTopY + 4.0f, HUDFont, 0.88f);
 	}
 
 	if (Now < CenterToastExpireTime && !ActiveCenterToastText.IsEmpty())
 	{
-		const float BannerY = ShowcaseStepBannerText.IsEmpty() ? 32.0f : 58.0f;
-		DrawRect(FLinearColor(0.04f, 0.04f, 0.06f, 0.84f), CenterX - 245.0f, BannerY, 490.0f, 30.0f);
-		DrawText(ActiveCenterToastText, ActiveCenterToastColor, CenterX - 230.0f, BannerY + 5.0f, HUDFont, 1.0f);
+		const float ToastW = FMath::Min(470.0f, Canvas->ClipX - 40.0f);
+		const float ToastX = (Canvas->ClipX < 1200.0f) ? 36.0f : (CenterX - ToastW * 0.5f);
+		const float BannerY = (Canvas->ClipX < 1200.0f) ? 182.0f : (ShowcaseStepBannerText.IsEmpty() ? 32.0f : 54.0f);
+		DrawRect(FLinearColor(0.04f, 0.04f, 0.06f, 0.84f), ToastX, BannerY, ToastW, 28.0f);
+		DrawText(ActiveCenterToastText, ActiveCenterToastColor, ToastX + 10.0f, BannerY + 4.0f, HUDFont, 0.88f);
 	}
 
 	// 5. Floating 3D->2D Damage Numbers, "PERFECT EVADE!" & "ENEMY DEFEATED!" Popups
@@ -411,15 +504,15 @@ void AIU_HUDManager::DrawHUD()
 		}
 	}
 
-	// 6. Live Gameplay Debug Telemetry Overlay (Top-Right, toggle with F3 — Criterion 1.7)
+	// 6. Live Gameplay & Multiplayer Debug Telemetry Overlay (Top-Right, toggle with F3 — Criterion 1.7 & Step 2)
 	if (bShowDebugTelemetry && Canvas->ClipX > 640.0f)
 	{
-		const float PanelW = 350.0f;
-		const float PanelH = 128.0f;
+		const float PanelW = 398.0f;
+		const float PanelH = 152.0f;
 		const float PX = Canvas->ClipX - PanelW - 24.0f;
 		const float PY = 24.0f;
 
-		DrawRect(FLinearColor(0.02f, 0.03f, 0.05f, 0.72f), PX, PY, PanelW, PanelH);
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.05f, 0.74f), PX, PY, PanelW, PanelH);
 
 		const float FPS = 1.0f / FMath::Max(SmoothedFrameDeltaSeconds, 0.0005f);
 		const float FrameMs = SmoothedFrameDeltaSeconds * 1000.0f;
@@ -444,14 +537,41 @@ void AIU_HUDManager::DrawHUD()
 			}
 		}
 
+		const ENetMode NetMode = World->GetNetMode();
+		const TCHAR* NetModeStr = (NetMode == NM_Client) ? TEXT("DedClient")
+			: (NetMode == NM_DedicatedServer) ? TEXT("DedServer")
+			: (NetMode == NM_ListenServer) ? TEXT("ListenSrv")
+			: TEXT("Standalone");
+
+		float PingMs = 0.0f;
+		int32 RepEnemyKills = DefeatedEnemyCount;
+		int32 RepPvPKills = 0;
+		int32 RepDeaths = PlayerDefeatedCount;
+		if (const APlayerState* RawPS = OwningPawn->GetPlayerState())
+		{
+			PingMs = RawPS->GetPingInMilliseconds();
+			if (const AIU_PlayerState* IUPS = Cast<AIU_PlayerState>(RawPS))
+			{
+				RepEnemyKills = FMath::Max(RepEnemyKills, IUPS->GetEnemyKills());
+				RepPvPKills = IUPS->GetPvPKills();
+				RepDeaths = FMath::Max(RepDeaths, IUPS->GetDeaths());
+			}
+		}
+
+		const int32 OnlineCount = GameState ? FMath::Max(1, GameState->PlayerArray.Num()) : 1;
+		const bool bInPvPArena = GameState && (GameState->bAllowGlobalPvPSparring || GameState->IsLocationInMartialArena(PlayerPos));
+		const TCHAR* ZoneLabel = bInPvPArena ? TEXT("[PVP ARENA]") : TEXT("[CO-OP PVE]");
+
 		const FLinearColor HeaderCol(0.55f, 0.90f, 1.0f, 0.95f);
+		const FLinearColor NetCol = bInPvPArena ? FLinearColor(1.0f, 0.72f, 0.25f, 0.95f) : FLinearColor(0.35f, 0.95f, 0.80f, 0.95f);
 		const FLinearColor LineCol(0.90f, 0.95f, 0.98f, 0.92f);
 
-		DrawText(FString::Printf(TEXT("[DEBUG TELEMETRY - F3]  %.0f FPS (%.2f ms) | RAM %.0f MB"), FPS, FrameMs, UsedMemMB), HeaderCol, PX + 10.0f, PY + 8.0f, HUDFont, 0.84f);
-		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 32.0f, HUDFont, 0.82f);
-		DrawText(FString::Printf(TEXT("Cfg: Atk x%.1f | Walk %.0f | Sprint %.0f | Fly %.0f"), AtkMul, WalkCfg, SprintCfg, FlyCfg), LineCol, PX + 10.0f, PY + 56.0f, HUDFont, 0.82f);
-		DrawText(FString::Printf(TEXT("AI Raiders: %d/%d Alive | Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, DefeatedEnemyCount, PlayerDefeatedCount), LineCol, PX + 10.0f, PY + 80.0f, HUDFont, 0.82f);
-		DrawText(FString::Printf(TEXT("Map: %s"), *World->GetName()), FLinearColor(0.72f, 0.82f, 0.92f, 0.85f), PX + 10.0f, PY + 102.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("[DEBUG TELEMETRY - F3]  %.0f FPS (%.2f ms) | RAM %.0f MB"), FPS, FrameMs, UsedMemMB), HeaderCol, PX + 10.0f, PY + 8.0f, HUDFont, 0.82f);
+		DrawText(FString::Printf(TEXT("Net: %s | Ping: %.0f ms | Online: %d | %s"), NetModeStr, PingMs, OnlineCount, ZoneLabel), NetCol, PX + 10.0f, PY + 31.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 54.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("Cfg: Atk x%.1f | Walk %.0f | Sprint %.0f | Fly %.0f"), AtkMul, WalkCfg, SprintCfg, FlyCfg), LineCol, PX + 10.0f, PY + 77.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("AI: %d/%d Alive | PvE Kills: %d | PvP Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, RepEnemyKills, RepPvPKills, RepDeaths), LineCol, PX + 10.0f, PY + 100.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("Map: %s  (F4: Toggle Global PvP)"), *World->GetName()), FLinearColor(0.72f, 0.82f, 0.92f, 0.85f), PX + 10.0f, PY + 123.0f, HUDFont, 0.78f);
 	}
 
 	// 7. Compact Bottom-Left Controls Quick-Bar
@@ -459,13 +579,13 @@ void AIU_HUDManager::DrawHUD()
 	{
 		const float LegendX = 36.0f;
 		const float LegendY = Canvas->ClipY - 52.0f;
-		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, 945.0f, 30.0f);
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, 990.0f, 30.0f);
 		DrawText(
-			TEXT("WASD: Move | Space x2: 3D Flight | Ctrl/Shift: Boost/Down | LMB: Combo | Q: Ki Blast | RMB: Dash/Evade | E: Lock-On | V: Blink | F3: Debug"),
+			TEXT("WASD: Move | Space x2: 3D Flight | Ctrl/Shift: Boost/Down | LMB: Combo | Q: Ki Blast | RMB: Dash/Evade | E: Lock-On | V: Blink | F3: Debug | F4: PvP"),
 			FLinearColor(0.86f, 0.93f, 1.0f, 0.90f),
 			LegendX,
 			LegendY,
 			HUDFont,
-			0.86f);
+			0.84f);
 	}
 }

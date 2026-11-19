@@ -9,6 +9,8 @@
 AIU_EnemySpawner::AIU_EnemySpawner()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = false;
+	bNetLoadOnClient = false;
 
 	SpawnerRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SpawnerRoot"));
 	RootComponent = SpawnerRoot;
@@ -19,6 +21,12 @@ AIU_EnemySpawner::AIU_EnemySpawner()
 void AIU_EnemySpawner::BeginPlay()
 {
 	Super::BeginPlay();
+
+	const UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_Client || !HasAuthority())
+	{
+		return;
+	}
 
 	if (bSpawnOnBeginPlay)
 	{
@@ -42,7 +50,7 @@ void AIU_EnemySpawner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 AIU_EnemyCharacter* AIU_EnemySpawner::RespawnEnemyNow()
 {
 	UWorld* World = GetWorld();
-	if (!World)
+	if (!World || World->GetNetMode() == NM_Client || !HasAuthority())
 	{
 		return nullptr;
 	}
@@ -88,7 +96,8 @@ bool AIU_EnemySpawner::IsRespawnPending() const
 
 void AIU_EnemySpawner::HandleManagedEnemyDefeated(AIU_EnemyCharacter* DefeatedEnemy)
 {
-	if (!bAutoRespawnAfterDefeat)
+	const UWorld* WorldCheck = GetWorld();
+	if (!bAutoRespawnAfterDefeat || !WorldCheck || WorldCheck->GetNetMode() == NM_Client || !HasAuthority())
 	{
 		return;
 	}

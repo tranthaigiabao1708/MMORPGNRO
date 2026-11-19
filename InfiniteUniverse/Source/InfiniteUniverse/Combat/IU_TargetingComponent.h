@@ -70,6 +70,9 @@ public:
 	FIU_OnTargetLockChangedSignature OnTargetLockChanged;
 
 private:
+	UFUNCTION(Server, Reliable)
+	void Server_SyncLockedTarget(AActor* NewTarget);
+
 	UFUNCTION()
 	void HandleLockedTargetDepleted(AActor* DepletedActor);
 

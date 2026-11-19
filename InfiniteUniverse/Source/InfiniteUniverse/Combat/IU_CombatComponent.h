@@ -38,6 +38,7 @@ public:
 	UIU_CombatComponent();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -108,7 +109,7 @@ public:
 	// ========================================================================
 
 	/** Archetype traversal style: Earthling continuous Dash vs Alien InstantBlink (both arrive at identical B). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat|Dodge")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_MobilityStyle, Category = "IU|Combat|Dodge")
 	EIU_MobilityStepStyle MobilityStyle = EIU_MobilityStepStyle::Dash;
 
 	/** Unified A -> B travel distance (cm) shared identically by Dash, InstantBlink, and Perfect Evade. */
@@ -224,6 +225,35 @@ private:
 	UFUNCTION()
 	void HandleOwnerHealthDepleted(AActor* DepletedActor);
 
+	UFUNCTION()
+	void OnRep_CombatState(EIU_CombatState OldState);
+
+	UFUNCTION()
+	void OnRep_MobilityStyle();
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestMeleeAttack(float ClientControlYaw);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestKiBlast(FVector ClientAimDirection);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestDodge(FVector DesiredWorldDirection);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetMobilityStyle(EIU_MobilityStepStyle NewStyle);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_OnComboStepCosmetics(int32 StepIndex, float FacingYaw);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_OnKiBlastCosmetics();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_OnDodgeCosmetics(FTransform OriginTransform, FVector EndLocation, float EndYaw, bool bWasCombatEvade, bool bBlinkedInstantly);
+
+	AIU_KiProjectile* ExecuteAuthoritativeKiBlast(const FVector& ExplicitAimDirOverride);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_AttributeComponent> AttributeComp;
 
@@ -235,7 +265,10 @@ private:
 
 	TWeakObjectPtr<AIU_AfterimageGhost> LastSpawnedAfterimage;
 
+	UPROPERTY(ReplicatedUsing = OnRep_CombatState)
 	EIU_CombatState CurrentCombatState = EIU_CombatState::Idle;
+
+	UPROPERTY(Replicated)
 	int32 CurrentComboStep = 0;
 	bool bQueuedNextComboHit = false;
 	bool bKiBlastOnCooldown = false;

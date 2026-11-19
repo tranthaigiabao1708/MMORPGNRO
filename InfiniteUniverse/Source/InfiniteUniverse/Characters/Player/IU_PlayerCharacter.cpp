@@ -24,6 +24,8 @@ AIU_PlayerCharacter::AIU_PlayerCharacter(const FObjectInitializer& ObjectInitial
 	// Zero-Tick when camera zoom is settled; enabled dynamically only during zoom interpolation
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	bReplicates = true;
+	SetReplicateMovement(true);
 
 	// Standard 180 cm anime humanoid capsule (Radius 40 cm, HalfHeight 90 cm)
 	GetCapsuleComponent()->InitCapsuleSize(40.0f, 90.0f);
@@ -293,6 +295,15 @@ void AIU_PlayerCharacter::ApplyMovementInput(const FVector2D& MoveAxis)
 		FlightComponent->SetMoveAxisInput(MoveAxis);
 		if (FlightComponent->IsFlying())
 		{
+			// Stream 3D flight directional intent via CMC Acceleration so FSavedMove sends it to Dedicated Server!
+			if (Controller && !MoveAxis.IsNearlyZero())
+			{
+				const FRotator ViewRot = Controller->GetControlRotation();
+				const FVector CamFwd3D = ViewRot.Vector();
+				const FVector CamRight2D = FRotationMatrix(FRotator(0.0f, ViewRot.Yaw, 0.0f)).GetUnitAxis(EAxis::Y);
+				AddMovementInput(CamFwd3D, MoveAxis.Y);
+				AddMovementInput(CamRight2D, MoveAxis.X);
+			}
 			return;
 		}
 	}
@@ -534,6 +545,18 @@ void AIU_PlayerCharacter::ToggleRotationModeInput()
 		: EIU_CharacterRotationMode::OrientToMovement;
 
 	IUMovementComponent->SetCharacterRotationMode(NextMode);
+	if (!HasAuthority())
+	{
+		Server_SetCharacterRotationMode(NextMode);
+	}
+}
+
+void AIU_PlayerCharacter::Server_SetCharacterRotationMode_Implementation(EIU_CharacterRotationMode NewMode)
+{
+	if (IUMovementComponent)
+	{
+		IUMovementComponent->SetCharacterRotationMode(NewMode);
+	}
 }
 
 void AIU_PlayerCharacter::MeleeAttackInput()
@@ -730,7 +753,7 @@ void AIU_PlayerCharacter::HandlePlayerDefeated(AActor* DepletedActor)
 		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.65f, 0.65f, 0.45f));
 	}
 
-	if (bAutoRespawnOnDefeat)
+	if (bAutoRespawnOnDefeat && HasAuthority())
 	{
 		if (UWorld* World = GetWorld())
 		{
@@ -744,8 +767,19 @@ void AIU_PlayerCharacter::HandlePlayerDefeated(AActor* DepletedActor)
 	}
 }
 
+void AIU_PlayerCharacter::UpdateSavedSpawnTransform(const FTransform& NewTransform)
+{
+	InitialSpawnTransform = NewTransform;
+	bHasSavedInitialSpawn = true;
+}
+
 void AIU_PlayerCharacter::ResetPlayerAtSpawn()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PlayerAutoRespawnTimerHandle);
@@ -772,9 +806,21 @@ void AIU_PlayerCharacter::ResetPlayerAtSpawn()
 		FlightComponent->ExitFlight(false);
 	}
 
+	const FVector RespawnLoc = bHasSavedInitialSpawn ? InitialSpawnTransform.GetLocation() : GetActorLocation();
+	const FRotator RespawnRot = bHasSavedInitialSpawn ? InitialSpawnTransform.GetRotation().Rotator() : GetActorRotation();
 	if (bHasSavedInitialSpawn)
 	{
-		TeleportTo(InitialSpawnTransform.GetLocation(), InitialSpawnTransform.GetRotation().Rotator(), false, true);
+		TeleportTo(RespawnLoc, RespawnRot, false, true);
+	}
+
+	Multicast_OnPlayerRespawned(RespawnLoc, RespawnRot);
+}
+
+void AIU_PlayerCharacter::Multicast_OnPlayerRespawned_Implementation(FVector RespawnLocation, FRotator RespawnRotation)
+{
+	if (!HasAuthority())
+	{
+		SetActorLocationAndRotation(RespawnLocation, RespawnRotation, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
 	UnCrouch();

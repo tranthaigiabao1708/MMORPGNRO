@@ -80,6 +80,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_PlayerHUDWidget> ActiveHUDWidget;
 
+	TWeakObjectPtr<APawn> BoundHUDWidgetPawn;
 	TSet<TWeakObjectPtr<UIU_DamageComponent>> ObservedDamageComponents;
 	TSet<TWeakObjectPtr<UIU_AttributeComponent>> ObservedAttributeComponents;
 	TWeakObjectPtr<UIU_CombatComponent> ObservedPlayerCombat;

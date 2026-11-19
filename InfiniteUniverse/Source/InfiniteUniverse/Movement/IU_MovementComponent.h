@@ -32,6 +32,8 @@ public:
 	virtual void BeginPlay() override;
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
+	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
+	virtual class FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 	virtual float GetMaxSpeed() const override;
 	virtual float GetMaxAcceleration() const override;
 	virtual float GetMaxBrakingDeceleration() const override;
@@ -132,4 +134,36 @@ private:
 
 	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")
 	EIU_PlayerMovementMode CurrentIUMovementMode = EIU_PlayerMovementMode::Grounded;
+};
+
+/**
+ * Step 2 Client-Side SavedMove packing Sprint, Free 3D Flight state, Ascend/Descend & Flight Dash
+ * into UE5's native 60Hz ServerMove bitflags with zero extra RPC bandwidth.
+ */
+class INFINITEUNIVERSE_API FSavedMove_IUCharacter : public FSavedMove_Character
+{
+public:
+	typedef FSavedMove_Character Super;
+
+	uint8 bSavedIsSprinting : 1;
+	uint8 bSavedInFreeFlight : 1;
+	uint8 bSavedAscendHeld : 1;
+	uint8 bSavedDescendHeld : 1;
+
+	FSavedMove_IUCharacter();
+
+	virtual void Clear() override;
+	virtual uint8 GetCompressedFlags() const override;
+	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const override;
+	virtual void SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, class FNetworkPredictionData_Client_Character& ClientData) override;
+	virtual void PrepMoveFor(ACharacter* C) override;
+};
+
+class INFINITEUNIVERSE_API FNetworkPredictionData_Client_IUCharacter : public FNetworkPredictionData_Client_Character
+{
+public:
+	typedef FNetworkPredictionData_Client_Character Super;
+
+	explicit FNetworkPredictionData_Client_IUCharacter(const UCharacterMovementComponent& ClientMovement);
+	virtual FSavedMovePtr AllocateNewMove() override;
 };

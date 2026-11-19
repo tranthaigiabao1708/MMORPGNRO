@@ -102,6 +102,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IU|Lifecycle")
 	void ResetPlayerAtSpawn();
 
+	void UpdateSavedSpawnTransform(const FTransform& NewTransform);
+
 	UFUNCTION(BlueprintPure, Category = "IU|Camera")
 	USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
@@ -230,6 +232,12 @@ private:
 
 	UFUNCTION()
 	void HandlePlayerDefeated(AActor* DepletedActor);
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetCharacterRotationMode(EIU_CharacterRotationMode NewMode);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_OnPlayerRespawned(FVector RespawnLocation, FRotator RespawnRotation);
 
 	FTransform InitialSpawnTransform;
 	bool bHasSavedInitialSpawn = false;

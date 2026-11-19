@@ -131,4 +131,5 @@ private:
 	bool bActiveClipLooping = true;
 	double ActionOverrideEndTime = 0.0;
 	bool bWasAirborneLastFrame = false;
+	bool bWasDeadLastFrame = false;
 };

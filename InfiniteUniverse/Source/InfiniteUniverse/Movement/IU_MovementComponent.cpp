@@ -8,6 +8,7 @@
 
 UIU_MovementComponent::UIU_MovementComponent()
 {
+	SetIsReplicatedByDefault(true);
 	bOrientRotationToMovement = false;
 	bUseControllerDesiredRotation = true;
 	NavAgentProps.bCanCrouch = true;
@@ -99,6 +100,15 @@ void UIU_MovementComponent::OnMovementModeChanged(EMovementMode PreviousMovement
 		if (CustomMovementMode == CMOVE_FreeFlight)
 		{
 			SetIUMovementMode(EIU_PlayerMovementMode::Flying);
+			if (!CachedFlightComponent && GetOwner())
+			{
+				CachedFlightComponent = GetOwner()->FindComponentByClass<UIU_FlightComponent>();
+			}
+			if (CachedFlightComponent)
+			{
+				// Ensure SimulatedProxy enables flight visual lean updates upon unpacking CMOVE_FreeFlight
+				CachedFlightComponent->SetComponentTickEnabled(true);
+			}
 		}
 		break;
 
@@ -227,6 +237,18 @@ void UIU_MovementComponent::PhysCustom_FreeFlight(float DeltaTime, int32 Iterati
 
 	ApplyRootMotionToVelocity(DeltaTime);
 
+	// Pre-move Server-Authoritative Anti-Speedhack Envelope Clamp (prevents single-frame spoofed displacement!)
+	const float MaxAllowedFlightSpeed = FMath::Sqrt(
+		FMath::Square(CachedFlightComponent->FlightSpeed * CachedFlightComponent->FlightDashMultiplier) +
+		FMath::Square(CachedFlightComponent->VerticalFlightSpeed * CachedFlightComponent->FlightDashMultiplier)) * 1.02f;
+	if (CharacterOwner && CharacterOwner->HasAuthority() && !bInAerialFlashDodge)
+	{
+		if (Velocity.SizeSquared() > FMath::Square(MaxAllowedFlightSpeed))
+		{
+			Velocity = Velocity.GetSafeNormal() * MaxAllowedFlightSpeed;
+		}
+	}
+
 	Iterations++;
 	bJustTeleported = false;
 
@@ -262,6 +284,18 @@ void UIU_MovementComponent::PhysCustom_FreeFlight(float DeltaTime, int32 Iterati
 	if (!bJustTeleported && !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity())
 	{
 		Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation) / DeltaTime;
+
+		// Server-Authoritative Anti-Speedhack Envelope Clamp (Step 2)
+		if (CharacterOwner && CharacterOwner->HasAuthority() && !bInAerialFlashDodge)
+		{
+			const float MaxAllowedSpeed = FMath::Max(
+				CachedFlightComponent->FlightSpeed * CachedFlightComponent->FlightDashMultiplier,
+				CachedFlightComponent->VerticalFlightSpeed * CachedFlightComponent->FlightDashMultiplier) * 1.05f;
+			if (Velocity.SizeSquared() > FMath::Square(MaxAllowedSpeed))
+			{
+				Velocity = Velocity.GetSafeNormal() * MaxAllowedSpeed;
+			}
+		}
 	}
 }
 
@@ -294,4 +328,140 @@ bool UIU_MovementComponent::TryAutoLandOnWalkableFloor()
 		QueryParams);
 
 	return bHit && FloorHit.bBlockingHit && IsWalkable(FloorHit);
+}
+
+void UIU_MovementComponent::UpdateFromCompressedFlags(uint8 Flags)
+{
+	Super::UpdateFromCompressedFlags(Flags);
+
+	const bool bNetSprintOrDash = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
+	const bool bNetInFreeFlight = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
+	const bool bNetAscendHeld = (Flags & FSavedMove_Character::FLAG_Custom_2) != 0;
+	const bool bNetDescendHeld = (Flags & FSavedMove_Character::FLAG_Custom_3) != 0;
+
+	SetSprinting(bNetSprintOrDash);
+
+	if (!CachedFlightComponent && GetOwner())
+	{
+		CachedFlightComponent = GetOwner()->FindComponentByClass<UIU_FlightComponent>();
+	}
+	if (CachedFlightComponent)
+	{
+		CachedFlightComponent->ApplyNetworkSavedFlightFlags(
+			bNetInFreeFlight,
+			bNetAscendHeld,
+			bNetDescendHeld,
+			bNetSprintOrDash);
+	}
+}
+
+FNetworkPredictionData_Client* UIU_MovementComponent::GetPredictionData_Client() const
+{
+	if (ClientPredictionData == nullptr)
+	{
+		UIU_MovementComponent* MutableThis = const_cast<UIU_MovementComponent*>(this);
+		MutableThis->ClientPredictionData = new FNetworkPredictionData_Client_IUCharacter(*this);
+	}
+	return ClientPredictionData;
+}
+
+// ============================================================================
+// FSavedMove_IUCharacter & FNetworkPredictionData_Client_IUCharacter
+// ============================================================================
+
+FSavedMove_IUCharacter::FSavedMove_IUCharacter()
+	: bSavedIsSprinting(false)
+	, bSavedInFreeFlight(false)
+	, bSavedAscendHeld(false)
+	, bSavedDescendHeld(false)
+{
+}
+
+void FSavedMove_IUCharacter::Clear()
+{
+	Super::Clear();
+	bSavedIsSprinting = false;
+	bSavedInFreeFlight = false;
+	bSavedAscendHeld = false;
+	bSavedDescendHeld = false;
+}
+
+uint8 FSavedMove_IUCharacter::GetCompressedFlags() const
+{
+	uint8 Result = Super::GetCompressedFlags();
+	if (bSavedIsSprinting)
+	{
+		Result |= FLAG_Custom_0;
+	}
+	if (bSavedInFreeFlight)
+	{
+		Result |= FLAG_Custom_1;
+	}
+	if (bSavedAscendHeld)
+	{
+		Result |= FLAG_Custom_2;
+	}
+	if (bSavedDescendHeld)
+	{
+		Result |= FLAG_Custom_3;
+	}
+	return Result;
+}
+
+bool FSavedMove_IUCharacter::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* InCharacter, float MaxDelta) const
+{
+	const FSavedMove_IUCharacter* NewIUMove = static_cast<const FSavedMove_IUCharacter*>(NewMove.Get());
+	if (bSavedIsSprinting != NewIUMove->bSavedIsSprinting ||
+		bSavedInFreeFlight != NewIUMove->bSavedInFreeFlight ||
+		bSavedAscendHeld != NewIUMove->bSavedAscendHeld ||
+		bSavedDescendHeld != NewIUMove->bSavedDescendHeld)
+	{
+		return false;
+	}
+	return Super::CanCombineWith(NewMove, InCharacter, MaxDelta);
+}
+
+void FSavedMove_IUCharacter::SetMoveFor(ACharacter* C, float InDeltaTime, FVector const& NewAccel, FNetworkPredictionData_Client_Character& ClientData)
+{
+	Super::SetMoveFor(C, InDeltaTime, NewAccel, ClientData);
+
+	if (const UIU_MovementComponent* IUMove = C ? Cast<UIU_MovementComponent>(C->GetCharacterMovement()) : nullptr)
+	{
+		bSavedIsSprinting = IUMove->IsSprinting();
+		bSavedInFreeFlight = IUMove->IsInCustomFreeFlight();
+		if (const UIU_FlightComponent* Flight = C->FindComponentByClass<UIU_FlightComponent>())
+		{
+			bSavedIsSprinting = bSavedIsSprinting || Flight->WantsFlightDash();
+			bSavedAscendHeld = Flight->IsAscendHeld();
+			bSavedDescendHeld = Flight->IsDescendHeld();
+		}
+	}
+}
+
+void FSavedMove_IUCharacter::PrepMoveFor(ACharacter* C)
+{
+	Super::PrepMoveFor(C);
+
+	if (UIU_MovementComponent* IUMove = C ? Cast<UIU_MovementComponent>(C->GetCharacterMovement()) : nullptr)
+	{
+		IUMove->SetSprinting(bSavedIsSprinting);
+		if (UIU_FlightComponent* Flight = C->FindComponentByClass<UIU_FlightComponent>())
+		{
+			Flight->ApplyNetworkSavedFlightFlags(
+				bSavedInFreeFlight,
+				bSavedAscendHeld,
+				bSavedDescendHeld,
+				bSavedIsSprinting);
+		}
+	}
+}
+
+FNetworkPredictionData_Client_IUCharacter::FNetworkPredictionData_Client_IUCharacter(const UCharacterMovementComponent& ClientMovement)
+	: Super(ClientMovement)
+{
+}
+
+FSavedMovePtr FNetworkPredictionData_Client_IUCharacter::AllocateNewMove()
+{
+	return FSavedMovePtr(new FSavedMove_IUCharacter());
 }

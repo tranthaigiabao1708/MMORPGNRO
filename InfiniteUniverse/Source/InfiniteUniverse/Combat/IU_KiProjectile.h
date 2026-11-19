@@ -26,6 +26,7 @@ public:
 	AIU_KiProjectile();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Initializes velocity, instigator exclusion, and damage amount immediately after spawning. */
@@ -87,6 +88,12 @@ private:
 		const FHitResult& Hit);
 
 	void ProcessImpact(AActor* TargetActor, const FVector& ImpactPoint);
+
+	UFUNCTION()
+	void OnRep_LaunchVelocity();
+
+	UPROPERTY(ReplicatedUsing = OnRep_LaunchVelocity)
+	FVector ReplicatedLaunchVelocity = FVector::ZeroVector;
 
 	TWeakObjectPtr<AActor> ShooterActor;
 	bool bHasImpacted = false;

@@ -1,0 +1,391 @@
+// Copyright InfiniteUniverse Dev. All Rights Reserved.
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "CoreMinimal.h"
+#include "Misc/AutomationTest.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerStart.h"
+#include "UObject/UnrealType.h"
+#include "Core/IU_GameMode.h"
+#include "Core/IU_GameState.h"
+#include "Core/IU_PlayerState.h"
+#include "Core/IU_PlayerController.h"
+#include "Characters/Player/IU_PlayerCharacter.h"
+#include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "AI/IU_EnemyAIController.h"
+#include "AI/IU_EnemySpawner.h"
+#include "Movement/IU_MovementComponent.h"
+#include "Movement/IU_FlightComponent.h"
+#include "Attributes/IU_AttributeComponent.h"
+#include "Combat/IU_CombatComponent.h"
+#include "Combat/IU_DamageComponent.h"
+#include "Combat/IU_TargetingComponent.h"
+#include "Combat/IU_CombatThreatSubsystem.h"
+#include "Combat/IU_KiProjectile.h"
+#include "Combat/IU_AfterimageGhost.h"
+
+namespace IU_S2TestHelpers
+{
+	struct FScopedStep2NetWorld
+	{
+		UWorld* World = nullptr;
+		UWorld* PrevGWorld = nullptr;
+
+		explicit FScopedStep2NetWorld(bool bSpawnGameModeAndState = true)
+		{
+			PrevGWorld = GWorld;
+			World = UWorld::CreateWorld(EWorldType::Game, false, FName(TEXT("IU_Step2_NetAuthorityWorld")));
+			FWorldContext& WorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
+			WorldContext.SetCurrentWorld(World);
+			GWorld = World;
+
+			FURL URL;
+			if (bSpawnGameModeAndState)
+			{
+				AIU_GameMode* GM = World->SpawnActor<AIU_GameMode>();
+				AIU_GameState* GS = World->SpawnActor<AIU_GameState>();
+				if (GM && GS)
+				{
+					World->SetGameState(GS);
+				}
+			}
+
+			World->InitializeActorsForPlay(URL);
+			World->BeginPlay();
+			World->SetBegunPlay(true);
+		}
+
+		void TickWorld(float TotalSeconds, float StepDelta = 1.0f / 60.0f)
+		{
+			const int32 Steps = FMath::Max(1, FMath::RoundToInt(TotalSeconds / StepDelta));
+			for (int32 i = 0; i < Steps; ++i)
+			{
+				++GFrameCounter;
+				World->Tick(LEVELTICK_All, StepDelta);
+			}
+		}
+
+		~FScopedStep2NetWorld()
+		{
+			GWorld = PrevGWorld;
+			if (World)
+			{
+				World->SetBegunPlay(false);
+				GEngine->DestroyWorldContext(World);
+				World->DestroyWorld(false);
+			}
+		}
+	};
+
+	static bool HasNetReplicatedProperty(const UStruct* StructType, const FName& PropName)
+	{
+		if (!StructType)
+		{
+			return false;
+		}
+		const FProperty* Prop = StructType->FindPropertyByName(PropName);
+		return Prop && Prop->HasAnyPropertyFlags(CPF_Net);
+	}
+}
+
+// ============================================================================
+// TEST 1: Multi-Player Non-Overlapping Spawn, Co-op PvE Friendly-Fire Block & Arena PvP
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2_GameModeMultiSpawnAndArenaPvPRulesTest,
+	"InfiniteUniverse.Step2.GameModeMultiSpawnAndArenaPvPRules",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2_GameModeMultiSpawnAndArenaPvPRulesTest::RunTest(const FString& Parameters)
+{
+	IU_S2TestHelpers::FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/true);
+	UWorld* World = ScopeWorld.World;
+	AIU_GameState* GS = World->GetGameState<AIU_GameState>();
+	AIU_GameMode* GM = World->SpawnActor<AIU_GameMode>();
+	TestNotNull(TEXT("AIU_GameState active in world"), GS);
+	TestNotNull(TEXT("AIU_GameMode spawned"), GM);
+
+	APlayerStart* RootStart = World->SpawnActor<APlayerStart>(FVector(0.0f, 0.0f, 110.0f), FRotator::ZeroRotator);
+	TestNotNull(TEXT("PlayerStart spawned at Co-op Courtyard (0, 0, 110)"), RootStart);
+
+	TArray<AIU_PlayerController*> Controllers;
+	TArray<AIU_PlayerCharacter*> Players;
+	TArray<AIU_PlayerState*> States;
+
+	for (int32 i = 0; i < 3; ++i)
+	{
+		AIU_PlayerController* PC = World->SpawnActor<AIU_PlayerController>();
+		PC->MarkAsLocalTestController();
+		AIU_PlayerState* PS = World->SpawnActor<AIU_PlayerState>();
+		PC->PlayerState = PS;
+
+		const FTransform SpawnTM = GM->AllocateMultiplayerSpawnTransform(PC);
+		AIU_PlayerCharacter* Char = World->SpawnActor<AIU_PlayerCharacter>(SpawnTM.GetLocation(), SpawnTM.GetRotation().Rotator());
+		Char->SetPlayerState(PS);
+		PC->Possess(Char);
+		Char->GetIUMovementComponent()->GravityScale = 0.0f;
+
+		Controllers.Add(PC);
+		Players.Add(Char);
+		States.Add(PS);
+	}
+
+	// 1. Verify all 3 spawned players sit >= 120 cm apart (no capsule overlap on simultaneous login!)
+	TestTrue(TEXT("Player 0 and Player 1 spawn non-overlapping (> 120 cm)"),
+		FVector::Dist2D(Players[0]->GetActorLocation(), Players[1]->GetActorLocation()) > 120.0f);
+	TestTrue(TEXT("Player 1 and Player 2 spawn non-overlapping (> 120 cm)"),
+		FVector::Dist2D(Players[1]->GetActorLocation(), Players[2]->GetActorLocation()) > 120.0f);
+	TestTrue(TEXT("Player 0 and Player 2 spawn non-overlapping (> 120 cm)"),
+		FVector::Dist2D(Players[0]->GetActorLocation(), Players[2]->GetActorLocation()) > 120.0f);
+
+	// 2. Verify Co-op PvE Friendly-Fire Block at Courtyard (X ~ 0, outside West Martial Arena)
+	TestFalse(TEXT("Players in Co-op Courtyard are NOT allowed to spar by default"),
+		GS->ArePlayersAllowedToSpar(Players[0], Players[1]));
+
+	FIU_DamageSpec CoopHit;
+	CoopHit.Amount = 35.0f;
+	CoopHit.InstigatorActor = Players[0];
+	CoopHit.DamageCauser = Players[0];
+	CoopHit.HitLocation = Players[1]->GetActorLocation();
+	TestFalse(TEXT("Server UIU_DamageComponent blocks friendly fire in Co-op PvE sector"),
+		Players[1]->GetDamageComponent()->ApplyDamageSpec(CoopHit));
+	TestEqual(TEXT("Co-op teammate HP remains 100.0 after blocked friendly fire"),
+		Players[1]->GetAttributeComponent()->GetHP(), 100.0f);
+
+	// Lock-On must also skip friendly Co-op allies outside the Arena
+	Players[0]->SetActorRotation((Players[1]->GetActorLocation() - Players[0]->GetActorLocation()).Rotation());
+	Controllers[0]->SetControlRotation(Players[0]->GetActorRotation());
+	TestFalse(TEXT("UIU_TargetingComponent refuses to lock onto Co-op ally outside Martial Arena"),
+		Players[0]->GetTargetingComponent()->ToggleLockOn());
+
+	// 3. Move Player 0 and Player 1 inside West Martial Sparring Arena (-2600, 0, 100) -> Full PvP Enabled!
+	Players[0]->SetActorLocation(FVector(-2600.0f, -150.0f, 100.0f));
+	Players[1]->SetActorLocation(FVector(-2600.0f, 150.0f, 100.0f));
+	TestTrue(TEXT("Both players inside West Martial Arena ARE allowed to spar"),
+		GS->ArePlayersAllowedToSpar(Players[0], Players[1]));
+
+	Controllers[0]->SetControlRotation((Players[1]->GetActorLocation() - Players[0]->GetActorLocation()).Rotation());
+	TestTrue(TEXT("Lock-On acquires Rival Player inside West Martial Arena"),
+		Players[0]->GetTargetingComponent()->ToggleLockOn());
+	TestEqual(TEXT("Locked target is Rival Player 1"),
+		Players[0]->GetTargetingComponent()->GetLockedTarget(), static_cast<AActor*>(Players[1]));
+
+	FIU_DamageSpec ArenaLethalHit;
+	ArenaLethalHit.Amount = 120.0f;
+	ArenaLethalHit.InstigatorActor = Players[0];
+	ArenaLethalHit.DamageCauser = Players[0];
+	ArenaLethalHit.HitLocation = Players[1]->GetActorLocation();
+	TestTrue(TEXT("Authoritative PvP damage applies inside West Martial Arena"),
+		Players[1]->GetDamageComponent()->ApplyDamageSpec(ArenaLethalHit));
+	TestTrue(TEXT("Rival Player 1 defeated at 0 HP"), Players[1]->GetAttributeComponent()->IsDead());
+	TestEqual(TEXT("Attacker AIU_PlayerState::PvPKills incremented to 1"), States[0]->GetPvPKills(), 1);
+	TestEqual(TEXT("Defeated Rival AIU_PlayerState::Deaths incremented to 1"), States[1]->GetDeaths(), 1);
+
+	// 4. Verify Global PvP Toggle (F4) allows PvP anywhere when enabled, and blocks again when disabled
+	GS->SetAllowGlobalPvPSparring(true);
+	TestTrue(TEXT("Global PvP toggle allows sparring even outside Arena (Player 0 vs Player 2)"),
+		GS->ArePlayersAllowedToSpar(Players[0], Players[2]));
+	GS->SetAllowGlobalPvPSparring(false);
+	TestFalse(TEXT("Disabling Global PvP restores Co-op protection outside Arena"),
+		GS->ArePlayersAllowedToSpar(Players[0], Players[2]));
+
+	return true;
+}
+
+// ============================================================================
+// TEST 2: FSavedMove_IUCharacter 3D Flight Bit-Packing & Server Anti-Speedhack Clamp
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2_SavedMoveFlightFlagsAndAntiSpeedhackTest,
+	"InfiniteUniverse.Step2.SavedMoveFlightFlagsAndAntiSpeedhack",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2_SavedMoveFlightFlagsAndAntiSpeedhackTest::RunTest(const FString& Parameters)
+{
+	IU_S2TestHelpers::FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/false);
+	UWorld* World = ScopeWorld.World;
+
+	AIU_PlayerCharacter* ClientChar = World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0f, 0.0f, 300.0f), FRotator::ZeroRotator);
+	AIU_PlayerCharacter* ServerChar = World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0f, 500.0f, 300.0f), FRotator::ZeroRotator);
+	AIU_PlayerController* ServerPC = World->SpawnActor<AIU_PlayerController>();
+	ServerPC->MarkAsLocalTestController();
+	ServerPC->Possess(ServerChar);
+
+	UIU_MovementComponent* ClientMove = ClientChar->GetIUMovementComponent();
+	UIU_FlightComponent* ClientFlight = ClientChar->GetFlightComponent();
+	UIU_MovementComponent* ServerMove = ServerChar->GetIUMovementComponent();
+	UIU_FlightComponent* ServerFlight = ServerChar->GetFlightComponent();
+
+	FNetworkPredictionData_Client* PredData = ClientMove->GetPredictionData_Client();
+	TestNotNull(TEXT("UIU_MovementComponent::GetPredictionData_Client allocated FNetworkPredictionData_Client_IUCharacter"), PredData);
+
+	// Put ClientChar into Free 3D Flight + Boost + Ascend
+	ClientFlight->EnterFlight();
+	ClientFlight->SetFlightDashActive(true);
+	ClientFlight->HandleJumpOrAscendStarted();
+	ClientMove->SetSprinting(true);
+
+	FSavedMove_IUCharacter SavedFlightMove;
+	SavedFlightMove.SetMoveFor(ClientChar, 1.0f / 60.0f, FVector(1.0f, 0.0f, 0.4f), *static_cast<FNetworkPredictionData_Client_Character*>(PredData));
+	const uint8 PackedFlags = SavedFlightMove.GetCompressedFlags();
+
+	TestTrue(TEXT("FLAG_Custom_0 (Sprint/FlightDash) packed"), (PackedFlags & FSavedMove_Character::FLAG_Custom_0) != 0);
+	TestTrue(TEXT("FLAG_Custom_1 (CMOVE_FreeFlight) packed"), (PackedFlags & FSavedMove_Character::FLAG_Custom_1) != 0);
+	TestTrue(TEXT("FLAG_Custom_2 (Ascend) packed"), (PackedFlags & FSavedMove_Character::FLAG_Custom_2) != 0);
+	TestFalse(TEXT("FLAG_Custom_3 (Descend) cleared"), (PackedFlags & FSavedMove_Character::FLAG_Custom_3) != 0);
+
+	// Apply compressed flags directly to ServerChar via UpdateFromCompressedFlags (simulating ServerMove receipt!)
+	struct FServerFlagUnpacker : public UIU_MovementComponent
+	{
+		static void Unpack(UIU_MovementComponent* Target, uint8 Flags)
+		{
+			static_cast<FServerFlagUnpacker*>(Target)->UpdateFromCompressedFlags(Flags);
+		}
+	};
+
+	FServerFlagUnpacker::Unpack(ServerMove, PackedFlags);
+	TestTrue(TEXT("ServerChar entered CMOVE_FreeFlight via compressed FSavedMove flags"), ServerMove->IsInCustomFreeFlight());
+	TestTrue(TEXT("ServerChar activated FlightComponent::IsFlying()"), ServerFlight->IsFlying());
+	TestTrue(TEXT("ServerChar unpacked AscendHeld == true"), ServerFlight->IsAscendHeld());
+	TestFalse(TEXT("ServerChar unpacked DescendHeld == false"), ServerFlight->IsDescendHeld());
+
+	// Test Anti-Speedhack Envelope Clamp on Server PhysCustom: inject spoofed 99,999 cm/s velocity!
+	ServerMove->bRunPhysicsWithNoController = true;
+	ServerMove->Velocity = FVector(99999.0f, 0.0f, 0.0f);
+	ServerMove->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+
+	const float MaxLegalEnvelope = (ServerFlight->FlightSpeed * ServerFlight->FlightDashMultiplier) + ServerFlight->VerticalFlightSpeed + 400.0f;
+	TestTrue(TEXT("Server clamped spoofed 99,999 cm/s flight velocity within legal dash speed envelope"),
+		ServerMove->Velocity.Size() <= MaxLegalEnvelope);
+
+	// Now clear flight flag -> verify ServerChar exits CMOVE_FreeFlight cleanly!
+	FServerFlagUnpacker::Unpack(ServerMove, 0);
+	TestFalse(TEXT("Clearing FLAG_Custom_1 exits CMOVE_FreeFlight on Server"), ServerMove->IsInCustomFreeFlight());
+
+	return true;
+}
+
+// ============================================================================
+// TEST 3: Server-Authoritative Multi-Player Enemy AI Closest Aggro & Failover
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2_MultiPlayerEnemyAggroSwitchingTest,
+	"InfiniteUniverse.Step2.MultiPlayerEnemyAggroAndFailover",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2_MultiPlayerEnemyAggroSwitchingTest::RunTest(const FString& Parameters)
+{
+	IU_S2TestHelpers::FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/true);
+	UWorld* World = ScopeWorld.World;
+
+	// Spawn PlayerFar FIRST (so PlayerController[0] is farther away at 950 cm!)
+	AIU_PlayerController* PCFar = World->SpawnActor<AIU_PlayerController>();
+	AIU_PlayerCharacter* PlayerFar = World->SpawnActor<AIU_PlayerCharacter>(FVector(950.0f, 0.0f, 95.0f), FRotator::ZeroRotator);
+	PCFar->Possess(PlayerFar);
+	PlayerFar->GetIUMovementComponent()->GravityScale = 0.0f;
+
+	// Spawn PlayerNear SECOND (at 380 cm from Enemy!)
+	AIU_PlayerController* PCNear = World->SpawnActor<AIU_PlayerController>();
+	AIU_PlayerCharacter* PlayerNear = World->SpawnActor<AIU_PlayerCharacter>(FVector(380.0f, 0.0f, 95.0f), FRotator::ZeroRotator);
+	PCNear->Possess(PlayerNear);
+	PlayerNear->GetIUMovementComponent()->GravityScale = 0.0f;
+
+	AIU_EnemyCharacter* Enemy = World->SpawnActor<AIU_EnemyCharacter>(FVector(0.0f, 0.0f, 95.0f), FRotator::ZeroRotator);
+	Enemy->GetCharacterMovement()->GravityScale = 0.0f;
+	AIU_EnemyAIController* EnemyAI = Enemy->GetEnemyAIController();
+	TestNotNull(TEXT("Enemy possessed by AIU_EnemyAIController on Authority"), EnemyAI);
+
+	ScopeWorld.TickWorld(0.35f);
+	TestEqual(TEXT("Multi-player AI acquired NEAREST player (PlayerNear, not PlayerController[0])"),
+		EnemyAI->GetTargetActor(), static_cast<AActor*>(PlayerNear));
+	TestTrue(TEXT("Enemy ReplicatedAIState updated out of Idle"),
+		Enemy->GetEnemyAIState() == EIU_EnemyAIState::Chase || Enemy->GetEnemyAIState() == EIU_EnemyAIState::Detect);
+
+	// Defeat PlayerNear -> verify Enemy AI seamlessly switches aggro to surviving PlayerFar without dropping to Idle!
+	PlayerNear->GetAttributeComponent()->ModifyHP(-999.0f);
+	TestTrue(TEXT("PlayerNear is dead"), PlayerNear->GetAttributeComponent()->IsDead());
+
+	ScopeWorld.TickWorld(0.15f);
+	TestEqual(TEXT("Enemy AI seamlessly switched aggro to surviving Co-op teammate PlayerFar"),
+		EnemyAI->GetTargetActor(), static_cast<AActor*>(PlayerFar));
+	TestEqual(TEXT("Enemy remained in Chase state pursuing PlayerFar"),
+		Enemy->GetEnemyAIState(), EIU_EnemyAIState::Chase);
+
+	return true;
+}
+
+// ============================================================================
+// TEST 4: Replication Descriptors Audit & Ping-Compensated 2-Player PvP Mirage Evade
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2_ReplicationAndPingCompensatedEvadeTest,
+	"InfiniteUniverse.Step2.ReplicationDescriptorsAndPingCompensatedPvPEvade",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2_ReplicationAndPingCompensatedEvadeTest::RunTest(const FString& Parameters)
+{
+	using namespace IU_S2TestHelpers;
+
+	// 1. Audit CDO Replication Flags & CPF_Net Properties across all Step 2 Gameplay Classes
+	TestTrue(TEXT("AIU_PlayerCharacter replicates"), GetDefault<AIU_PlayerCharacter>()->GetIsReplicated());
+	TestTrue(TEXT("AIU_EnemyCharacter replicates"), GetDefault<AIU_EnemyCharacter>()->GetIsReplicated());
+	TestTrue(TEXT("AIU_KiProjectile replicates"), GetDefault<AIU_KiProjectile>()->GetIsReplicated());
+	TestFalse(TEXT("AIU_EnemySpawner does NOT replicate to clients"), GetDefault<AIU_EnemySpawner>()->GetIsReplicated());
+	TestFalse(TEXT("AIU_EnemySpawner bNetLoadOnClient is false"), GetDefault<AIU_EnemySpawner>()->bNetLoadOnClient);
+
+	TestTrue(TEXT("AIU_GameState::bAllowGlobalPvPSparring is CPF_Net"),
+		HasNetReplicatedProperty(AIU_GameState::StaticClass(), TEXT("bAllowGlobalPvPSparring")));
+	TestTrue(TEXT("AIU_PlayerState::EnemyKills is CPF_Net"),
+		HasNetReplicatedProperty(AIU_PlayerState::StaticClass(), TEXT("EnemyKills")));
+	TestTrue(TEXT("AIU_PlayerState::PvPKills is CPF_Net"),
+		HasNetReplicatedProperty(AIU_PlayerState::StaticClass(), TEXT("PvPKills")));
+	TestTrue(TEXT("UIU_AttributeComponent::CurrentHP is CPF_Net"),
+		HasNetReplicatedProperty(UIU_AttributeComponent::StaticClass(), TEXT("CurrentHP")));
+	TestTrue(TEXT("UIU_AttributeComponent::CurrentKi is CPF_Net"),
+		HasNetReplicatedProperty(UIU_AttributeComponent::StaticClass(), TEXT("CurrentKi")));
+	TestTrue(TEXT("UIU_AttributeComponent::bIsDead is CPF_Net"),
+		HasNetReplicatedProperty(UIU_AttributeComponent::StaticClass(), TEXT("bIsDead")));
+	TestTrue(TEXT("UIU_CombatComponent::CurrentCombatState is CPF_Net"),
+		HasNetReplicatedProperty(UIU_CombatComponent::StaticClass(), TEXT("CurrentCombatState")));
+	TestTrue(TEXT("UIU_EnemyCharacter::bWindingUpAttack is CPF_Net"),
+		HasNetReplicatedProperty(AIU_EnemyCharacter::StaticClass(), TEXT("bWindingUpAttack")));
+	TestTrue(TEXT("AIU_KiProjectile::ReplicatedLaunchVelocity is CPF_Net"),
+		HasNetReplicatedProperty(AIU_KiProjectile::StaticClass(), TEXT("ReplicatedLaunchVelocity")));
+
+	// 2. Verify Ping-Compensated 2-Player PvP Mirage Perfect Evade inside West Martial Arena!
+	FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/true);
+	UWorld* World = ScopeWorld.World;
+
+	AIU_PlayerCharacter* Attacker = World->SpawnActor<AIU_PlayerCharacter>(FVector(-2600.0f, 0.0f, 100.0f), FRotator::ZeroRotator);
+	AIU_PlayerCharacter* Defender = World->SpawnActor<AIU_PlayerCharacter>(FVector(-2440.0f, 0.0f, 100.0f), FRotator(0.0f, 180.0f, 0.0f));
+	AIU_PlayerState* DefenderPS = World->SpawnActor<AIU_PlayerState>();
+	DefenderPS->ExactPing = 180.0f; // Simulate 180 ms WAN RTT -> +90 ms server ping compensation!
+	DefenderPS->SetCompressedPing(45);
+	Defender->SetPlayerState(DefenderPS);
+
+	Attacker->GetIUMovementComponent()->GravityScale = 0.0f;
+	Defender->GetIUMovementComponent()->GravityScale = 0.0f;
+
+	// Register a PvP melee threat that is 0.36s from impact (> 0.30s base window, <= 0.39s with 90 ms half-RTT compensation!)
+	UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>();
+	TestNotNull(TEXT("UIU_CombatThreatSubsystem active"), ThreatSubsys);
+	ThreatSubsys->RegisterMeleeAttackWindup(
+		Attacker,
+		Attacker->GetActorLocation() + FVector(45.0f, 0.0f, 0.0f),
+		Defender->GetActorLocation(),
+		80.0f,
+		0.36f);
+
+	TestTrue(TEXT("Defender RequestDodge succeeded under 180 ms simulated WAN RTT"),
+		Defender->GetCombatComponent()->RequestDodge(FVector(0.0f, 1.0f, 0.0f)));
+	TestTrue(TEXT("Bounded Server Ping Compensation upgraded PvP dodge to Mirage Perfect Evade"),
+		Defender->GetCombatComponent()->IsLastDodgeCombatEvade());
+	TestNotNull(TEXT("UPoseableMeshComponent AIU_AfterimageGhost spawned at Origin A"),
+		Defender->GetCombatComponent()->GetLastSpawnedAfterimage());
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS

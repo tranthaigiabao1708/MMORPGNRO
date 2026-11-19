@@ -2,6 +2,7 @@
 
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_DamageComponent.h"
+#include "Core/IU_GameState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "GameFramework/Pawn.h"
@@ -12,6 +13,7 @@
 
 UIU_TargetingComponent::UIU_TargetingComponent()
 {
+	SetIsReplicatedByDefault(true);
 	// Zero-Tick when unlocked; enabled dynamically only while LockedTarget is valid
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
@@ -234,6 +236,11 @@ bool UIU_TargetingComponent::SetLockedTarget(AActor* CandidateTarget)
 
 	SetComponentTickEnabled(true);
 	OnTargetLockChanged.Broadcast(CandidateTarget);
+
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		Server_SyncLockedTarget(CandidateTarget);
+	}
 	return true;
 }
 
@@ -254,6 +261,22 @@ void UIU_TargetingComponent::ClearLockOn()
 	if (bWasLocked)
 	{
 		OnTargetLockChanged.Broadcast(nullptr);
+		if (GetOwner() && !GetOwner()->HasAuthority())
+		{
+			Server_SyncLockedTarget(nullptr);
+		}
+	}
+}
+
+void UIU_TargetingComponent::Server_SyncLockedTarget_Implementation(AActor* NewTarget)
+{
+	if (!NewTarget)
+	{
+		ClearLockOn();
+	}
+	else if (IsValidLockCandidate(NewTarget))
+	{
+		SetLockedTarget(NewTarget);
 	}
 }
 
@@ -301,6 +324,22 @@ bool UIU_TargetingComponent::IsValidLockCandidate(const AActor* Candidate) const
 	if (!IsValid(Candidate) || Candidate == GetOwner() || Candidate->IsActorBeingDestroyed())
 	{
 		return false;
+	}
+
+	// In Co-op PvE zones outside the Martial Combat Arena, do not lock onto friendly player teammates
+	const AActor* Owner = GetOwner();
+	if (Owner && Owner->IsA<AIU_PlayerCharacter>() && Candidate->IsA<AIU_PlayerCharacter>())
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (const AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+			{
+				if (!GS->ArePlayersAllowedToSpar(Owner, Candidate))
+				{
+					return false;
+				}
+			}
+		}
 	}
 
 	const UIU_DamageComponent* DmgComp = Candidate->FindComponentByClass<UIU_DamageComponent>();

@@ -12,6 +12,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -19,6 +20,11 @@
 
 AIU_EnemyCharacter::AIU_EnemyCharacter()
 {
+	bReplicates = true;
+	SetReplicateMovement(true);
+	SetNetUpdateFrequency(60.0f);
+	SetMinNetUpdateFrequency(15.0f);
+
 	// Zero-Tick on the character actor when not swinging; AI decisions tick in AIU_EnemyAIController
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -81,6 +87,17 @@ AIU_EnemyCharacter::AIU_EnemyCharacter()
 	ApplyDefaultMovementConfig();
 }
 
+void AIU_EnemyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AIU_EnemyCharacter, bCanFlyChase);
+	DOREPLIFETIME(AIU_EnemyCharacter, ReplicatedAIState);
+	DOREPLIFETIME(AIU_EnemyCharacter, bWindingUpAttack);
+	DOREPLIFETIME(AIU_EnemyCharacter, ActiveWindupTotal);
+	DOREPLIFETIME(AIU_EnemyCharacter, StrikeStartWorldPos);
+	DOREPLIFETIME(AIU_EnemyCharacter, StrikeImpactWorldPos);
+}
+
 void AIU_EnemyCharacter::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
@@ -126,8 +143,8 @@ void AIU_EnemyCharacter::BeginPlay()
 		AnimDirectorComponent->RefreshMeshAndBindings();
 	}
 
-	// Ensure an AIU_EnemyAIController possesses this enemy even in bare transient test worlds
-	if (!GetController() && !IsDead())
+	// Ensure an AIU_EnemyAIController possesses this enemy on Authority (and in bare transient test worlds)
+	if (HasAuthority() && GetNetMode() != NM_Client && !GetController() && !IsDead())
 	{
 		SpawnDefaultController();
 	}
@@ -158,7 +175,7 @@ void AIU_EnemyCharacter::Tick(float DeltaTime)
 bool AIU_EnemyCharacter::StartTelegraphedAttack(AActor* TargetActor)
 {
 	UWorld* World = GetWorld();
-	if (!World || !IsValid(TargetActor) || IsDead())
+	if (!World || !HasAuthority() || !IsValid(TargetActor) || IsDead())
 	{
 		return false;
 	}
@@ -191,7 +208,7 @@ bool AIU_EnemyCharacter::StartTelegraphedAttack(AActor* TargetActor)
 	StrikeImpactWorldPos = MyLoc + (StrikeDir * ClampedReach) + FVector(0.0f, 0.0f, 20.0f);
 
 	StrikeFistMesh->SetWorldLocation(StrikeStartWorldPos);
-	StrikeFistMesh->SetWorldScale3D(FVector((AttackHitboxRadius * 2.0f) / 100.0f));
+	StrikeFistMesh->SetWorldScale3D(FVector(0.36f));
 	StrikeFistMesh->SetVisibility(true);
 
 	bWindingUpAttack = true;
@@ -245,8 +262,35 @@ void AIU_EnemyCharacter::CancelActiveAttack()
 	SetActorTickEnabled(false);
 }
 
+void AIU_EnemyCharacter::OnRep_WindingUpAttack()
+{
+	ActiveWindupElapsed = 0.0f;
+	if (bWindingUpAttack && !IsDead())
+	{
+		if (StrikeFistMesh)
+		{
+			StrikeFistMesh->SetWorldLocation(StrikeStartWorldPos);
+			StrikeFistMesh->SetWorldScale3D(FVector(0.36f));
+			StrikeFistMesh->SetVisibility(true);
+		}
+		SetActorTickEnabled(true);
+	}
+	else
+	{
+		if (StrikeFistMesh)
+		{
+			StrikeFistMesh->SetVisibility(false);
+		}
+		SetActorTickEnabled(false);
+	}
+}
+
 void AIU_EnemyCharacter::ExecuteAttackImpact()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
 	UWorld* World = GetWorld();
 	if (World)
 	{
@@ -333,9 +377,15 @@ void AIU_EnemyCharacter::ExecuteAttackImpact()
 
 void AIU_EnemyCharacter::ResetEnemy(const FTransform& NewSpawnTransform)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	CancelActiveAttack();
 	HomeSpawnTransform = NewSpawnTransform;
 	LastDamageInstigator.Reset();
+	ReplicatedAIState = EIU_EnemyAIState::Idle;
 
 	if (AttributeComponent)
 	{
@@ -371,7 +421,7 @@ void AIU_EnemyCharacter::ResetEnemy(const FTransform& NewSpawnTransform)
 		AnimDirectorComponent->ResetAnimDirector();
 	}
 
-	if (!GetController())
+	if (GetNetMode() != NM_Client && !GetController())
 	{
 		SpawnDefaultController();
 	}
@@ -379,6 +429,46 @@ void AIU_EnemyCharacter::ResetEnemy(const FTransform& NewSpawnTransform)
 	if (AIU_EnemyAIController* EnemyAI = GetEnemyAIController())
 	{
 		EnemyAI->ResetToIdle(NewSpawnTransform.GetLocation());
+	}
+
+	if (GetNetMode() != NM_Standalone)
+	{
+		Multicast_OnEnemyReset(NewSpawnTransform.GetLocation(), NewSpawnTransform.GetRotation().Rotator());
+	}
+
+	OnEnemyReset.Broadcast(this);
+}
+
+void AIU_EnemyCharacter::Multicast_OnEnemyReset_Implementation(FVector NewLocation, FRotator NewRotation)
+{
+	if (HasAuthority())
+	{
+		return;
+	}
+
+	CancelActiveAttack();
+	GetCapsuleComponent()->SetCollisionProfileName(TEXT("Pawn"));
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SetActorLocationAndRotation(NewLocation, NewRotation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+	{
+		ApplyDefaultMovementConfig();
+		CMC->StopMovementImmediately();
+		CMC->SetMovementMode(bCanFlyChase ? MOVE_Flying : MOVE_Walking);
+	}
+
+	if (PlaceholderBodyMesh)
+	{
+		PlaceholderBodyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -14.0f));
+		PlaceholderBodyMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		PlaceholderBodyMesh->SetRelativeScale3D(FVector(0.76f, 0.76f, 1.55f));
+	}
+
+	UpdatePlaceholderVisibility();
+	if (AnimDirectorComponent)
+	{
+		AnimDirectorComponent->ResetAnimDirector();
 	}
 
 	OnEnemyReset.Broadcast(this);
@@ -404,7 +494,7 @@ EIU_EnemyAIState AIU_EnemyCharacter::GetEnemyAIState() const
 	{
 		return EnemyAI->GetAIState();
 	}
-	return EIU_EnemyAIState::Idle;
+	return ReplicatedAIState;
 }
 
 bool AIU_EnemyCharacter::IsDead() const
@@ -457,6 +547,7 @@ void AIU_EnemyCharacter::HandleHitReactionRecovered()
 void AIU_EnemyCharacter::HandleHealthDepleted(AActor* DepletedActor)
 {
 	CancelActiveAttack();
+	ReplicatedAIState = EIU_EnemyAIState::Dead;
 
 	if (AIU_EnemyAIController* EnemyAI = GetEnemyAIController())
 	{

@@ -13,11 +13,12 @@ public class InfiniteUniverse : ModuleRules
 			"InfiniteUniverse"
 		});
 
-		// Strictly scoped to Step 1 Core Gameplay Prototype (No GAS, No Networking/Backend plugins)
+		// Step 1 Core Gameplay + Step 2 Native UE5 Replication & Dedicated Server Support
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"NetCore",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",

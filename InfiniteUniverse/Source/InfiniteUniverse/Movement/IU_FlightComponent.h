@@ -30,6 +30,7 @@ public:
 	UIU_FlightComponent();
 
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// ========================================================================
@@ -121,7 +122,14 @@ public:
 	bool IsHovering() const;
 
 	UFUNCTION(BlueprintPure, Category = "Flight")
-	bool IsFlightDashing() const { return IsFlying() && bWantsFlightDash && !IsHoveringInputIdle(); }
+	bool IsFlightDashing() const;
+
+	bool IsAscendHeld() const { return bAscendHeld; }
+	bool IsDescendHeld() const { return bDescendHeld; }
+	bool WantsFlightDash() const { return bWantsFlightDash; }
+
+	/** Synchronizes compressed SavedMove flight flags on Server Authority and Client Replay (Step 2). */
+	void ApplyNetworkSavedFlightFlags(bool bNetWantsFlight, bool bNetAscendHeld, bool bNetDescendHeld, bool bNetFlightDash);
 
 	UFUNCTION(BlueprintPure, Category = "Flight")
 	float GetVerticalFlightInput() const;
@@ -166,6 +174,9 @@ private:
 	bool bDescendHeld = false;
 	bool bWantsFlightDash = false;
 	bool bLastBroadcastDashState = false;
+
+	UPROPERTY(Replicated)
+	bool bReplicatedFlightDashing = false;
 
 	/** Elapsed seconds since entering flight via double-Space. */
 	float TimeSinceFlightEntered = 0.0f;

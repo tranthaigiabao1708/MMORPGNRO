@@ -2,6 +2,10 @@
 
 #include "Combat/IU_DamageComponent.h"
 #include "Attributes/IU_AttributeComponent.h"
+#include "Characters/Player/IU_PlayerCharacter.h"
+#include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "Core/IU_GameState.h"
+#include "Core/IU_PlayerState.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
@@ -9,6 +13,7 @@
 
 UIU_DamageComponent::UIU_DamageComponent()
 {
+	SetIsReplicatedByDefault(true);
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
@@ -33,7 +38,7 @@ void UIU_DamageComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 {
 	AActor* Owner = GetOwner();
-	if (!Owner || Spec.Amount <= 0.0f)
+	if (!Owner || !Owner->HasAuthority() || Spec.Amount <= 0.0f)
 	{
 		return false;
 	}
@@ -42,6 +47,21 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 	if (Spec.InstigatorActor.Get() == Owner)
 	{
 		return false;
+	}
+
+	// Step 2 Co-op PvE vs Martial Combat Arena PvP Sparring Filter
+	if (Owner->IsA<AIU_PlayerCharacter>() && Spec.InstigatorActor.IsValid() && Spec.InstigatorActor->IsA<AIU_PlayerCharacter>())
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (const AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+			{
+				if (!GS->ArePlayersAllowedToSpar(Spec.InstigatorActor.Get(), Owner))
+				{
+					return false;
+				}
+			}
+		}
 	}
 
 	if (!AttributeComp)
@@ -63,6 +83,8 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 
 	OnDamageReceived.Broadcast(Spec, AttributeComp->GetHP());
 
+	bool bTriggeredStun = false;
+
 	// Trigger Hit Reaction & subtle knockback only if target survived the hit
 	if (!AttributeComp->IsDead())
 	{
@@ -81,6 +103,7 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 		if (Spec.HitStunDuration > 0.0f)
 		{
 			bInHitReaction = true;
+			bTriggeredStun = true;
 			OnHitReactionStarted.Broadcast(Spec);
 
 			if (UWorld* World = GetWorld())
@@ -101,9 +124,63 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 		{
 			World->GetTimerManager().ClearTimer(HitReactionTimerHandle);
 		}
+
+		// Record replicated PlayerState kills & deaths on Server Authority
+		if (APawn* VictimPawn = Cast<APawn>(Owner))
+		{
+			if (AIU_PlayerState* VictimPS = VictimPawn->GetPlayerState<AIU_PlayerState>())
+			{
+				VictimPS->AddDeath();
+			}
+		}
+		if (APawn* KillerPawn = Cast<APawn>(Spec.InstigatorActor.Get()))
+		{
+			if (AIU_PlayerState* KillerPS = KillerPawn->GetPlayerState<AIU_PlayerState>())
+			{
+				if (Owner->IsA<AIU_PlayerCharacter>())
+				{
+					KillerPS->AddPvPKill();
+				}
+				else if (Owner->IsA<AIU_EnemyCharacter>())
+				{
+					KillerPS->AddEnemyKill();
+				}
+			}
+		}
+	}
+
+	if (Owner->GetNetMode() != NM_Standalone)
+	{
+		Multicast_NotifyDamageApplied(Spec, AttributeComp->GetHP(), bTriggeredStun);
 	}
 
 	return true;
+}
+
+void UIU_DamageComponent::Multicast_NotifyDamageApplied_Implementation(FIU_DamageSpec Spec, float RemainingHP, bool bTriggeredHitStun)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || Owner->HasAuthority())
+	{
+		return;
+	}
+
+	OnDamageReceived.Broadcast(Spec, RemainingHP);
+
+	if (bTriggeredHitStun && Spec.HitStunDuration > 0.0f)
+	{
+		bInHitReaction = true;
+		OnHitReactionStarted.Broadcast(Spec);
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				HitReactionTimerHandle,
+				this,
+				&UIU_DamageComponent::EndHitReaction,
+				Spec.HitStunDuration,
+				false);
+		}
+	}
 }
 
 void UIU_DamageComponent::EndHitReaction()

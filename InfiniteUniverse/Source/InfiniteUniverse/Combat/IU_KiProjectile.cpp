@@ -11,11 +11,14 @@
 #include "Materials/MaterialInterface.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
 AIU_KiProjectile::AIU_KiProjectile()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	SetReplicateMovement(true);
 
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
 	CollisionSphere->InitSphereRadius(CollisionRadius);
@@ -54,6 +57,12 @@ AIU_KiProjectile::AIU_KiProjectile()
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = false;
 	ProjectileMovement->ProjectileGravityScale = 0.0f;
+}
+
+void AIU_KiProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AIU_KiProjectile, ReplicatedLaunchVelocity);
 }
 
 void AIU_KiProjectile::BeginPlay()
@@ -110,8 +119,36 @@ void AIU_KiProjectile::InitializeProjectile(AActor* InShooter, const FVector& Sh
 		ProjectileMovement->InitialSpeed = ProjectileSpeed;
 		ProjectileMovement->MaxSpeed = ProjectileSpeed;
 		ProjectileMovement->Velocity = NormDir * ProjectileSpeed;
+		ReplicatedLaunchVelocity = ProjectileMovement->Velocity;
 	}
 
+	if (UWorld* World = GetWorld())
+	{
+		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
+		{
+			ThreatSubsys->RegisterProjectileThreat(this);
+		}
+	}
+}
+
+void AIU_KiProjectile::OnRep_LaunchVelocity()
+{
+	if (!ShooterActor.IsValid() && GetOwner())
+	{
+		ShooterActor = GetOwner();
+		if (CollisionSphere)
+		{
+			CollisionSphere->IgnoreActorWhenMoving(GetOwner(), true);
+		}
+	}
+	if (ProjectileMovement && !ReplicatedLaunchVelocity.IsNearlyZero())
+	{
+		const float Spd = ReplicatedLaunchVelocity.Size();
+		ProjectileMovement->InitialSpeed = Spd;
+		ProjectileMovement->MaxSpeed = Spd;
+		ProjectileMovement->Velocity = ReplicatedLaunchVelocity;
+		SetActorRotation(ReplicatedLaunchVelocity.Rotation());
+	}
 	if (UWorld* World = GetWorld())
 	{
 		if (UIU_CombatThreatSubsystem* ThreatSubsys = World->GetSubsystem<UIU_CombatThreatSubsystem>())
@@ -129,7 +166,7 @@ void AIU_KiProjectile::HandleSphereOverlap(
 	bool bFromSweep,
 	const FHitResult& SweepResult)
 {
-	if (bHasImpacted || !OtherActor || OtherActor == this || OtherActor == ShooterActor.Get())
+	if (!HasAuthority() || bHasImpacted || !OtherActor || OtherActor == this || OtherActor == ShooterActor.Get())
 	{
 		return;
 	}
@@ -157,7 +194,7 @@ void AIU_KiProjectile::HandleSphereHit(
 	FVector NormalImpulse,
 	const FHitResult& Hit)
 {
-	if (bHasImpacted || OtherActor == ShooterActor.Get())
+	if (!HasAuthority() || bHasImpacted || OtherActor == ShooterActor.Get())
 	{
 		return;
 	}

@@ -144,11 +144,20 @@ void UIU_SkeletalAnimDirectorComponent::TickComponent(float DeltaTime, ELevelTic
 	const UIU_AttributeComponent* Attr = Owner ? Owner->FindComponentByClass<UIU_AttributeComponent>() : nullptr;
 	if (Attr && Attr->IsDead())
 	{
+		bWasDeadLastFrame = true;
 		if (DeathAnim && ActiveClip != DeathAnim)
 		{
 			ApplyClipToMesh(DeathAnim, false);
 		}
 		return;
+	}
+
+	if (bWasDeadLastFrame)
+	{
+		// Deterministic recovery when OnRep_IsDead transitions Dead -> Alive regardless of RPC packet arrival order!
+		bWasDeadLastFrame = false;
+		ActionOverrideEndTime = 0.0;
+		ActiveClip = nullptr;
 	}
 
 	const UWorld* World = GetWorld();

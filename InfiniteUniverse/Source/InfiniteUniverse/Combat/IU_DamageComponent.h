@@ -60,6 +60,9 @@ public:
 private:
 	void EndHitReaction();
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_NotifyDamageApplied(FIU_DamageSpec Spec, float RemainingHP, bool bTriggeredHitStun);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_AttributeComponent> AttributeComp;
 

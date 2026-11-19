@@ -3,12 +3,20 @@
 #include "Movement/IU_FlightComponent.h"
 #include "Movement/IU_MovementComponent.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "Net/UnrealNetwork.h"
 #include "InfiniteUniverse.h"
 
 UIU_FlightComponent::UIU_FlightComponent()
 {
+	SetIsReplicatedByDefault(true);
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+}
+
+void UIU_FlightComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(UIU_FlightComponent, bReplicatedFlightDashing, COND_SkipOwner);
 }
 
 void UIU_FlightComponent::BeginPlay()
@@ -109,6 +117,50 @@ void UIU_FlightComponent::SetMoveAxisInput(const FVector2D& InMoveAxis)
 void UIU_FlightComponent::SetFlightDashActive(bool bActive)
 {
 	bWantsFlightDash = bActive;
+	if (OwnerCharacter && OwnerCharacter->HasAuthority())
+	{
+		bReplicatedFlightDashing = bActive && IsFlying();
+	}
+}
+
+bool UIU_FlightComponent::IsFlightDashing() const
+{
+	if (!IsFlying() || !MovementComp)
+	{
+		return false;
+	}
+	if (OwnerCharacter && OwnerCharacter->GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		return bReplicatedFlightDashing && MovementComp->Velocity.SizeSquared() > FMath::Square(30.0f);
+	}
+	return bWantsFlightDash && !IsHoveringInputIdle();
+}
+
+void UIU_FlightComponent::ApplyNetworkSavedFlightFlags(bool bNetWantsFlight, bool bNetAscendHeld, bool bNetDescendHeld, bool bNetFlightDash)
+{
+	bWantsFlightDash = bNetFlightDash;
+
+	if (bNetWantsFlight && !IsFlying())
+	{
+		EnterFlight();
+		bInInitialActivationAscent = bNetAscendHeld;
+	}
+	else if (!bNetWantsFlight && IsFlying())
+	{
+		ExitFlight(false);
+	}
+
+	if (bNetAscendHeld && !bAscendHeld && IsFlying())
+	{
+		ContinuousAscentHoldTime = 0.0f;
+	}
+	bAscendHeld = bNetAscendHeld;
+	bDescendHeld = bNetDescendHeld;
+
+	if (OwnerCharacter && OwnerCharacter->HasAuthority())
+	{
+		bReplicatedFlightDashing = bNetWantsFlight && bNetFlightDash;
+	}
 }
 
 void UIU_FlightComponent::ToggleFlightMode()
@@ -279,6 +331,15 @@ FVector UIU_FlightComponent::ComputeDesiredFlightVelocity() const
 	const float MaxVertSpeed = VerticalFlightSpeed * DashMult;
 
 	FVector PlanarInputDir = (CamForward3D * CachedMoveAxis.Y) + (CamRightHorizontal * CachedMoveAxis.X);
+
+	// On Dedicated/Listen Server Authority simulating a remote AutonomousProxy's ServerMove,
+	// recover the exact 3D input vector streamed inside UCharacterMovementComponent::Acceleration!
+	if (!OwnerCharacter->IsLocallyControlled() && MovementComp && PlanarInputDir.IsNearlyZero(0.01f))
+	{
+		const float MaxAccel = FMath::Max(MovementComp->GetMaxAcceleration(), 1.0f);
+		PlanarInputDir = MovementComp->GetCurrentAcceleration() / MaxAccel;
+	}
+
 	if (PlanarInputDir.SizeSquared() > 1.0f)
 	{
 		PlanarInputDir.Normalize();
