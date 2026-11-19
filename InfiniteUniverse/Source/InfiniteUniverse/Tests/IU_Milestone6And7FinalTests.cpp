@@ -16,6 +16,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/PlatformTime.h"
+#include "HAL/PlatformMemory.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
 #include "Characters/IU_SkeletalAnimDirectorComponent.h"
@@ -525,6 +526,105 @@ bool FIUM7FullGameplayLoopAnd60FPSBudgetTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Player transform free of NaN after 240-frame full loop"), Player->GetActorLocation().ContainsNaN());
 	TestTrue(FString::Printf(TEXT("Average CPU gameplay/AI/anim frame cost (%.3f ms) well under 16.67 ms (60 FPS budget)"), AvgFrameMs),
 		AvgFrameMs < 8.0);
+
+	return true;
+}
+
+// ============================================================================
+// TEST 5 (M7 Gatekeeper): AttackPower Attribute, Death Notifications & Endurance Memory Check
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIUM7EnduranceMemoryAndAttributeGateTest,
+	"InfiniteUniverse.Milestone7.EnduranceStabilityMemoryAndAttributeDamage",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIUM7EnduranceMemoryAndAttributeGateTest::RunTest(const FString& Parameters)
+{
+	IUM6And7TestHelpers::FScopedFinalTestWorld Scope;
+	Scope.SpawnArenaFloor();
+
+	AIU_PlayerController* PC = Scope.World->SpawnActor<AIU_PlayerController>();
+	PC->MarkAsLocalTestController();
+	AIU_HUDManager* HUD = Scope.World->SpawnActor<AIU_HUDManager>();
+	PC->MyHUD = HUD;
+
+	AIU_PlayerCharacter* Player = Scope.World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0f, 0.0f, 95.0f), FRotator::ZeroRotator);
+	PC->Possess(Player);
+
+	FActorSpawnParameters SP;
+	SP.bDeferConstruction = true;
+	AIU_EnemySpawner* Spawner = Scope.World->SpawnActor<AIU_EnemySpawner>(AIU_EnemySpawner::StaticClass(), FTransform(FRotator(0.0f, 180.0f, 0.0f), FVector(380.0f, 0.0f, 95.0f)), SP);
+	Spawner->RespawnDelaySeconds = 0.60f;
+	Spawner->FinishSpawning(FTransform(FRotator(0.0f, 180.0f, 0.0f), FVector(380.0f, 0.0f, 95.0f)));
+
+	Scope.TickWorld(0.45f);
+	HUD->DrawHUD();
+
+	AIU_EnemyCharacter* Enemy = Spawner->GetSpawnedEnemy();
+	TestNotNull(TEXT("Enemy spawned for Gatekeeper verification"), Enemy);
+	if (!Enemy)
+	{
+		return false;
+	}
+
+	// 1. Criterion 1.6: Verify AttackPowerMultiplier attribute scales outgoing combat damage dynamically
+	Player->GetAttributeComponent()->SetAttackPowerMultiplier(2.0f);
+	Player->GetTargetingComponent()->SetLockedTarget(Enemy);
+	const float HPBefore = Enemy->GetAttributeComponent()->GetHP();
+
+	AIU_KiProjectile* BoostedKi = Player->GetCombatComponent()->RequestKiBlast();
+	TestNotNull(TEXT("Spawned 2.0x AttackPower Ki Blast"), BoostedKi);
+	Scope.TickWorld(0.35f);
+
+	const float ActualDamageDealt = HPBefore - Enemy->GetAttributeComponent()->GetHP();
+	TestTrue(FString::Printf(TEXT("2.0x AttackPowerMultiplier doubled KiBlast damage (Expected ~40, Got %.1f)"), ActualDamageDealt),
+		FMath::IsNearlyEqual(ActualDamageDealt, Player->GetCombatComponent()->KiBlastDamage * 2.0f, 0.5f));
+
+	// 2. Endurance Soak: 3,600 frames (60s simulated multi-cycle combat/flight/kill/respawn) + Memory & Leak Check
+	const uint64 MemBeforeBytes = FPlatformMemory::GetStats().UsedPhysical;
+
+	for (int32 Frame = 0; Frame < 3600; ++Frame)
+	{
+		if (Frame % 90 == 0)
+		{
+			Player->GetAttributeComponent()->RestoreKi(50.0f);
+			if (AIU_EnemyCharacter* LiveEnemy = Spawner->GetSpawnedEnemy())
+			{
+				if (!LiveEnemy->IsDead())
+				{
+					Player->GetTargetingComponent()->SetLockedTarget(LiveEnemy);
+					Player->GetCombatComponent()->RequestKiBlast();
+				}
+			}
+		}
+		else if (Frame % 90 == 45)
+		{
+			Player->GetCombatComponent()->RequestDodge(FVector((Frame % 180 == 45) ? 1.0f : -1.0f, 0.0f, 0.0f));
+		}
+
+		++GFrameCounter;
+		Scope.World->Tick(LEVELTICK_All, 1.0f / 60.0f);
+	}
+
+	// Wait 4.0s with no new shots so all transient KiProjectiles & Afterimages expire naturally via LifeSpan
+	Scope.TickWorld(4.0f);
+
+	int32 RemainingProjectiles = 0;
+	int32 RemainingGhosts = 0;
+	for (TActorIterator<AIU_KiProjectile> It(Scope.World); It; ++It) { ++RemainingProjectiles; }
+	for (TActorIterator<AIU_AfterimageGhost> It(Scope.World); It; ++It) { ++RemainingGhosts; }
+
+	const uint64 MemAfterBytes = FPlatformMemory::GetStats().UsedPhysical;
+	const double MemDeltaMB = (MemAfterBytes > MemBeforeBytes)
+		? static_cast<double>(MemAfterBytes - MemBeforeBytes) / (1024.0 * 1024.0)
+		: 0.0;
+
+	TestEqual(TEXT("Zero leaked KiProjectile actors after endurance soak"), RemainingProjectiles, 0);
+	TestEqual(TEXT("Zero leaked AfterimageGhost actors after endurance soak"), RemainingGhosts, 0);
+	TestTrue(TEXT("Criterion 1.7: HUD tracked >= 3 Enemy Defeated notifications across multi-cycle loop"),
+		HUD->GetDefeatedEnemyNotificationCount() >= 3);
+	TestTrue(FString::Printf(TEXT("Endurance memory delta (%.2f MB) bounded (< 48 MB)"), MemDeltaMB),
+		MemDeltaMB < 48.0);
 
 	return true;
 }

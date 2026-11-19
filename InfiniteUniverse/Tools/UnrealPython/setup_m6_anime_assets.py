@@ -105,6 +105,8 @@ def create_anime_stylized_material(
     else:
         mat_lib.connect_material_property(rim_mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
+    # Critical for Cooked Standalone Builds: compile SkeletalMesh shader permutations!
+    mat_lib.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_SKELETAL_MESH, True)
     mat_lib.recompile_material(mat)
     editor_asset_lib.save_loaded_asset(mat, only_if_is_dirty=False)
     return mat
@@ -311,6 +313,13 @@ def main():
         (1.0, 0.88, 0.35),
         (1.40, 3.80, 5.20),
     )
+
+    if editor_asset_lib.does_asset_exist("/Game/Combat/VFX/M_AfterimageGhost"):
+        ghost_mat = editor_asset_lib.load_asset("/Game/Combat/VFX/M_AfterimageGhost")
+        if isinstance(ghost_mat, unreal.Material):
+            mat_lib.set_base_material_usage(ghost_mat, unreal.MaterialUsage.MATUSAGE_SKELETAL_MESH, True)
+            mat_lib.recompile_material(ghost_mat)
+            editor_asset_lib.save_loaded_asset(ghost_mat, only_if_is_dirty=False)
 
     # 2. Import SK_Player + Skeleton + Socket_KiMuzzle_R
     sk_player = import_skeletal_mesh_fbx(player_fbx, "/Game/Characters/Player/Meshes", "SK_Player", shared_skeleton=None)

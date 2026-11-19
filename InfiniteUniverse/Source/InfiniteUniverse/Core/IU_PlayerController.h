@@ -139,4 +139,5 @@ private:
 	void HandleLockOn(const FInputActionValue& Value);
 	void HandleSwitchTarget(const FInputActionValue& Value);
 	void HandleToggleMobilityStyle(const FInputActionValue& Value);
+	void HandleToggleDebugHUD();
 };

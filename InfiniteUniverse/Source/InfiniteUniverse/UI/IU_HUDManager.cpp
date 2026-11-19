@@ -4,6 +4,8 @@
 #include "UI/IU_PlayerHUDWidget.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "Movement/IU_MovementComponent.h"
+#include "Movement/IU_FlightComponent.h"
 #include "Combat/IU_TargetingComponent.h"
 #include "Combat/IU_DamageComponent.h"
 #include "Combat/IU_CombatComponent.h"
@@ -14,6 +16,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformMemory.h"
 
 AIU_HUDManager::AIU_HUDManager()
 {
@@ -40,6 +43,13 @@ void AIU_HUDManager::BeginPlay()
 			ActiveHUDWidget->BindToPlayerPawn(PC->GetPawn());
 		}
 	}
+
+	RefreshCombatEventBindings(GetOwningPawn());
+}
+
+void AIU_HUDManager::SetShowcaseStepBanner(const FString& InBannerText)
+{
+	ShowcaseStepBannerText = InBannerText;
 }
 
 void AIU_HUDManager::RefreshCombatEventBindings(APawn* OwningPawn)
@@ -55,7 +65,7 @@ void AIU_HUDManager::RefreshCombatEventBindings(APawn* OwningPawn)
 	{
 		return;
 	}
-	NextBindingScanTime = Now + 0.50;
+	NextBindingScanTime = Now + 0.35;
 
 	if (OwningPawn)
 	{
@@ -82,6 +92,14 @@ void AIU_HUDManager::RefreshCombatEventBindings(APawn* OwningPawn)
 			{
 				ObservedDamageComponents.Add(DmgComp);
 				DmgComp->OnDamageReceived.AddUniqueDynamic(this, &AIU_HUDManager::HandleAnyActorDamaged);
+			}
+		}
+		if (UIU_AttributeComponent* AttrComp = Act->FindComponentByClass<UIU_AttributeComponent>())
+		{
+			if (!ObservedAttributeComponents.Contains(AttrComp))
+			{
+				ObservedAttributeComponents.Add(AttrComp);
+				AttrComp->OnHealthDepleted.AddUniqueDynamic(this, &AIU_HUDManager::HandleAnyActorHealthDepleted);
 			}
 		}
 	}
@@ -118,6 +136,42 @@ void AIU_HUDManager::HandleAnyActorDamaged(const FIU_DamageSpec& DamageSpec, flo
 	FloatingTexts.Add(Entry);
 }
 
+void AIU_HUDManager::HandleAnyActorHealthDepleted(AActor* DepletedActor)
+{
+	UWorld* World = GetWorld();
+	if (!World || !IsValid(DepletedActor))
+	{
+		return;
+	}
+
+	const double Now = World->GetTimeSeconds();
+	const APawn* OwningPawn = GetOwningPawn();
+
+	if (DepletedActor == OwningPawn)
+	{
+		++PlayerDefeatedCount;
+		ActiveCenterToastText = TEXT("[ PLAYER DEFEATED ]  HP Depleted — Auto-Respawning at Checkpoint...");
+		ActiveCenterToastColor = FLinearColor(1.0f, 0.22f, 0.20f, 1.0f);
+		CenterToastExpireTime = Now + 3.0;
+	}
+	else
+	{
+		++DefeatedEnemyCount;
+		ActiveCenterToastText = FString::Printf(TEXT("[ ENEMY DEFEATED ]  Target Eliminated (Total Kills: %d)"), DefeatedEnemyCount);
+		ActiveCenterToastColor = FLinearColor(0.30f, 1.0f, 0.52f, 1.0f);
+		CenterToastExpireTime = Now + 2.4;
+
+		FIU_FloatingCombatText KillPopup;
+		KillPopup.WorldLocation = DepletedActor->GetActorLocation() + FVector(0.0f, 0.0f, 95.0f);
+		KillPopup.Label = TEXT("ENEMY DEFEATED!");
+		KillPopup.Color = FLinearColor(0.32f, 1.0f, 0.50f, 1.0f);
+		KillPopup.SpawnWorldTime = Now;
+		KillPopup.Duration = 1.25f;
+		KillPopup.Scale = 1.45f;
+		FloatingTexts.Add(KillPopup);
+	}
+}
+
 void AIU_HUDManager::HandlePlayerCombatStateChanged(EIU_CombatState PreviousState, EIU_CombatState NewState)
 {
 	UWorld* World = GetWorld();
@@ -143,16 +197,23 @@ void AIU_HUDManager::HandlePlayerCombatStateChanged(EIU_CombatState PreviousStat
 
 void AIU_HUDManager::DrawHUD()
 {
-	Super::DrawHUD();
+	APawn* OwningPawn = GetOwningPawn();
+	RefreshCombatEventBindings(OwningPawn);
 
 	if (!Canvas)
 	{
 		return;
 	}
 
+	Super::DrawHUD();
+
 	UWorld* World = GetWorld();
-	APawn* OwningPawn = GetOwningPawn();
-	RefreshCombatEventBindings(OwningPawn);
+
+	if (World)
+	{
+		const float RawDt = FMath::Clamp(World->GetDeltaSeconds(), 0.0005f, 0.25f);
+		SmoothedFrameDeltaSeconds = FMath::FInterpTo(SmoothedFrameDeltaSeconds, RawDt, RawDt, 8.0f);
+	}
 
 	UFont* HUDFont = GEngine ? GEngine->GetMediumFont() : nullptr;
 
@@ -209,12 +270,26 @@ void AIU_HUDManager::DrawHUD()
 	const UIU_TargetingComponent* TargetingComp = OwningPawn->FindComponentByClass<UIU_TargetingComponent>();
 	AActor* LockedTarget = (TargetingComp && TargetingComp->IsLockedOn()) ? TargetingComp->GetLockedTarget() : nullptr;
 
-	// 2. World-Space Overhead Enemy HP Bars & Crimson "[ ! RMB EVADE ]" Windup Telegraph
+	// 2. World-Space Overhead Enemy HP Bars & Crimson "[ ! RMB EVADE ]" Windup Telegraph + AI Count
+	int32 LivingEnemyCount = 0;
+	int32 TotalEnemyActors = 0;
 	const FVector PlayerPos = OwningPawn->GetActorLocation();
+
 	for (TActorIterator<AIU_EnemyCharacter> It(World); It; ++It)
 	{
 		AIU_EnemyCharacter* Enemy = *It;
-		if (!IsValid(Enemy) || Enemy->IsDead() || Enemy == LockedTarget)
+		if (!IsValid(Enemy))
+		{
+			continue;
+		}
+		++TotalEnemyActors;
+		if (Enemy->IsDead())
+		{
+			continue;
+		}
+		++LivingEnemyCount;
+
+		if (Enemy == LockedTarget)
 		{
 			continue;
 		}
@@ -293,44 +368,104 @@ void AIU_HUDManager::DrawHUD()
 		}
 	}
 
-	// 4. Floating 3D->2D Damage Numbers & "PERFECT EVADE!" Popups
-	if (HUDFont)
+	if (!HUDFont)
 	{
-		const double Now = World->GetTimeSeconds();
-		for (int32 i = FloatingTexts.Num() - 1; i >= 0; --i)
-		{
-			const FIU_FloatingCombatText& Item = FloatingTexts[i];
-			const float Age = static_cast<float>(Now - Item.SpawnWorldTime);
-			if (Age >= Item.Duration)
-			{
-				FloatingTexts.RemoveAt(i);
-				continue;
-			}
+		return;
+	}
 
-			const float Alpha = FMath::Clamp(Age / FMath::Max(Item.Duration, 0.05f), 0.0f, 1.0f);
-			const FVector WorldPos = Item.WorldLocation + FVector(0.0f, 0.0f, 55.0f * Alpha);
-			const FVector ScreenPos = Project(WorldPos);
-			if (ScreenPos.Z > 0.0f)
+	const double Now = World->GetTimeSeconds();
+
+	// 4. Center-Top Death / Victory Notification Banner & Optional Auto-Demo Stage Header
+	if (!ShowcaseStepBannerText.IsEmpty())
+	{
+		DrawRect(FLinearColor(0.02f, 0.06f, 0.14f, 0.82f), CenterX - 290.0f, 18.0f, 580.0f, 32.0f);
+		DrawText(ShowcaseStepBannerText, FLinearColor(0.45f, 0.92f, 1.0f, 1.0f), CenterX - 275.0f, 24.0f, HUDFont, 1.02f);
+	}
+
+	if (Now < CenterToastExpireTime && !ActiveCenterToastText.IsEmpty())
+	{
+		const float BannerY = ShowcaseStepBannerText.IsEmpty() ? 32.0f : 58.0f;
+		DrawRect(FLinearColor(0.04f, 0.04f, 0.06f, 0.84f), CenterX - 245.0f, BannerY, 490.0f, 30.0f);
+		DrawText(ActiveCenterToastText, ActiveCenterToastColor, CenterX - 230.0f, BannerY + 5.0f, HUDFont, 1.0f);
+	}
+
+	// 5. Floating 3D->2D Damage Numbers, "PERFECT EVADE!" & "ENEMY DEFEATED!" Popups
+	for (int32 i = FloatingTexts.Num() - 1; i >= 0; --i)
+	{
+		const FIU_FloatingCombatText& Item = FloatingTexts[i];
+		const float Age = static_cast<float>(Now - Item.SpawnWorldTime);
+		if (Age >= Item.Duration)
+		{
+			FloatingTexts.RemoveAt(i);
+			continue;
+		}
+
+		const float Alpha = FMath::Clamp(Age / FMath::Max(Item.Duration, 0.05f), 0.0f, 1.0f);
+		const FVector WorldPos = Item.WorldLocation + FVector(0.0f, 0.0f, 55.0f * Alpha);
+		const FVector ScreenPos = Project(WorldPos);
+		if (ScreenPos.Z > 0.0f)
+		{
+			FLinearColor DrawCol = Item.Color;
+			DrawCol.A *= (1.0f - FMath::Pow(Alpha, 2.0f));
+			DrawText(Item.Label, DrawCol, ScreenPos.X - 18.0f, ScreenPos.Y - 10.0f, HUDFont, Item.Scale);
+		}
+	}
+
+	// 6. Live Gameplay Debug Telemetry Overlay (Top-Right, toggle with F3 — Criterion 1.7)
+	if (bShowDebugTelemetry && Canvas->ClipX > 640.0f)
+	{
+		const float PanelW = 350.0f;
+		const float PanelH = 128.0f;
+		const float PX = Canvas->ClipX - PanelW - 24.0f;
+		const float PY = 24.0f;
+
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.05f, 0.72f), PX, PY, PanelW, PanelH);
+
+		const float FPS = 1.0f / FMath::Max(SmoothedFrameDeltaSeconds, 0.0005f);
+		const float FrameMs = SmoothedFrameDeltaSeconds * 1000.0f;
+		const double UsedMemMB = static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0);
+
+		const FVector Vel = OwningPawn->GetVelocity();
+		float WalkCfg = 520.0f, SprintCfg = 880.0f, FlyCfg = 1575.0f, AtkMul = 1.0f;
+		if (const AIU_PlayerCharacter* PChar = Cast<AIU_PlayerCharacter>(OwningPawn))
+		{
+			if (const UIU_MovementComponent* MC = PChar->GetIUMovementComponent())
 			{
-				FLinearColor DrawCol = Item.Color;
-				DrawCol.A *= (1.0f - FMath::Pow(Alpha, 2.0f));
-				DrawText(Item.Label, DrawCol, ScreenPos.X - 18.0f, ScreenPos.Y - 10.0f, HUDFont, Item.Scale);
+				WalkCfg = MC->WalkSpeed;
+				SprintCfg = MC->SprintSpeed;
+			}
+			if (const UIU_FlightComponent* FC = PChar->GetFlightComponent())
+			{
+				FlyCfg = FC->FlightSpeed;
+			}
+			if (const UIU_AttributeComponent* AC = PChar->GetAttributeComponent())
+			{
+				AtkMul = AC->GetAttackPowerMultiplier();
 			}
 		}
 
-		// 5. Compact Bottom-Left Controls Quick-Bar
-		if (bShowControlsLegend && Canvas->ClipY > 360.0f)
-		{
-			const float LegendX = 36.0f;
-			const float LegendY = Canvas->ClipY - 52.0f;
-			DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, 890.0f, 30.0f);
-			DrawText(
-				TEXT("WASD: Move  |  Space x2: 3D Flight  |  Ctrl/Shift: Boost/Down  |  LMB: Combo  |  Q: Ki Blast  |  RMB: Dash / Mirage Evade  |  E: Lock-On  |  R: Blink Mode"),
-				FLinearColor(0.86f, 0.93f, 1.0f, 0.90f),
-				LegendX,
-				LegendY,
-				HUDFont,
-				0.88f);
-		}
+		const FLinearColor HeaderCol(0.55f, 0.90f, 1.0f, 0.95f);
+		const FLinearColor LineCol(0.90f, 0.95f, 0.98f, 0.92f);
+
+		DrawText(FString::Printf(TEXT("[DEBUG TELEMETRY - F3]  %.0f FPS (%.2f ms) | RAM %.0f MB"), FPS, FrameMs, UsedMemMB), HeaderCol, PX + 10.0f, PY + 8.0f, HUDFont, 0.84f);
+		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 32.0f, HUDFont, 0.82f);
+		DrawText(FString::Printf(TEXT("Cfg: Atk x%.1f | Walk %.0f | Sprint %.0f | Fly %.0f"), AtkMul, WalkCfg, SprintCfg, FlyCfg), LineCol, PX + 10.0f, PY + 56.0f, HUDFont, 0.82f);
+		DrawText(FString::Printf(TEXT("AI Raiders: %d/%d Alive | Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, DefeatedEnemyCount, PlayerDefeatedCount), LineCol, PX + 10.0f, PY + 80.0f, HUDFont, 0.82f);
+		DrawText(FString::Printf(TEXT("Map: %s"), *World->GetName()), FLinearColor(0.72f, 0.82f, 0.92f, 0.85f), PX + 10.0f, PY + 102.0f, HUDFont, 0.80f);
+	}
+
+	// 7. Compact Bottom-Left Controls Quick-Bar
+	if (bShowControlsLegend && Canvas->ClipY > 360.0f)
+	{
+		const float LegendX = 36.0f;
+		const float LegendY = Canvas->ClipY - 52.0f;
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, 945.0f, 30.0f);
+		DrawText(
+			TEXT("WASD: Move | Space x2: 3D Flight | Ctrl/Shift: Boost/Down | LMB: Combo | Q: Ki Blast | RMB: Dash/Evade | E: Lock-On | V: Blink | F3: Debug"),
+			FLinearColor(0.86f, 0.93f, 1.0f, 0.90f),
+			LegendX,
+			LegendY,
+			HUDFont,
+			0.86f);
 	}
 }

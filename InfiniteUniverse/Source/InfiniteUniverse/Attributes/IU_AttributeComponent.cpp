@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "Attributes/IU_AttributeComponent.h"
+#include "InfiniteUniverse.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
@@ -44,6 +45,7 @@ float UIU_AttributeComponent::ModifyHP(float Delta)
 	{
 		bIsDead = true;
 		UpdateKiRegenTimerState();
+		UE_LOG(LogIUCombat, Log, TEXT("[%s] HP depleted (0/%.0f) -> Dead state triggered"), *GetNameSafe(GetOwner()), MaxHP);
 		OnHealthDepleted.Broadcast(GetOwner());
 	}
 
@@ -140,4 +142,9 @@ void UIU_AttributeComponent::OnKiRegenTimerTick()
 	}
 
 	RestoreKi(PassiveKiRegenPerSecond * KiRegenTickInterval);
+}
+
+void UIU_AttributeComponent::SetAttackPowerMultiplier(float NewMultiplier)
+{
+	AttackPowerMultiplier = FMath::Clamp(NewMultiplier, 0.1f, 100.0f);
 }

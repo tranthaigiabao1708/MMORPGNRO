@@ -8,6 +8,7 @@
 #include "Combat/IU_CombatThreatSubsystem.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Attributes/IU_AttributeComponent.h"
+#include "InfiniteUniverse.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
@@ -231,7 +232,8 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 	AIU_KiProjectile* Projectile = World->SpawnActor<AIU_KiProjectile>(KiProjectileClass, SpawnTM, SpawnParams);
 	if (Projectile)
 	{
-		Projectile->InitializeProjectile(Owner, ShootDir, KiBlastDamage, KiBlastSpeed);
+		const float EffectiveKiDamage = KiBlastDamage * (AttributeComp ? AttributeComp->GetAttackPowerMultiplier() : 1.0f);
+		Projectile->InitializeProjectile(Owner, ShootDir, EffectiveKiDamage, KiBlastSpeed);
 		bKiBlastOnCooldown = true;
 		World->GetTimerManager().SetTimer(
 			KiBlastCooldownTimerHandle,
@@ -581,9 +583,10 @@ void UIU_CombatComponent::ExecuteComboStep(int32 StepIndex)
 		}
 	}
 
-	PendingMeleeStepDamage = ComboStepDamages.IsValidIndex(StepIndex - 1)
+	const float BaseStepDamage = ComboStepDamages.IsValidIndex(StepIndex - 1)
 		? ComboStepDamages[StepIndex - 1]
 		: 15.0f;
+	PendingMeleeStepDamage = BaseStepDamage * (AttributeComp ? AttributeComp->GetAttackPowerMultiplier() : 1.0f);
 
 	const float RawWindup = ComboStepWindupTimes.IsValidIndex(StepIndex - 1)
 		? ComboStepWindupTimes[StepIndex - 1]

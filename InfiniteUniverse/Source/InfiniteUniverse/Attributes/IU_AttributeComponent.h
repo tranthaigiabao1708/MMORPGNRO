@@ -38,6 +38,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "500.0"))
 	float PassiveKiRegenPerSecond = 8.0f;
 
+	/** Outgoing combat damage multiplier attribute (1.0 = baseline 100% damage, editable in Blueprint/runtime). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "100.0"))
+	float AttackPowerMultiplier = 1.0f;
+
 	/** Timer interval for smooth Ki regeneration (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.05", ClampMax = "1.0"))
 	float KiRegenTickInterval = 0.10f;
@@ -86,6 +90,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
 	bool IsDead() const { return bIsDead; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
+	float GetAttackPowerMultiplier() const { return FMath::Max(0.1f, AttackPowerMultiplier); }
+
+	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
+	void SetAttackPowerMultiplier(float NewMultiplier);
 
 	// ========================================================================
 	// Events

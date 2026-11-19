@@ -2,6 +2,7 @@
 
 #include "Core/IU_PlayerController.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "UI/IU_HUDManager.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/LocalPlayer.h"
 #include "EnhancedInputComponent.h"
@@ -295,6 +296,11 @@ void AIU_PlayerController::SetupInputComponent()
 			EnhancedInput->BindAction(ToggleMobilityStyleAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleToggleMobilityStyle);
 		}
 	}
+
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::F3, IE_Pressed, this, &AIU_PlayerController::HandleToggleDebugHUD);
+	}
 }
 
 AIU_PlayerCharacter* AIU_PlayerController::GetIUPlayerCharacter() const
@@ -444,5 +450,13 @@ void AIU_PlayerController::HandleToggleMobilityStyle(const FInputActionValue& Va
 	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
 	{
 		IUChar->ToggleMobilityStyleInput();
+	}
+}
+
+void AIU_PlayerController::HandleToggleDebugHUD()
+{
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		IUHUD->ToggleDebugTelemetry();
 	}
 }
