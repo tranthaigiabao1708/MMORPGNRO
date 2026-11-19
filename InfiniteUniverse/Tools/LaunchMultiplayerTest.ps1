@@ -4,7 +4,8 @@ param(
     [switch]$AutomatedDemoCapture,
     [switch]$RecordVideoFrames,
     [switch]$SimulateWANLag,
-    [double]$DurationSeconds = 27.5
+    [double]$DurationSeconds = 27.5,
+    [string]$CustomSuffix = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,11 +21,14 @@ if (-not (Test-Path $ClientExe)) {
     throw "Packaged client executable not found at $ClientExe. Run Tools\PackageStandalone.ps1 first."
 }
 
-# Stop any stale processes holding port 7777
-Get-Process -Name "InfiniteUniverse*","UnrealEditor*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Stop any stale packaged clients or headless -server processes holding port 7777 (leave interactive GUI Editor untouched!)
+Get-Process -Name "InfiniteUniverse*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name LIKE 'UnrealEditor%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "-server" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Milliseconds 500
 
-$Suffix = if ($SimulateWANLag) { "_WANLag" } elseif ($RecordVideoFrames) { "_Video" } else { "" }
+$Suffix = if ($CustomSuffix) { $CustomSuffix } elseif ($SimulateWANLag) { "_WANLag" } elseif ($RecordVideoFrames) { "_Video" } elseif ($ClientCount -gt 2) { "_${ClientCount}Clients" } else { "" }
 $ServerDur = [math]::Round($DurationSeconds + 6.5, 1)
 
 # Simulate realistic 80ms WAN RTT (+/- 15ms jitter, 2% packet loss): 40ms each direction = 80ms RTT!
@@ -64,12 +68,23 @@ if (-not $BoundReady) {
 }
 Write-Host "[SERVER] IpNetDriver listening on 0.0.0.0:$Port (PID $($ServerProc.Id))" -ForegroundColor Green
 
-# 2. Launch Packaged Cooked D3D12 Clients side-by-side (960x540 each on 1920x1080 desktop)
+# 2. Launch Packaged Cooked D3D12 Clients (Side-by-Side 960x540 for 2 clients, or 2x2 Quad Grid 960x500 for 4 clients)
 $ClientProcs = @()
 for ($i = 1; $i -le $ClientCount; $i++) {
-    $WinX = ($i - 1) * 960
-    $WinY = 40
-    $ClientArgs = "127.0.0.1:$Port -windowed -WinX=$WinX -WinY=$WinY -ResX=960 -ResY=540 -NoVSync -Log=Step2_Client${i}${Suffix}.log"
+    if ($ClientCount -le 2) {
+        $WinX = ($i - 1) * 960
+        $WinY = 40
+        $ResW = 960
+        $ResH = 540
+    } else {
+        $Col = ($i - 1) % 2
+        $Row = [math]::Floor(($i - 1) / 2)
+        $WinX = $Col * 960
+        $WinY = 20 + ($Row * 510)
+        $ResW = 960
+        $ResH = 500
+    }
+    $ClientArgs = "127.0.0.1:$Port -windowed -WinX=$WinX -WinY=$WinY -ResX=$ResW -ResY=$ResH -NoVSync -Log=Step2_Client${i}${Suffix}.log"
     if ($AutomatedDemoCapture) {
         $ClientArgs += " -unattended -AutoNetDemo=$i -DemoDuration=$DurationSeconds -CSVOutputName=Step2_Client${i}Profile${Suffix}.csv"
         if ($RecordVideoFrames) {

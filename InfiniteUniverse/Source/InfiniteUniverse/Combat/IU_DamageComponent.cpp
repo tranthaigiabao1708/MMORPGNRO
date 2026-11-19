@@ -38,7 +38,7 @@ void UIU_DamageComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 {
 	AActor* Owner = GetOwner();
-	if (!Owner || !Owner->HasAuthority() || Spec.Amount <= 0.0f)
+	if (!Owner || !Owner->HasAuthority() || !FMath::IsFinite(Spec.Amount) || Spec.Amount <= 0.0f)
 	{
 		return false;
 	}
@@ -92,7 +92,8 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 		{
 			if (UCharacterMovementComponent* MoveComp = OwnerChar->GetCharacterMovement())
 			{
-				const FVector PushDir = Spec.HitDirection.GetSafeNormal();
+				const FVector CleanHitDir = Spec.HitDirection.ContainsNaN() ? FVector::ZeroVector : Spec.HitDirection;
+				const FVector PushDir = CleanHitDir.GetSafeNormal();
 				if (!PushDir.IsNearlyZero())
 				{
 					MoveComp->Velocity += PushDir * HitKnockbackSpeed;

@@ -3,6 +3,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "CoreMinimal.h"
+#include <limits>
 #include "Misc/AutomationTest.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -384,6 +385,152 @@ bool FIU_S2_ReplicationAndPingCompensatedEvadeTest::RunTest(const FString& Param
 		Defender->GetCombatComponent()->IsLastDodgeCombatEvade());
 	TestNotNull(TEXT("UPoseableMeshComponent AIU_AfterimageGhost spawned at Origin A"),
 		Defender->GetCombatComponent()->GetLastSpawnedAfterimage());
+
+	return true;
+}
+
+// ============================================================================
+// TEST 5 (AUDIT): Simultaneous 4-Client Attacks on 1 Enemy — Single Death & Single Respawn
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2Audit_SimultaneousFourPlayerEnemyAttackTest,
+	"InfiniteUniverse.Step2Audit.SimultaneousFourPlayerEnemyAttackSingleDeath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2Audit_SimultaneousFourPlayerEnemyAttackTest::RunTest(const FString& Parameters)
+{
+	IU_S2TestHelpers::FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/true);
+	UWorld* World = ScopeWorld.World;
+
+	AIU_EnemySpawner* Spawner = World->SpawnActor<AIU_EnemySpawner>(FVector(-1850.0f, 0.0f, 98.0f), FRotator::ZeroRotator);
+	Spawner->RespawnDelaySeconds = 0.50f;
+	AIU_EnemyCharacter* Enemy = Spawner->RespawnEnemyNow();
+	TestNotNull(TEXT("Enemy spawned by Server AIU_EnemySpawner"), Enemy);
+	Enemy->GetAttributeComponent()->MaxHP = 100.0f;
+	Enemy->GetAttributeComponent()->ResetAttributesToFull();
+
+	TArray<AIU_PlayerCharacter*> Raiders;
+	TArray<AIU_PlayerState*> RaiderStates;
+	const FVector Offsets[4] = {
+		FVector(140.0f, 0.0f, 0.0f),
+		FVector(-140.0f, 0.0f, 0.0f),
+		FVector(0.0f, 140.0f, 0.0f),
+		FVector(0.0f, -140.0f, 0.0f)
+	};
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		AIU_PlayerCharacter* P = World->SpawnActor<AIU_PlayerCharacter>(Enemy->GetActorLocation() + Offsets[i], (-Offsets[i]).Rotation());
+		AIU_PlayerState* PS = World->SpawnActor<AIU_PlayerState>();
+		P->SetPlayerState(PS);
+		Raiders.Add(P);
+		RaiderStates.Add(PS);
+	}
+
+	// All 4 players apply 35 damage on the EXACT SAME SERVER FRAME (4 * 35 = 140 > 100 MaxHP!)
+	int32 AcceptedHits = 0;
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FIU_DamageSpec Hit;
+		Hit.Amount = 35.0f;
+		Hit.InstigatorActor = Raiders[i];
+		Hit.DamageCauser = Raiders[i];
+		Hit.HitLocation = Enemy->GetActorLocation();
+		Hit.HitDirection = (-Offsets[i]).GetSafeNormal();
+		if (Enemy->GetDamageComponent()->ApplyDamageSpec(Hit))
+		{
+			++AcceptedHits;
+		}
+	}
+
+	// Exactly 3 hits (35 + 35 + 30 = 100) bring Enemy to 0 HP; the 4th simultaneous hit MUST be rejected cleanly!
+	TestEqual(TEXT("Exactly 3 simultaneous hits applied before 0 HP death gate closed"), AcceptedHits, 3);
+	TestEqual(TEXT("Enemy HP clamped to exact 0.0 (never negative)"), Enemy->GetAttributeComponent()->GetHP(), 0.0f);
+	TestTrue(TEXT("Enemy transitioned to Dead state"), Enemy->IsDead());
+
+	int32 TotalAwardedKills = 0;
+	for (const AIU_PlayerState* PS : RaiderStates)
+	{
+		TotalAwardedKills += PS->GetEnemyKills();
+	}
+	TestEqual(TEXT("Exactly 1 finishing blow EnemyKill awarded across all 4 simultaneous attackers (no double-kill race)"),
+		TotalAwardedKills, 1);
+
+	// Tick past 0.50s respawn delay -> verify single clean respawn to 100 HP
+	ScopeWorld.TickWorld(0.65f);
+	TestFalse(TEXT("Enemy respawned cleanly after simultaneous 4-player takedown"), Enemy->IsDead());
+	TestEqual(TEXT("Respawned Enemy restored to full 100 HP"), Enemy->GetAttributeComponent()->GetHP(), 100.0f);
+
+	return true;
+}
+
+// ============================================================================
+// TEST 6 (AUDIT): Invalid Damage Requests, NaN/Inf RPC Payloads & Exploit Validation
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S2Audit_InvalidDamageAndExploitRejectionTest,
+	"InfiniteUniverse.Step2Audit.InvalidDamageAndClientExploitRejection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S2Audit_InvalidDamageAndExploitRejectionTest::RunTest(const FString& Parameters)
+{
+	IU_S2TestHelpers::FScopedStep2NetWorld ScopeWorld(/*bSpawnGameModeAndState=*/true);
+	UWorld* World = ScopeWorld.World;
+
+	AIU_PlayerCharacter* Attacker = World->SpawnActor<AIU_PlayerCharacter>(FVector(0.0f, 0.0f, 110.0f), FRotator::ZeroRotator);
+	AIU_PlayerCharacter* Victim = World->SpawnActor<AIU_PlayerCharacter>(FVector(200.0f, 0.0f, 110.0f), FRotator::ZeroRotator);
+	AIU_EnemyCharacter* FarEnemy = World->SpawnActor<AIU_EnemyCharacter>(FVector(9500.0f, 0.0f, 110.0f), FRotator::ZeroRotator);
+
+	Victim->GetAttributeComponent()->ModifyHP(-20.0f); // Victim at 80/100 HP
+	TestEqual(TEXT("Victim baseline HP is 80"), Victim->GetAttributeComponent()->GetHP(), 80.0f);
+
+	// 1. Negative damage exploit (attempting to heal via negative damage spec)
+	FIU_DamageSpec NegSpec;
+	NegSpec.Amount = -500.0f;
+	NegSpec.InstigatorActor = FarEnemy;
+	TestFalse(TEXT("Negative damage spec rejected"), Victim->GetDamageComponent()->ApplyDamageSpec(NegSpec));
+	TestEqual(TEXT("Victim HP unchanged after negative damage attempt"), Victim->GetAttributeComponent()->GetHP(), 80.0f);
+
+	// 2. NaN and +Infinity damage exploit
+	FIU_DamageSpec NaNSpec;
+	NaNSpec.Amount = std::numeric_limits<float>::quiet_NaN();
+	NaNSpec.InstigatorActor = FarEnemy;
+	TestFalse(TEXT("NaN damage spec rejected"), Victim->GetDamageComponent()->ApplyDamageSpec(NaNSpec));
+
+	FIU_DamageSpec InfSpec;
+	InfSpec.Amount = std::numeric_limits<float>::infinity();
+	InfSpec.InstigatorActor = FarEnemy;
+	TestFalse(TEXT("+Infinity damage spec rejected"), Victim->GetDamageComponent()->ApplyDamageSpec(InfSpec));
+	TestEqual(TEXT("Victim HP still finite at 80.0"), Victim->GetAttributeComponent()->GetHP(), 80.0f);
+
+	// 3. Self-inflicted damage exploit
+	FIU_DamageSpec SelfSpec;
+	SelfSpec.Amount = 25.0f;
+	SelfSpec.InstigatorActor = Victim;
+	TestFalse(TEXT("Self-damage spec rejected"), Victim->GetDamageComponent()->ApplyDamageSpec(SelfSpec));
+
+	// 4. Co-op friendly-fire damage outside Martial Arena
+	FIU_DamageSpec FriendlyFireSpec;
+	FriendlyFireSpec.Amount = 50.0f;
+	FriendlyFireSpec.InstigatorActor = Attacker;
+	TestFalse(TEXT("Unauthorized PvP damage in Co-op zone rejected"), Victim->GetDamageComponent()->ApplyDamageSpec(FriendlyFireSpec));
+	TestEqual(TEXT("Victim HP unchanged at 80.0"), Victim->GetAttributeComponent()->GetHP(), 80.0f);
+
+	// 5. Out-of-range Lock-On spoof (9,500 cm > MaxAcquisitionRange)
+	TestFalse(TEXT("Out-of-range lock-on spoof rejected"), Attacker->GetTargetingComponent()->SetLockedTarget(FarEnemy));
+	TestNull(TEXT("LockedTarget remains nullptr"), Attacker->GetTargetingComponent()->GetLockedTarget());
+
+	// 6. Malicious NaN vector Dodge & KiBlast requests must not corrupt Actor transform with NaN!
+	const FVector BadNaNVec(std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), 0.0f);
+	Attacker->GetCombatComponent()->RequestDodge(BadNaNVec);
+	TestFalse(TEXT("Actor location remains NaN-free after malformed NaN/Inf Dodge vector"),
+		Attacker->GetActorLocation().ContainsNaN());
+
+	// 7. Zero-Ki KiBlast spam exploit
+	Attacker->GetCombatComponent()->ResetCombatState();
+	Attacker->GetAttributeComponent()->TryConsumeKi(100.0f);
+	TestEqual(TEXT("Attacker Ki drained to 0"), Attacker->GetAttributeComponent()->GetKi(), 0.0f);
+	TestNull(TEXT("Server rejects KiBlast when Ki == 0"), Attacker->GetCombatComponent()->RequestKiBlast());
 
 	return true;
 }

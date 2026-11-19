@@ -12,6 +12,8 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "InputCoreTypes.h"
+#include "Misc/CommandLine.h"
+#include "InfiniteUniverse.h"
 
 AIU_PlayerController::AIU_PlayerController()
 {
@@ -470,11 +472,24 @@ void AIU_PlayerController::HandleToggleGlobalPvP()
 
 void AIU_PlayerController::Server_ToggleGlobalPvPSparring_Implementation()
 {
-	if (UWorld* World = GetWorld())
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		if (AIU_GameState* GS = World->GetGameState<AIU_GameState>())
-		{
-			GS->SetAllowGlobalPvPSparring(!GS->bAllowGlobalPvPSparring);
-		}
+		return;
+	}
+
+	// Security Gate (SEC-01): On a Dedicated Server, unprivileged remote clients cannot mutate global PvP rules
+	// unless the server operator explicitly enabled -AllowClientPvPToggle on the server command line.
+	if (World->GetNetMode() == NM_DedicatedServer && !FParse::Param(FCommandLine::Get(), TEXT("AllowClientPvPToggle")))
+	{
+		UE_LOG(LogInfiniteUniverse, Warning,
+			TEXT("[Security] Rejected unauthorized Server_ToggleGlobalPvPSparring RPC from remote client '%s'."),
+			*GetNameSafe(this));
+		return;
+	}
+
+	if (AIU_GameState* GS = World->GetGameState<AIU_GameState>())
+	{
+		GS->SetAllowGlobalPvPSparring(!GS->bAllowGlobalPvPSparring);
 	}
 }

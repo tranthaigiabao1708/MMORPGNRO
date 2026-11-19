@@ -553,6 +553,10 @@ void AIU_PlayerCharacter::ToggleRotationModeInput()
 
 void AIU_PlayerCharacter::Server_SetCharacterRotationMode_Implementation(EIU_CharacterRotationMode NewMode)
 {
+	if (NewMode != EIU_CharacterRotationMode::OrientToMovement && NewMode != EIU_CharacterRotationMode::OrientToCamera)
+	{
+		return;
+	}
 	if (IUMovementComponent)
 	{
 		IUMovementComponent->SetCharacterRotationMode(NewMode);

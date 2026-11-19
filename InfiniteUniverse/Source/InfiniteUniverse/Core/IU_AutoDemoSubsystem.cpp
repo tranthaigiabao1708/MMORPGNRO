@@ -336,7 +336,12 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 
 	AIU_PlayerCharacter* OtherPlayer = FindOtherPlayerCharacter(Player);
 	AIU_EnemyCharacter* NearestEnemy = FindClosestLivingEnemy(Player->GetActorLocation());
-	const double T = ConnectedPlaySeconds;
+	const double T = FMath::Fmod(ConnectedPlaySeconds, 27.5);
+	const bool bIsHeroTeamRole = (NetDemoClientRole % 2 == 1);
+	const float LaneY = (NetDemoClientRole == 1) ? -180.0f
+		: (NetDemoClientRole == 2) ? 180.0f
+		: (NetDemoClientRole == 3) ? -65.0f
+		: 65.0f;
 
 	// =========================================================================
 	// STAGE 1 (0.0s .. 4.0s): Co-op Courtyard Spawn & Friendly-Fire Authority Guard
@@ -353,12 +358,12 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 		if (OtherPlayer)
 		{
 			SteerPlayerToward(Player, RawPC, OtherPlayer->GetActorLocation(), 200.0f, false, false);
-			if (NetDemoClientRole == 1 && T > 2.0 && !bTestedCoopFriendlyFireShot)
+			if (bIsHeroTeamRole && T > 2.0 && !bTestedCoopFriendlyFireShot)
 			{
 				bTestedCoopFriendlyFireShot = true;
 				Player->KiBlastInput();
 			}
-			else if (NetDemoClientRole == 1 && T > 2.8 && T < 3.1 && ElapsedSeconds >= NextActionCooldownTime)
+			else if (bIsHeroTeamRole && T > 2.8 && T < 3.1 && ElapsedSeconds >= NextActionCooldownTime)
 			{
 				Player->MeleeAttackInput();
 				NextActionCooldownTime = ElapsedSeconds + 0.45;
@@ -370,18 +375,17 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 		}
 	}
 	// =========================================================================
-	// STAGE 2 (4.0s .. 10.2s): Synchronized 2-Player Free 3D Flight Formation (FSavedMove)
+	// STAGE 2 (4.0s .. 10.2s): Synchronized Multi-Player Free 3D Flight Formation (FSavedMove)
 	// =========================================================================
 	else if (T < 10.2)
 	{
 		if (LastTriggeredStage != 102)
 		{
 			LastTriggeredStage = 102;
-			SetBanner(TEXT("MULTIPLAYER [2/4]: 2-Player 3D Flight Prediction -> West Martial Arena"));
+			SetBanner(TEXT("MULTIPLAYER [2/4]: Multi-Player 3D Flight Prediction -> West Martial Arena"));
 			Player->StartJumpInput();
 		}
 
-		const float LaneY = (NetDemoClientRole == 1) ? -145.0f : 145.0f;
 		const FVector ArenaSkyWaypoint(-1650.0f, LaneY, 440.0f);
 
 		if (T < 4.30)
@@ -527,8 +531,8 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 
 			if (T < 21.6)
 			{
-				// Phase 4A: Client 2 strikes Client 1 -> Client 1 takes 1st PvP hit, then Perfect Evades 2nd PvP attack!
-				if (NetDemoClientRole == 2)
+				// Phase 4A: Even-role fighters strike -> Odd-role fighters take 1st PvP hit, then Perfect Evade 2nd PvP attack!
+				if (!bIsHeroTeamRole)
 				{
 					if (ElapsedSeconds >= NextActionCooldownTime)
 					{
@@ -545,7 +549,7 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 						}
 					}
 				}
-				else // NetDemoClientRole == 1 (Hero Camera)
+				else
 				{
 					if (Player->GetAttributeComponent()->GetHPPercent() < 0.99f)
 					{
@@ -571,8 +575,8 @@ void UIU_AutoDemoSubsystem::TickMultiplayerNetClient(UWorld* World, AIU_PlayerCh
 			}
 			else
 			{
-				// Phase 4B: Client 1 counterattacks with 3-Hit Combo + Ki Blast to defeat Rival Player in Arena!
-				if (NetDemoClientRole == 1 && ElapsedSeconds >= NextActionCooldownTime)
+				// Phase 4B: Odd-role fighters counterattack with 3-Hit Combo + Ki Blast in Arena!
+				if (bIsHeroTeamRole && ElapsedSeconds >= NextActionCooldownTime)
 				{
 					const float DistP = FVector::Dist2D(Player->GetActorLocation(), OtherPlayer->GetActorLocation());
 					if (DistP > 220.0f)

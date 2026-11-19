@@ -9,8 +9,8 @@
 
 | Severity | Discovered | Resolved & Regression-Tested | Open / Blocking |
 | :--- | :---: | :---: | :---: |
-| **Critical / Gameplay or Net-Blocking (`S1`)** | 6 | 6 | **0** |
-| **Major (`S2`)** | 6 | 6 | **0** |
+| **Critical / Gameplay or Net-Blocking (`S1`)** | 7 | 7 | **0** |
+| **Major (`S2`)** | 7 | 7 | **0** |
 | **Minor / UI / Tooling (`S3`)** | 3 | 3 | **0** |
 
 ---
@@ -41,6 +41,8 @@
 | `BUG-13` | `S1` | `Tools/LaunchMultiplayerTest.ps1` (UE `5.8` Installed Build) | Cooked `TargetType.Game` binary (`InfiniteUniverse.exe`) ignores `-server` (`#if WITH_EDITOR || UE_SERVER` in `LaunchEngineLoop`), booting in `NM_Standalone` (`NetMode=0`) instead of binding UDP `:7777`. | Configured `LaunchMultiplayerTest.ps1` to boot `UnrealEditor.exe ... -server -NullRHI -port=7777` (`NetMode=1 / NM_DedicatedServer`) and poll `IpNetDriver listening on port 7777` before connecting cooked `InfiniteUniverse.exe` D3D12 Clients (`NetMode=3`). | `Step2_DedicatedServer.log` (`Join succeeded x2`, `OnlinePlayers=2`) |
 | `BUG-14` | `S2` | `IU_SkeletalAnimDirectorComponent` & `IU_AttributeComponent` | Under UDP packet reordering, if `Multicast_OnEnemyReset` / `Multicast_OnPlayerRespawned` arrived 1 packet ahead of `OnRep_IsDead (false)`, `AnimDirector` re-latched `DeathAnim` and left respawned actors visually prone on Clients. | Added `bWasDeadLastFrame` transition recovery in `UIU_SkeletalAnimDirectorComponent::TickComponent` and capsule collision restore inside `UIU_AttributeComponent::OnRep_IsDead`. | Live 2-Client Video Frame Inspection (`PASS`) |
 | `BUG-15` | `S3` | `IU_HUDManager` (`960×540` Split-Window Layout) | At `960×540` side-by-side window resolution, the centered top stage banner overlapped the top-right `F3` Debug Telemetry panel, and `StrikeFistMesh` (`1.04m` scale) over-filled close-up camera views. | Made banner/toast coordinates responsive for `< 1200px` viewports and scaled `StrikeFistMesh` visual orb to `0.36` while keeping physics `AttackHitboxRadius = 52 cm`. | Live 2-Client Video Frame Inspection (`PASS`) |
+| `SEC-01` | `S1` | `IU_PlayerController` (Security Audit) | Unprivileged remote `NM_Client` callers could invoke `Server_ToggleGlobalPvPSparring` (`F4`) on `NM_DedicatedServer` and enable global PvP griefing in Co-op PvE sectors. | Restricted `Server_ToggleGlobalPvPSparring_Implementation` on `NM_DedicatedServer` unless `-AllowClientPvPToggle` is explicitly set on Server CLI; logs `[Security]` warning. | Step 2 Security Audit (`PASS`) |
+| `SEC-02` | `S2` | `IU_DamageComponent` & `IU_CombatComponent` (Security Audit) | Malformed `NaN` / `Infinity` floats/vectors or out-of-range enum payloads sent to `Server_*` RPCs / `ApplyDamageSpec` could corrupt transforms or HP state. | Added `FMath::IsFinite`, `!ContainsNaN()`, and enum-range guards across all `Server_*` RPCs and `ApplyDamageSpec`, plus explicit `ExitingPawn->Destroy()` verification in `AIU_GameMode::Logout`. | `InvalidDamageAndClientExploitRejection` (`PASS`) |
 
 ---
 

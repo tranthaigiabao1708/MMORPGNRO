@@ -6,6 +6,7 @@
 #include "Core/IU_PlayerController.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "UI/IU_HUDManager.h"
+#include "EngineUtils.h"
 #include "InfiniteUniverse.h"
 
 AIU_GameMode::AIU_GameMode()
@@ -40,8 +41,28 @@ void AIU_GameMode::PostLogin(APlayerController* NewPlayer)
 
 void AIU_GameMode::Logout(AController* Exiting)
 {
-	UE_LOG(LogInfiniteUniverse, Log, TEXT("[GameMode] Player disconnected: %s"), *GetNameSafe(Exiting));
+	APawn* ExitingPawn = Exiting ? Exiting->GetPawn() : nullptr;
 	Super::Logout(Exiting);
+
+	if (IsValid(ExitingPawn) && !ExitingPawn->IsActorBeingDestroyed())
+	{
+		ExitingPawn->Destroy();
+	}
+
+	int32 RemainingPlayerPawns = 0;
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AIU_PlayerCharacter> It(World); It; ++It)
+		{
+			if (IsValid(*It) && !It->IsActorBeingDestroyed())
+			{
+				++RemainingPlayerPawns;
+			}
+		}
+	}
+
+	UE_LOG(LogInfiniteUniverse, Log, TEXT("[GameMode] Player disconnected: %s (Active Player Pawns Remaining: %d)"),
+		*GetNameSafe(Exiting), RemainingPlayerPawns);
 }
 
 FTransform AIU_GameMode::AllocateMultiplayerSpawnTransform(AController* NewPlayer)

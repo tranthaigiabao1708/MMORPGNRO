@@ -149,6 +149,10 @@ void UIU_CombatComponent::SetMobilityStyle(EIU_MobilityStepStyle NewStyle)
 
 void UIU_CombatComponent::Server_SetMobilityStyle_Implementation(EIU_MobilityStepStyle NewStyle)
 {
+	if (NewStyle != EIU_MobilityStepStyle::Dash && NewStyle != EIU_MobilityStepStyle::InstantBlink)
+	{
+		return;
+	}
 	SetMobilityStyle(NewStyle);
 }
 
@@ -227,9 +231,9 @@ void UIU_CombatComponent::Server_RequestMeleeAttack_Implementation(float ClientC
 {
 	if (AActor* Owner = GetOwner())
 	{
-		if (!TargetingComp || !TargetingComp->IsLockedOn())
+		if (FMath::IsFinite(ClientControlYaw) && (!TargetingComp || !TargetingComp->IsLockedOn()))
 		{
-			Owner->SetActorRotation(FRotator(0.0f, ClientControlYaw, 0.0f));
+			Owner->SetActorRotation(FRotator(0.0f, FRotator::NormalizeAxis(ClientControlYaw), 0.0f));
 		}
 	}
 	RequestMeleeAttack();
@@ -277,7 +281,8 @@ AIU_KiProjectile* UIU_CombatComponent::RequestKiBlast()
 
 void UIU_CombatComponent::Server_RequestKiBlast_Implementation(FVector ClientAimDirection)
 {
-	ExecuteAuthoritativeKiBlast(ClientAimDirection.GetSafeNormal());
+	const FVector SafeDir = ClientAimDirection.ContainsNaN() ? FVector::ZeroVector : ClientAimDirection.GetSafeNormal();
+	ExecuteAuthoritativeKiBlast(SafeDir);
 }
 
 AIU_KiProjectile* UIU_CombatComponent::ExecuteAuthoritativeKiBlast(const FVector& ExplicitAimDirOverride)
@@ -422,7 +427,8 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 	const FTransform OriginTransform = Owner->GetActorTransform();
 
 	// 1. Compute unified A -> B direction (strictly identical across Dash, InstantBlink, and Perfect Evade!)
-	FVector TravelDir = DesiredWorldDirection.GetSafeNormal();
+	const FVector SanitizedDesiredDir = DesiredWorldDirection.ContainsNaN() ? FVector::ZeroVector : DesiredWorldDirection;
+	FVector TravelDir = SanitizedDesiredDir.GetSafeNormal();
 	if (TravelDir.IsNearlyZero())
 	{
 		if (const APawn* OwnerPawn = Cast<APawn>(Owner))
@@ -559,7 +565,8 @@ bool UIU_CombatComponent::RequestDodge(const FVector& DesiredWorldDirection)
 
 void UIU_CombatComponent::Server_RequestDodge_Implementation(FVector DesiredWorldDirection)
 {
-	RequestDodge(DesiredWorldDirection);
+	const FVector SafeDir = DesiredWorldDirection.ContainsNaN() ? FVector::ZeroVector : DesiredWorldDirection;
+	RequestDodge(SafeDir);
 }
 
 void UIU_CombatComponent::Multicast_OnDodgeCosmetics_Implementation(
