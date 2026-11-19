@@ -1,0 +1,41 @@
+# Unreal Engine 5 Generated Directories
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Visual Studio / Rider / IDE Files
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Compiled Object & Debug Files
+*.obj
+*.pdb
+*.ilk
+*.aps
+*.ncb
+*.exp
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+
+# Blender Backup Files
+*.blend1
+*.blend2
+
+# OS Temp Files
+Thumbs.db
+.DS_Store
