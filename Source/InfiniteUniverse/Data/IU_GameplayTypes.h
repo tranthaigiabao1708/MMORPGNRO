@@ -23,9 +23,66 @@ enum class EIU_PlayerMovementMode : uint8
 UENUM(BlueprintType)
 enum class EIU_CharacterRotationMode : uint8
 {
-	/** Character smoothly turns toward the direction of movement (Exploration default). */
+	/** Character smoothly turns toward the direction of movement. */
 	OrientToMovement UMETA(DisplayName = "Orient To Movement"),
 
-	/** Character faces the camera forward direction (Strafe / Lock-On ready). */
+	/** Character faces the camera forward direction (Default). */
 	OrientToCamera   UMETA(DisplayName = "Orient To Camera")
+};
+
+/**
+ * Combat state machine states (Milestone 3 Specification).
+ */
+UENUM(BlueprintType)
+enum class EIU_CombatState : uint8
+{
+	Idle        UMETA(DisplayName = "Idle"),
+	Attacking   UMETA(DisplayName = "Attacking"),
+	Dodging     UMETA(DisplayName = "Dodging"),
+	Blocking    UMETA(DisplayName = "Blocking"),
+	HitReaction UMETA(DisplayName = "Hit Reaction"),
+	Knockback   UMETA(DisplayName = "Knockback"),
+	Defeated    UMETA(DisplayName = "Defeated")
+};
+
+/**
+ * Enemy AI state machine states (Milestone 4 Specification).
+ */
+UENUM(BlueprintType)
+enum class EIU_EnemyAIState : uint8
+{
+	Idle        UMETA(DisplayName = "Idle"),
+	Detect      UMETA(DisplayName = "Detect Player"),
+	Chase       UMETA(DisplayName = "Chase Target"),
+	Attack      UMETA(DisplayName = "Attack"),
+	Recover     UMETA(DisplayName = "Recover"),
+	HitReaction UMETA(DisplayName = "Hit Reaction"),
+	Dead        UMETA(DisplayName = "Dead")
+};
+
+/**
+ * Structured damage payload passed into UIU_DamageComponent.
+ */
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_DamageSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	float Amount = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	TWeakObjectPtr<AActor> InstigatorActor = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	TWeakObjectPtr<AActor> DamageCauser = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	FVector HitLocation = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	FVector HitDirection = FVector::ForwardVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
+	float HitStunDuration = 0.22f;
 };

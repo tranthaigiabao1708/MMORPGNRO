@@ -12,6 +12,10 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class UIU_MovementComponent;
 class UIU_FlightComponent;
+class UIU_AttributeComponent;
+class UIU_DamageComponent;
+class UIU_TargetingComponent;
+class UIU_CombatComponent;
 
 /**
  * Playable Third-Person Character orchestrator (Milestone 1).
@@ -53,6 +57,11 @@ public:
 	void StartSprintInput();
 	void StopSprintInput();
 	void ToggleRotationModeInput();
+	void MeleeAttackInput();
+	void KiBlastInput();
+	void DodgeInput();
+	void ToggleLockOnInput();
+	void SwitchTargetInput(float Direction);
 
 	/** Applies visual-only pitch/roll lean during 3D flight without tilting the collision capsule. */
 	void ApplyVisualFlightLean(const FRotator& LeanRotator);
@@ -66,6 +75,18 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|Flight")
 	UIU_FlightComponent* GetFlightComponent() const { return FlightComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
+	UIU_AttributeComponent* GetAttributeComponent() const { return AttributeComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Combat")
+	UIU_DamageComponent* GetDamageComponent() const { return DamageComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Combat")
+	UIU_TargetingComponent* GetTargetingComponent() const { return TargetingComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Combat")
+	UIU_CombatComponent* GetCombatComponent() const { return CombatComponent; }
 
 	UFUNCTION(BlueprintPure, Category = "IU|Camera")
 	USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -125,6 +146,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Flight")
 	TObjectPtr<UIU_FlightComponent> FlightComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Attributes")
+	TObjectPtr<UIU_AttributeComponent> AttributeComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Combat")
+	TObjectPtr<UIU_DamageComponent> DamageComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Combat")
+	TObjectPtr<UIU_TargetingComponent> TargetingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Combat")
+	TObjectPtr<UIU_CombatComponent> CombatComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
@@ -142,7 +175,13 @@ private:
 	UFUNCTION()
 	void HandleFlightDashChanged(bool bIsDashing);
 
+	UFUNCTION()
+	void HandleComboVisualPulse(int32 ComboStep);
+
 	float DesiredCameraArmLength = 360.0f;
+	FVector2D LastMoveAxisInput = FVector2D::ZeroVector;
 	bool bFlightDashCameraActive = false;
+	FTimerHandle StrikePulseResetTimerHandle;
+	void ResetStrikeVisualPulse();
 	void UpdatePlaceholderVisibility();
 };

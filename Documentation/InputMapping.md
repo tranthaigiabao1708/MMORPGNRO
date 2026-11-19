@@ -17,6 +17,7 @@ All player controls use Unreal Engine 5's **Enhanced Input** subsystem (`IMC_Pla
 | `IA_Sprint` | `Digital (bool)` | `Left Ctrl` | **Ground:** Fast Run (`880 cm/s`).<br>**While Flying:** **`x2.0`** high-speed Flight Boost (`3150 cm/s` planar / `2550 cm/s` vertical). |
 | `IA_MeleeAttack` | `Digital (bool)` | `Left Mouse Button` | Executes basic melee & advances `Combo 1 → 2 → 3` inside valid combo window (Ground & Air). |
 | `IA_KiBlast` | `Digital (bool)` | `Right Mouse Button` | Fires `AIU_KiProjectile` from hand socket toward locked target or camera aim point (consumes `Ki`). |
-| `IA_Dodge` | `Digital (bool)` | `Q` *(or `Left Alt`)* | Directional evade burst on ground or in mid-air; cleanly exits back to `Idle` / `Flying`. |
-| `IA_LockOnToggle` | `Digital (bool)` | `Middle Mouse Button` / `Tab` | Acquires nearest valid living enemy in view or releases current lock-on. |
-| `IA_SwitchTarget` | `Axis1D (float)` | `E` (`+1`) / `R` (`-1`) | Cycles lock-on left/right among valid living enemies in range. |
+| `IA_Dodge` | `Digital (bool)` | `Q` | Directional evade burst on ground or in mid-air with brief invulnerability (`i-frames`); cleanly exits back to `Idle` / `Flying`. |
+| `IA_LockOn` | `Digital (bool)` | `Middle Mouse Button` / `C` | Acquires nearest valid living target in range or releases current lock-on. |
+| `IA_SwitchTarget` | `Digital (bool)` | `E` | Cycles lock-on among valid living targets in range. |
+| `IA_ToggleRotationMode` | `Digital (bool)` | `Tab` | Toggles ground rotation mode between `OrientToCamera` (default) and `OrientToMovement`. |

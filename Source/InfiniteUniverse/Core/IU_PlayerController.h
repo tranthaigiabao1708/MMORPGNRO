@@ -40,7 +40,12 @@ public:
 		UInputAction* InZoom,
 		UInputAction* InToggleRot,
 		UInputAction* InDescend = nullptr,
-		UInputAction* InFlightToggle = nullptr);
+		UInputAction* InFlightToggle = nullptr,
+		UInputAction* InMeleeAttack = nullptr,
+		UInputAction* InKiBlast = nullptr,
+		UInputAction* InDodge = nullptr,
+		UInputAction* InLockOn = nullptr,
+		UInputAction* InSwitchTarget = nullptr);
 
 	// ========================================================================
 	// Remappable Enhanced Input Assets
@@ -73,6 +78,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
 	TObjectPtr<UInputAction> ToggleRotationModeAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> MeleeAttackAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> KiBlastAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> DodgeAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> LockOnAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> SwitchTargetAction;
+
 	// ========================================================================
 	// Camera Pitch Clamp Limits
 	// ========================================================================
@@ -98,4 +118,9 @@ private:
 	void HandleSprintStarted(const FInputActionValue& Value);
 	void HandleSprintCompleted(const FInputActionValue& Value);
 	void HandleToggleRotationMode(const FInputActionValue& Value);
+	void HandleMeleeAttack(const FInputActionValue& Value);
+	void HandleKiBlast(const FInputActionValue& Value);
+	void HandleDodge(const FInputActionValue& Value);
+	void HandleLockOn(const FInputActionValue& Value);
+	void HandleSwitchTarget(const FInputActionValue& Value);
 };

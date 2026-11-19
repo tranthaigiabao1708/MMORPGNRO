@@ -24,7 +24,12 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	UInputAction* InZoom,
 	UInputAction* InToggleRot,
 	UInputAction* InDescend,
-	UInputAction* InFlightToggle)
+	UInputAction* InFlightToggle,
+	UInputAction* InMeleeAttack,
+	UInputAction* InKiBlast,
+	UInputAction* InDodge,
+	UInputAction* InLockOn,
+	UInputAction* InSwitchTarget)
 {
 	if (!TargetIMC)
 	{
@@ -95,6 +100,27 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	{
 		TargetIMC->MapKey(InFlightToggle, EKeys::F);
 	}
+	if (InMeleeAttack)
+	{
+		TargetIMC->MapKey(InMeleeAttack, EKeys::LeftMouseButton);
+	}
+	if (InKiBlast)
+	{
+		TargetIMC->MapKey(InKiBlast, EKeys::RightMouseButton);
+	}
+	if (InDodge)
+	{
+		TargetIMC->MapKey(InDodge, EKeys::Q);
+	}
+	if (InLockOn)
+	{
+		TargetIMC->MapKey(InLockOn, EKeys::MiddleMouseButton);
+		TargetIMC->MapKey(InLockOn, EKeys::C);
+	}
+	if (InSwitchTarget)
+	{
+		TargetIMC->MapKey(InSwitchTarget, EKeys::E);
+	}
 }
 
 void AIU_PlayerController::BeginPlay()
@@ -163,6 +189,26 @@ void AIU_PlayerController::SetupInputComponent()
 	{
 		ToggleRotationModeAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_ToggleRotationMode.IA_ToggleRotationMode"));
 	}
+	if (!MeleeAttackAction)
+	{
+		MeleeAttackAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_MeleeAttack.IA_MeleeAttack"));
+	}
+	if (!KiBlastAction)
+	{
+		KiBlastAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_KiBlast.IA_KiBlast"));
+	}
+	if (!DodgeAction)
+	{
+		DodgeAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Dodge.IA_Dodge"));
+	}
+	if (!LockOnAction)
+	{
+		LockOnAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_LockOn.IA_LockOn"));
+	}
+	if (!SwitchTargetAction)
+	{
+		SwitchTargetAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_SwitchTarget.IA_SwitchTarget"));
+	}
 
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
 	{
@@ -201,6 +247,26 @@ void AIU_PlayerController::SetupInputComponent()
 		if (ToggleRotationModeAction)
 		{
 			EnhancedInput->BindAction(ToggleRotationModeAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleToggleRotationMode);
+		}
+		if (MeleeAttackAction)
+		{
+			EnhancedInput->BindAction(MeleeAttackAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleMeleeAttack);
+		}
+		if (KiBlastAction)
+		{
+			EnhancedInput->BindAction(KiBlastAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleKiBlast);
+		}
+		if (DodgeAction)
+		{
+			EnhancedInput->BindAction(DodgeAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleDodge);
+		}
+		if (LockOnAction)
+		{
+			EnhancedInput->BindAction(LockOnAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleLockOn);
+		}
+		if (SwitchTargetAction)
+		{
+			EnhancedInput->BindAction(SwitchTargetAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleSwitchTarget);
 		}
 	}
 }
@@ -303,5 +369,46 @@ void AIU_PlayerController::HandleToggleRotationMode(const FInputActionValue& Val
 	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
 	{
 		IUChar->ToggleRotationModeInput();
+	}
+}
+
+void AIU_PlayerController::HandleMeleeAttack(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->MeleeAttackInput();
+	}
+}
+
+void AIU_PlayerController::HandleKiBlast(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->KiBlastInput();
+	}
+}
+
+void AIU_PlayerController::HandleDodge(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->DodgeInput();
+	}
+}
+
+void AIU_PlayerController::HandleLockOn(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->ToggleLockOnInput();
+	}
+}
+
+void AIU_PlayerController::HandleSwitchTarget(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		const float Axis = Value.Get<float>();
+		IUChar->SwitchTargetInput(FMath::IsNearlyZero(Axis) ? 1.0f : Axis);
 	}
 }
