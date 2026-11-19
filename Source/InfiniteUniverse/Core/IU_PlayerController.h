@@ -38,7 +38,9 @@ public:
 		UInputAction* InJump,
 		UInputAction* InSprint,
 		UInputAction* InZoom,
-		UInputAction* InToggleRot);
+		UInputAction* InToggleRot,
+		UInputAction* InDescend = nullptr,
+		UInputAction* InFlightToggle = nullptr);
 
 	// ========================================================================
 	// Remappable Enhanced Input Assets
@@ -55,6 +57,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
 	TObjectPtr<UInputAction> JumpAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> DescendAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
+	TObjectPtr<UInputAction> FlightToggleAction;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "IU|Input|Actions")
 	TObjectPtr<UInputAction> SprintAction;
@@ -79,10 +87,14 @@ private:
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;
 
 	void HandleMove(const FInputActionValue& Value);
+	void HandleMoveCompleted(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
 	void HandleCameraZoom(const FInputActionValue& Value);
 	void HandleJumpStarted(const FInputActionValue& Value);
 	void HandleJumpCompleted(const FInputActionValue& Value);
+	void HandleDescendStarted(const FInputActionValue& Value);
+	void HandleDescendCompleted(const FInputActionValue& Value);
+	void HandleFlightToggle(const FInputActionValue& Value);
 	void HandleSprintStarted(const FInputActionValue& Value);
 	void HandleSprintCompleted(const FInputActionValue& Value);
 	void HandleToggleRotationMode(const FInputActionValue& Value);

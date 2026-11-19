@@ -11,6 +11,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UStaticMeshComponent;
 class UIU_MovementComponent;
+class UIU_FlightComponent;
 
 /**
  * Playable Third-Person Character orchestrator (Milestone 1).
@@ -44,9 +45,15 @@ public:
 
 	void StartJumpInput();
 	void StopJumpInput();
+	void StartDescendInput();
+	void StopDescendInput();
+	void ToggleFlightInput();
 	void StartSprintInput();
 	void StopSprintInput();
 	void ToggleRotationModeInput();
+
+	/** Applies visual-only pitch/roll lean during 3D flight without tilting the collision capsule. */
+	void ApplyVisualFlightLean(const FRotator& LeanRotator);
 
 	// ========================================================================
 	// Accessors
@@ -54,6 +61,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|Character")
 	UIU_MovementComponent* GetIUMovementComponent() const { return IUMovementComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Flight")
+	UIU_FlightComponent* GetFlightComponent() const { return FlightComponent; }
 
 	UFUNCTION(BlueprintPure, Category = "IU|Camera")
 	USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -94,9 +104,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.1", ClampMax = "5.0"))
 	float LookSensitivity = 1.0f;
 
+	/** Default camera field-of-view in degrees. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "60.0", ClampMax = "120.0"))
+	float DefaultCameraFOV = 90.0f;
+
+	/** Expanded camera field-of-view during Flight Dash for high-speed sensation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "70.0", ClampMax = "130.0"))
+	float FlightDashCameraFOV = 102.0f;
+
+	/** Extra camera arm distance added smoothly while Flight Dashing (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Camera", meta = (ClampMin = "0.0", ClampMax = "300.0"))
+	float FlightDashArmLengthOffset = 65.0f;
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Movement")
 	TObjectPtr<UIU_MovementComponent> IUMovementComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Flight")
+	TObjectPtr<UIU_FlightComponent> FlightComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "IU|Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -112,6 +137,10 @@ protected:
 	TObjectPtr<UStaticMeshComponent> PlaceholderFacingVisor;
 
 private:
+	UFUNCTION()
+	void HandleFlightDashChanged(bool bIsDashing);
+
 	float DesiredCameraArmLength = 360.0f;
+	bool bFlightDashCameraActive = false;
 	void UpdatePlaceholderVisibility();
 };

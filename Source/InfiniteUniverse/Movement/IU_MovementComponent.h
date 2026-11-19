@@ -7,6 +7,8 @@
 #include "Data/IU_GameplayTypes.h"
 #include "IU_MovementComponent.generated.h"
 
+class UIU_FlightComponent;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FIU_OnMovementModeChangedSignature,
 	EIU_PlayerMovementMode, PreviousMode,
@@ -22,10 +24,16 @@ class INFINITEUNIVERSE_API UIU_MovementComponent : public UCharacterMovementComp
 	GENERATED_BODY()
 
 public:
+	static constexpr uint8 CMOVE_FreeFlight = 1;
+
 	UIU_MovementComponent();
 
 	virtual void BeginPlay() override;
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
+	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
+	virtual float GetMaxSpeed() const override;
+	virtual float GetMaxAcceleration() const override;
+	virtual float GetMaxBrakingDeceleration() const override;
 
 	// ========================================================================
 	// Tunable Ground Locomotion Parameters (Single Source of Truth)
@@ -91,10 +99,20 @@ public:
 	/** Explicit hook for M2 FlightComponent to transition high-level movement state. */
 	void SetIUMovementMode(EIU_PlayerMovementMode NewMode);
 
+	void EnterCustomFreeFlight();
+	void ExitCustomFreeFlight(bool bTouchdownOnFloor);
+	bool IsInCustomFreeFlight() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "IU|Movement|Events")
 	FIU_OnMovementModeChangedSignature OnIUMovementModeChanged;
 
 private:
+	void PhysCustom_FreeFlight(float DeltaTime, int32 Iterations);
+	bool TryAutoLandOnWalkableFloor();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_FlightComponent> CachedFlightComponent;
+
 	bool bIsSprinting = false;
 
 	UPROPERTY(VisibleInstanceOnly, Category = "IU|Movement|State")

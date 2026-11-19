@@ -22,7 +22,9 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	UInputAction* InJump,
 	UInputAction* InSprint,
 	UInputAction* InZoom,
-	UInputAction* InToggleRot)
+	UInputAction* InToggleRot,
+	UInputAction* InDescend,
+	UInputAction* InFlightToggle)
 {
 	if (!TargetIMC)
 	{
@@ -83,6 +85,14 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	{
 		TargetIMC->MapKey(InToggleRot, EKeys::Tab);
 	}
+	if (InDescend)
+	{
+		TargetIMC->MapKey(InDescend, EKeys::LeftControl);
+	}
+	if (InFlightToggle)
+	{
+		TargetIMC->MapKey(InFlightToggle, EKeys::F);
+	}
 }
 
 void AIU_PlayerController::BeginPlay()
@@ -131,6 +141,14 @@ void AIU_PlayerController::SetupInputComponent()
 	{
 		JumpAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
 	}
+	if (!DescendAction)
+	{
+		DescendAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Descend.IA_Descend"));
+	}
+	if (!FlightToggleAction)
+	{
+		FlightToggleAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_FlightToggle.IA_FlightToggle"));
+	}
 	if (!SprintAction)
 	{
 		SprintAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Sprint.IA_Sprint"));
@@ -149,6 +167,7 @@ void AIU_PlayerController::SetupInputComponent()
 		if (MoveAction)
 		{
 			EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AIU_PlayerController::HandleMove);
+			EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &AIU_PlayerController::HandleMoveCompleted);
 		}
 		if (LookAction)
 		{
@@ -162,6 +181,15 @@ void AIU_PlayerController::SetupInputComponent()
 		{
 			EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleJumpStarted);
 			EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &AIU_PlayerController::HandleJumpCompleted);
+		}
+		if (DescendAction)
+		{
+			EnhancedInput->BindAction(DescendAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleDescendStarted);
+			EnhancedInput->BindAction(DescendAction, ETriggerEvent::Completed, this, &AIU_PlayerController::HandleDescendCompleted);
+		}
+		if (FlightToggleAction)
+		{
+			EnhancedInput->BindAction(FlightToggleAction, ETriggerEvent::Started, this, &AIU_PlayerController::HandleFlightToggle);
 		}
 		if (SprintAction)
 		{
@@ -185,6 +213,14 @@ void AIU_PlayerController::HandleMove(const FInputActionValue& Value)
 	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
 	{
 		IUChar->ApplyMovementInput(Value.Get<FVector2D>());
+	}
+}
+
+void AIU_PlayerController::HandleMoveCompleted(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->ApplyMovementInput(FVector2D::ZeroVector);
 	}
 }
 
@@ -217,6 +253,30 @@ void AIU_PlayerController::HandleJumpCompleted(const FInputActionValue& Value)
 	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
 	{
 		IUChar->StopJumpInput();
+	}
+}
+
+void AIU_PlayerController::HandleDescendStarted(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->StartDescendInput();
+	}
+}
+
+void AIU_PlayerController::HandleDescendCompleted(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->StopDescendInput();
+	}
+}
+
+void AIU_PlayerController::HandleFlightToggle(const FInputActionValue& Value)
+{
+	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	{
+		IUChar->ToggleFlightInput();
 	}
 }
 

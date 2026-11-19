@@ -31,7 +31,23 @@
 
 ---
 
-## 2. Master 26-Point Core Prototype Acceptance Checklist (`5 / 26` — Updated Only on Runtime Proof)
+## 1C. Milestone 2 Task Status Ledger (`Free 3D Flight System`)
+
+| Task ID | Task Name | Status | Evidence / Test Proof |
+| :---: | :--- | :---: | :--- |
+| `P2-01` | Flight Mode (`Grounded / Jumping → Flying`) | `PASSED` | Hold `Space` (`0.28s`), airborne `Space`, or `F` toggle; zero teleport verified in `FlightTransitionsNoTeleport`. |
+| `P2-02` | Vertical Movement (`Space` Up / `LeftCtrl` Down) | `PASSED` | Configurable `VerticalFlightSpeed (850)` verified in `SixDOFHoverAndDash`. |
+| `P2-03` | Camera-Relative 3D Horizontal/Pitched Flight | `PASSED` | `WASD` flies along 3D `ControlRotation` (`+30°` pitch climb verified in `SixDOFHoverAndDash`). |
+| `P2-04` | Flight Rotation & Centered Camera Framing | `PASSED` | Smooth yaw alignment + visual pitch/roll lean without tilting collision capsule. |
+| `P2-05` | Stationary Mid-Air `Hover` (No Key Held) | `PASSED` | Smooth braking to `Velocity=0` & zero altitude drop verified in `SixDOFHoverAndDash`. |
+| `P2-06` | Flight Acceleration & Deceleration | `PASSED` | `FlightAcceleration (3400)` & `FlightDeceleration (3000)` verified in `PhysCustom_FreeFlight`. |
+| `P2-07` | Flight Dash (`LeftShift` Boost + Dynamic FOV) | `PASSED` | `FlightDashMultiplier (1.85x)` + smooth `FOV (90→102°)` verified in `SixDOFHoverAndDash`. |
+| `P2-08` | Landing (`Flying → Landing → Grounded`) & Collision | `PASSED` | `SafeMoveUpdatedComponent` + `SlideAlongSurface` + floor touchdown verified in `CollisionAndLanding`. |
+| `P2-09` | Flight Visual Lean & Animation State Hooks | `PASSED` | `IsFlying()`, `IsHovering()`, `IsFlightDashing()`, `GetVisualFlightLeanRotator()` active. |
+
+---
+
+## 2. Master 26-Point Core Prototype Acceptance Checklist (`9 / 26` — Updated Only on Runtime Proof)
 
 ### Project Foundation (3)
 - [x] **01.** UE5 C++ project (`InfiniteUniverse.uproject`) opens cleanly in Unreal Editor without errors (`0 error(s)` verified).
@@ -44,10 +60,10 @@
 - [x] **06.** Camera collision (`bDoCollisionTest=true`, `ECC_Camera`, `ProbeSize=12`) prevents clipping through walls, pillars, and ground surfaces.
 
 ### Free 3D Flight (4)
-- [ ] **07.** Smooth state transitions: `Grounded → Flying → Landing → Grounded` (including from mid-jump/fall).
-- [ ] **08.** Full 6-DOF flight movement (Forward, Backward, Left, Right relative to camera + Up `Space` / Down `Ctrl`).
-- [ ] **09.** Stationary mid-air `Hover` (no key held) and `Flight Dash` acceleration (`Shift`) work reliably.
-- [ ] **10.** Zero sudden character teleportation, zero camera snapping, and zero terrain penetration while flying.
+- [x] **07.** Smooth state transitions: `Grounded → Flying → Landing → Grounded` (`FlightTransitionsNoTeleport` & `CollisionAndLanding` PASSED).
+- [x] **08.** Full 6-DOF flight movement (Forward, Backward, Left, Right relative to 3D camera + Up `Space` / Down `Ctrl` — `SixDOFHoverAndDash` PASSED).
+- [x] **09.** Stationary mid-air `Hover` (no key held) and `Flight Dash` acceleration (`Shift`) work reliably (`SixDOFHoverAndDash` PASSED).
+- [x] **10.** Zero sudden character teleportation, zero camera snapping, and zero terrain penetration while flying (`FlightTransitionsNoTeleport` & `CollisionAndLanding` PASSED).
 
 ### Action Combat Prototype (5)
 - [ ] **11.** Target Lock-On acquires living enemies in range, cycles targets, assists camera framing, and auto-releases on target death/out-of-range.

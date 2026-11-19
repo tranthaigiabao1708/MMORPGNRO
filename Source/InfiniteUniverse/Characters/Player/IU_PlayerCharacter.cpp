@@ -2,6 +2,7 @@
 
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Movement/IU_MovementComponent.h"
+#include "Movement/IU_FlightComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -25,6 +26,7 @@ AIU_PlayerCharacter::AIU_PlayerCharacter(const FObjectInitializer& ObjectInitial
 	bUseControllerRotationRoll = false;
 
 	IUMovementComponent = Cast<UIU_MovementComponent>(GetCharacterMovement());
+	FlightComponent = CreateDefaultSubobject<UIU_FlightComponent>(TEXT("FlightComponent"));
 
 	// Position SkeletalMesh at bottom of capsule facing +X
 	GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
@@ -87,6 +89,14 @@ void AIU_PlayerCharacter::BeginPlay()
 		CameraBoom->TargetOffset = CameraTargetOffset;
 		CameraBoom->SocketOffset = CameraSocketOffset;
 	}
+	if (FollowCamera)
+	{
+		FollowCamera->SetFieldOfView(DefaultCameraFOV);
+	}
+	if (FlightComponent)
+	{
+		FlightComponent->OnFlightDashChanged.AddDynamic(this, &AIU_PlayerCharacter::HandleFlightDashChanged);
+	}
 
 	UpdatePlaceholderVisibility();
 }
@@ -95,21 +105,39 @@ void AIU_PlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	const float TargetArm = DesiredCameraArmLength + (bFlightDashCameraActive ? FlightDashArmLengthOffset : 0.0f);
+	const float TargetFOV = bFlightDashCameraActive ? FlightDashCameraFOV : DefaultCameraFOV;
+
+	bool bArmSettled = true;
+	bool bFOVSettled = true;
+
 	if (CameraBoom)
 	{
 		CameraBoom->TargetArmLength = FMath::FInterpTo(
 			CameraBoom->TargetArmLength,
-			DesiredCameraArmLength,
+			TargetArm,
 			DeltaTime,
 			CameraZoomInterpSpeed);
 
-		if (FMath::IsNearlyEqual(CameraBoom->TargetArmLength, DesiredCameraArmLength, 0.25f))
+		bArmSettled = FMath::IsNearlyEqual(CameraBoom->TargetArmLength, TargetArm, 0.25f);
+		if (bArmSettled)
 		{
-			CameraBoom->TargetArmLength = DesiredCameraArmLength;
-			SetActorTickEnabled(false);
+			CameraBoom->TargetArmLength = TargetArm;
 		}
 	}
-	else
+
+	if (FollowCamera)
+	{
+		const float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, 10.0f);
+		FollowCamera->SetFieldOfView(NewFOV);
+		bFOVSettled = FMath::IsNearlyEqual(NewFOV, TargetFOV, 0.15f);
+		if (bFOVSettled)
+		{
+			FollowCamera->SetFieldOfView(TargetFOV);
+		}
+	}
+
+	if (bArmSettled && bFOVSettled)
 	{
 		SetActorTickEnabled(false);
 	}
@@ -119,6 +147,10 @@ void AIU_PlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
+	if (FlightComponent)
+	{
+		FlightComponent->SetMoveAxisInput(FVector2D::ZeroVector);
+	}
 	if (IUMovementComponent)
 	{
 		IUMovementComponent->SetIUMovementMode(EIU_PlayerMovementMode::Grounded);
@@ -127,14 +159,22 @@ void AIU_PlayerCharacter::Landed(const FHitResult& Hit)
 
 void AIU_PlayerCharacter::ApplyMovementInput(const FVector2D& MoveAxis)
 {
+	if (FlightComponent)
+	{
+		FlightComponent->SetMoveAxisInput(MoveAxis);
+		if (FlightComponent->IsFlying())
+		{
+			return;
+		}
+	}
+
 	if (!Controller || MoveAxis.IsNearlyZero())
 	{
 		return;
 	}
 
-	// Derive horizontal basis directly from FollowCamera view direction (with Controller yaw fallback)
-	const float ViewYaw = FollowCamera ? FollowCamera->GetComponentRotation().Yaw : Controller->GetControlRotation().Yaw;
-	const FRotator YawRot(0.0f, ViewYaw, 0.0f);
+	// Use exact Controller Yaw (matches centered camera view with zero CameraLag delay)
+	const FRotator YawRot(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
 
 	const FVector ForwardDir = FRotationMatrix(YawRot).GetUnitAxis(EAxis::X);
 	const FVector RightDir = FRotationMatrix(YawRot).GetUnitAxis(EAxis::Y);
@@ -171,12 +211,50 @@ void AIU_PlayerCharacter::AdjustCameraZoom(float ZoomAxisValue)
 
 void AIU_PlayerCharacter::StartJumpInput()
 {
-	Jump();
+	if (FlightComponent)
+	{
+		FlightComponent->HandleJumpOrAscendStarted();
+	}
+	else
+	{
+		Jump();
+	}
 }
 
 void AIU_PlayerCharacter::StopJumpInput()
 {
-	StopJumping();
+	if (FlightComponent)
+	{
+		FlightComponent->HandleJumpOrAscendCompleted();
+	}
+	else
+	{
+		StopJumping();
+	}
+}
+
+void AIU_PlayerCharacter::StartDescendInput()
+{
+	if (FlightComponent)
+	{
+		FlightComponent->HandleDescendStarted();
+	}
+}
+
+void AIU_PlayerCharacter::StopDescendInput()
+{
+	if (FlightComponent)
+	{
+		FlightComponent->HandleDescendCompleted();
+	}
+}
+
+void AIU_PlayerCharacter::ToggleFlightInput()
+{
+	if (FlightComponent)
+	{
+		FlightComponent->ToggleFlightMode();
+	}
 }
 
 void AIU_PlayerCharacter::StartSprintInput()
@@ -184,6 +262,10 @@ void AIU_PlayerCharacter::StartSprintInput()
 	if (IUMovementComponent)
 	{
 		IUMovementComponent->SetSprinting(true);
+	}
+	if (FlightComponent)
+	{
+		FlightComponent->SetFlightDashActive(true);
 	}
 }
 
@@ -193,6 +275,29 @@ void AIU_PlayerCharacter::StopSprintInput()
 	{
 		IUMovementComponent->SetSprinting(false);
 	}
+	if (FlightComponent)
+	{
+		FlightComponent->SetFlightDashActive(false);
+	}
+}
+
+void AIU_PlayerCharacter::ApplyVisualFlightLean(const FRotator& LeanRotator)
+{
+	if (PlaceholderBodyMesh && PlaceholderBodyMesh->IsVisible())
+	{
+		PlaceholderBodyMesh->SetRelativeRotation(LeanRotator);
+	}
+	if (GetMesh() && GetMesh()->GetSkeletalMeshAsset() != nullptr)
+	{
+		// Base skeletal mesh faces +X via -90 Yaw offset
+		GetMesh()->SetRelativeRotation(FRotator(LeanRotator.Roll, -90.0f, -LeanRotator.Pitch));
+	}
+}
+
+void AIU_PlayerCharacter::HandleFlightDashChanged(bool bIsDashing)
+{
+	bFlightDashCameraActive = bIsDashing;
+	SetActorTickEnabled(true);
 }
 
 void AIU_PlayerCharacter::ToggleRotationModeInput()
