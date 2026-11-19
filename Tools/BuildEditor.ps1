@@ -20,7 +20,7 @@ if (Test-Path "D:\") {
     if (-not (Test-Path $ddcDir)) {
         New-Item -ItemType Directory -Path $ddcDir | Out-Null
     }
-    $env:UE-LocalDataCachePath = $ddcDir
+    ${env:UE-LocalDataCachePath} = $ddcDir
     Write-Host "[INFO] UE-LocalDataCachePath set to $ddcDir" -ForegroundColor Cyan
 }
 

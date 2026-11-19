@@ -8,21 +8,21 @@
 
 | Task ID | Task Name | Status | Evidence / Blocker Note |
 | :---: | :--- | :---: | :--- |
-| `P0-01` | Inspect UE5, compiler, SDK & build environment | `PASSED` | Audited hardware/toolchains in `EnvironmentReport.md` + `Tools/CheckEnvironment.ps1`. |
-| `P0-02` | Create C++ UE5 project (`InfiniteUniverse`) | `BLOCKED` | `.uproject`, `Target.cs`, `Build.cs`, `InfiniteUniverse.h/.cpp` scaffolded; **awaiting UE5 + MSVC v143 + Win11 SDK install** to compile via UBT. |
-| `P0-03` | Configure Enhanced Input subsystem | `IN_PROGRESS` | `DefaultInput.ini` & `InfiniteUniverse.uproject` configured; C++ binding awaits `P0-02` compile & `M1`. |
-| `P0-04` | Initialize Git & Git LFS repository | `PASSED` | Local Git repo + Git LFS rules (`.gitattributes`, `.gitignore`) initialized and verified. |
+| `P0-01` | Inspect UE5, compiler, SDK & build environment | `PASSED` | Verified UE `5.5` (`D:\Epic Games\UE_5.5`), MSVC `14.51.36231`, WinSDK `10.0.26100.0`, `C:` `49.5 GB` free, `D:` `160.9 GB` free. |
+| `P0-02` | Create C++ UE5 project (`InfiniteUniverse`) | `PASSED` | Compiled `UnrealEditor-InfiniteUniverse.dll` (`Win64 Development`) with `ExitCode 0`. |
+| `P0-03` | Configure Enhanced Input subsystem | `PASSED` | `DefaultInput.ini` & `EnhancedInput` plugin active and loaded cleanly in UE `5.5` (`0 errors`). |
+| `P0-04` | Initialize Git & Git LFS repository | `PASSED` | Local Git repo + Git LFS tracking verified (`M_Prototype.umap` tracked via LFS). |
 | `P0-05` | Establish coding & asset standards | `PASSED` | `CodingStandards.md`, `Architecture.md`, `AssetPipeline.md` + Blender `5.2.3` validator tested live. |
-| `P0-06` | Create default prototype startup map | `BLOCKED` | Awaits Unreal Editor installation (`P0-02` unblock) to save binary `Content/Maps/Prototype/M_Prototype.umap`. |
+| `P0-06` | Create default prototype startup map | `PASSED` | Generated `Content/Maps/Prototype/M_Prototype.umap` (`45.6 KB`) via `UnrealEditor-Cmd.exe` (`0 errors`). |
 
 ---
 
-## 2. Master 26-Point Core Prototype Acceptance Checklist (`0 / 26` — Updated Only on Runtime Proof)
+## 2. Master 26-Point Core Prototype Acceptance Checklist (`2 / 26` — Updated Only on Runtime Proof)
 
 ### Project Foundation (3)
-- [ ] **01.** UE5 C++ project (`InfiniteUniverse.uproject`) opens cleanly in Unreal Editor without errors.
-- [ ] **02.** `Development Editor` and `Development` game builds succeed cleanly via UBT.
-- [ ] **03.** Git + Git LFS repository and complete `Documentation/` suite are active and up to date.
+- [x] **01.** UE5 C++ project (`InfiniteUniverse.uproject`) opens cleanly in Unreal Editor without errors (`0 error(s)` verified).
+- [ ] **02.** `Development Editor` *(PASSED)* and `Development` game builds *(Pending M7)* succeed cleanly via UBT.
+- [x] **03.** Git + Git LFS repository and complete `Documentation/` suite are active and up to date.
 
 ### Player Movement (3)
 - [ ] **04.** Walk, Run (`Shift`), and Jump (`Space` tap) + Landing operate smoothly without jitter.

@@ -85,11 +85,11 @@ if (Test-Path $vswhere) {
     $vcPath = & $vswhere -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1
 }
 if ($vcPath) {
-    $v143Tools = Get-ChildItem (Join-Path $vcPath "VC\Tools\MSVC") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "14.3*" -or $_.Name -like "14.4*" }
-    if ($v143Tools) {
-        Write-Host ("[PASS] MSVC C++ x64 Toolset found at {0} ({1})" -f $vcPath, ($v143Tools.Name -join ", ")) -ForegroundColor Green
+    $vTools = Get-ChildItem (Join-Path $vcPath "VC\Tools\MSVC") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "^14\.[345]" }
+    if ($vTools) {
+        Write-Host ("[PASS] MSVC C++ x64 Toolset found at {0} ({1})" -f $vcPath, ($vTools.Name -join ", ")) -ForegroundColor Green
     } else {
-        Write-Host ("[WARN] VS C++ installed at {0}, but MSVC v143 (14.38+) not detected. Check Individual Components in VS Installer." -f $vcPath) -ForegroundColor Yellow
+        Write-Host ("[WARN] VS C++ installed at {0}, but compatible MSVC 14.x not detected." -f $vcPath) -ForegroundColor Yellow
         $AllPassed = $false
     }
 } else {
