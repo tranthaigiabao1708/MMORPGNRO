@@ -13,6 +13,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FIU_OnCharacterLevelUpSignature, in
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FIU_OnCharacterEXPChangedSignature, int64, CurrentEXP, int64, NextLevelEXP, int32, CurrentLevel);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FIU_OnCharacterPotentialChangedSignature, int64, PotentialPoints, int64, NextHPCost, int64, NextKiCost, int64, NextAtkCost);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FIU_OnCharacterEconomyChangedSignature, int64, StandardCoin, int32, ElixirCount, int32, CrimsonOreCount, int32, EquippedCount);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FIU_OnCharacterSocialChangedSignature, const FString&, GuildTag, const FString&, GuildName, const FString&, PartyID);
 
 /**
  * Replicated PlayerState for Step 2 Multiplayer session tracking & Step 3 NRO-style Level/EXP + Potential Stat Progression.
@@ -90,6 +91,41 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Economy")
 	int32 GetEquippedItemCount() const { return EquippedItemCount; }
 
+	// ========================================================================
+	// Step 5 Replicated Guild, Party & Overhead Speech Bubble Accessors
+	// ========================================================================
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetGuildID() const { return GuildID; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetGuildName() const { return GuildName; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetGuildTag() const { return GuildTag; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetGuildRole() const { return GuildRole; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetPartyID() const { return PartyID; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	bool IsPartyLeader() const { return bIsPartyLeader; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetOverheadChatBubbleText() const { return OverheadChatBubbleText; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	FString GetOverheadChatChannel() const { return OverheadChatChannel; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Social")
+	float GetOverheadChatExpireServerTime() const { return OverheadChatExpireServerTime; }
+
+	/** Computes NRO per-hit Party Synergy multiplier (1->1.00, 2->1.15, 3->1.25, 4->1.35, >=5->1.45). */
+	UFUNCTION(BlueprintPure, Category = "IU|Party")
+	static float ComputePartySynergyMultiplier(int32 NearbyPartyMembers);
+
 	UFUNCTION(BlueprintPure, Category = "IU|Backend")
 	int64 GetActiveFencingEpoch() const { return ActiveFencingEpoch; }
 
@@ -116,14 +152,23 @@ public:
 	/** Server-only: updates PotentialPoints, upgrade counts, and next costs after AllocateCharacterPotential succeeds. */
 	void ApplyAuthoritativePotentialUpgrade(const FIU_BackendCharacterSummary& Summary);
 
-	/** Standalone/PIE Offline helper: awards 1.5x OutgoingDamage to BOTH Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng on every valid hit. */
-	void AwardOfflineHitProgress(float OutgoingDamage);
+	/** Standalone/PIE Offline helper: awards 1.5x OutgoingDamage * PartySynergy to BOTH Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng on every valid hit. */
+	void AwardOfflineHitProgress(float OutgoingDamage, int32 NearbyPartyMembers = 1);
 
 	/** Standalone/PIE Offline helper: spends local Potential Points to upgrade HP/Ki/AttackPower on OwningPawn. */
 	bool TryOfflineAllocatePotential(EIU_PotentialStatType StatType, APawn* TargetPawn);
 
 	/** Server-only: updates replicated economy & inventory summary counts after authoritative Go Backend mutations. */
 	void ApplyAuthoritativeEconomySummary(int64 InStandardCoin, int32 InElixirCount, int32 InCrimsonOreCount, int32 InEquippedCount);
+
+	/** Server-only: updates replicated Guild identity ([TAG] Nameplate + GuildRole). */
+	void ApplyAuthoritativeGuildIdentity(const FString& InGuildID, const FString& InGuildName, const FString& InGuildTag, const FString& InGuildRole);
+
+	/** Server-only: updates replicated Party identity (PartyID + Leader flag) for 120m Synergy & Tactical Pings. */
+	void ApplyAuthoritativePartyIdentity(const FString& InPartyID, bool bInLeader);
+
+	/** Server-only: sets a 3D Overhead NRO Speech Bubble visible to nearby clients for DurationSeconds (default 4.5s). */
+	void SetOverheadSpeechBubble(const FString& CleanText, const FString& InChannel, float DurationSeconds = 4.5f);
 
 	/** Standalone/PIE Offline helper: consumes 1 offline Elixir (+150 HP & +150 Ki) and awards offline Vang on mob kills. */
 	bool TryOfflineUseElixir(APawn* TargetPawn);
@@ -148,6 +193,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "IU|Economy|Events")
 	FIU_OnCharacterEconomyChangedSignature OnCharacterEconomyChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "IU|Social|Events")
+	FIU_OnCharacterSocialChangedSignature OnCharacterSocialChanged;
+
 protected:
 	UFUNCTION()
 	void OnRep_CharacterLevel(int32 OldLevel);
@@ -163,6 +211,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_EconomyState();
+
+	UFUNCTION()
+	void OnRep_SocialIdentity();
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|PlayerState")
 	int32 EnemyKills = 0;
@@ -221,11 +272,40 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Economy")
 	int32 EquippedItemCount = 0;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	FString GuildID;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	FString GuildName;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	FString GuildTag;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	FString GuildRole;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	FString PartyID;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_SocialIdentity, Category = "IU|Social")
+	bool bIsPartyLeader = false;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Social")
+	FString OverheadChatBubbleText;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Social")
+	FString OverheadChatChannel;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Social")
+	float OverheadChatExpireServerTime = 0.0f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Backend")
+	FString PersistedCharacterUUID;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Backend")
 	int64 ActiveFencingEpoch = 0;
 
 private:
-	FString PersistedCharacterUUID;
 	bool bLeaseRevokedDoNotSave = false;
 	bool bHasReceivedInitialLevel = false;
 

@@ -17,6 +17,7 @@ class UHorizontalBox;
 class UScrollBox;
 class UUniformGridPanel;
 class UWidgetSwitcher;
+class UEditableTextBox;
 class UIU_AttributeComponent;
 class AIU_PlayerState;
 class UIU_InventoryEquipmentWidget;
@@ -41,7 +42,10 @@ enum class EIU_InvRowAction : uint8
 	UseConsumable,
 	Enhance,
 	ToggleLock,
-	SellOne
+	SellOne,
+	JoinGuildByID,
+	PromoteGuildVice,
+	KickGuildMember
 };
 
 /**
@@ -100,6 +104,9 @@ public:
 	/** Updates UI immediately from a newly received authoritative FIU_InventorySnapshot. */
 	void ApplyInventorySnapshot(const FIU_InventorySnapshot& Snapshot);
 
+	/** Updates Tab [Bang Hoi] immediately from a newly received authoritative FIU_GuildSnapshot. */
+	void ApplyGuildSnapshot(const FIU_GuildSnapshot& Snapshot);
+
 	/** Displays a feedback status line in the bottom footer. */
 	void SetFeedbackMessage(const FString& Message, bool bIsError = false);
 
@@ -128,6 +135,19 @@ private:
 	void HandleUpgradeKiClicked();
 	UFUNCTION()
 	void HandleUpgradeAtkClicked();
+
+	UFUNCTION()
+	void HandleCreateGuildClicked();
+	UFUNCTION()
+	void HandleRefreshGuildClicked();
+	UFUNCTION()
+	void HandleSaveGuildMOTDClicked();
+	UFUNCTION()
+	void HandleDonate50GuildClicked();
+	UFUNCTION()
+	void HandleDonate150GuildClicked();
+	UFUNCTION()
+	void HandleLeaveGuildClicked();
 
 	UFUNCTION()
 	void HandleFuncToggleDebugClicked();
@@ -159,6 +179,7 @@ private:
 	void UpdateAllReadouts();
 	void RebuildPaperdollAndBagGrid();
 	void RebuildSelectedInspectorBar();
+	void RebuildGuildPaneView();
 
 	// Header & Tab Bar Widgets
 	UPROPERTY(Transient)
@@ -225,6 +246,37 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> UpgradeAtkButton;
 
+	// Pane 3: Bang Hoi (Step 5 PostgreSQL 18 Guild Management)
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetSwitcher> GuildModeSwitcher;
+	UPROPERTY(Transient)
+	TObjectPtr<UEditableTextBox> GuildCreateNameInput;
+	UPROPERTY(Transient)
+	TObjectPtr<UEditableTextBox> GuildCreateTagInput;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildCreateButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildRefreshDirButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> GuildDirectoryListBox;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> GuildHeaderSummaryText;
+	UPROPERTY(Transient)
+	TObjectPtr<UEditableTextBox> GuildMOTDInputBox;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildSaveMOTDButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildDonate50Button;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildDonate150Button;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildRefreshRosterButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> GuildLeaveButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> GuildMembersListBox;
+
 	// Pane 4: Chuc Nang Buttons
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> FuncDebugButton;
@@ -267,6 +319,8 @@ private:
 
 	FIU_InventorySnapshot DisplayedSnapshot;
 	bool bHasSnapshotData = false;
+	FIU_GuildSnapshot DisplayedGuildSnapshot;
+	bool bHasGuildSnapshotData = false;
 
 	TWeakObjectPtr<UIU_AttributeComponent> BoundAttr;
 	TWeakObjectPtr<AIU_PlayerState> BoundPS;

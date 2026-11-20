@@ -105,6 +105,18 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	int32 Deaths = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	FString GuildID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	FString GuildName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	FString GuildTag;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	FString GuildRole;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int64 FencingEpoch = 0;
 
 	// Populated on /internal/v1/character/exp & /internal/v1/character/potential responses
@@ -119,6 +131,9 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int64 PotentialGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	float PartySynergyMult = 1.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int64 PotentialSpent = 0;
@@ -286,6 +301,328 @@ struct INFINITEUNIVERSE_API FIU_MobLootDropSummary
 	TArray<FString> DroppedItemLabels;
 };
 
+// ============================================================================
+// Step 5 Authoritative Party, Guild, Multi-Channel Chat & P2P Trade Snapshots
+// ============================================================================
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_PartyMemberView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString CharacterID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString CharacterName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	int32 Level = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	float HP = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	float MaxHP = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	float Energy = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	float MaxEnergy = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	bool bIsLeader = false;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_PartyInviteView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString InviteID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString InviterCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString InviterName;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_PartySnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	bool bInParty = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString PartyID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString LeaderCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	FString ActionMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	TArray<FIU_PartyMemberView> Members;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Party")
+	TArray<FIU_PartyInviteView> PendingInvites;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_GuildMemberView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString CharacterID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString CharacterName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 Level = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString MemberRole = TEXT("MEMBER");
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 WeeklyContribution = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 TotalContribution = 0;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_GuildDirectoryEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildTag;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString LeaderName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 GuildLevel = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 MemberCount = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 MemberCap = 30;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString MOTD;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_GuildSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	bool bInGuild = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString GuildTag;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString LeaderCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString LeaderName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 GuildLevel = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 GuildExp = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 MemberCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int32 MemberCap = 30;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 TreasuryStandardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString MOTD;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString MyRole;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 MyWeeklyContribution = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 MyTotalContribution = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	int64 StandardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	FString ActionMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	TArray<FIU_GuildMemberView> Members;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Guild")
+	TArray<FIU_GuildDirectoryEntry> Directory;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_ChatMessageView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	int64 Seq = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString Channel = TEXT("LOCAL");
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString SenderCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString SenderName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString SenderGuildTag;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString PartyID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString GuildID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString TargetCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString TargetName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FVector SenderPosition = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	FString Content;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Social")
+	bool bShowBubble = true;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_TradeItemView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString InstanceID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString ItemDefID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString Rarity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int32 StackCount = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int32 EnhanceLevel = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString StatSummaryText;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_TradeSessionSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	bool bHasActiveTrade = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString TradeID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString State;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString InitiatorCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString InitiatorName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString RecipientCharID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString RecipientName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int64 InitiatorCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int64 RecipientCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int64 TaxCoinPreview = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	bool bInitiatorLocked = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	bool bRecipientLocked = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	bool bInitiatorConfirmed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	bool bRecipientConfirmed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int64 RemainingInspectMs = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	int32 OfferVersion = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	FString ActionMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	TArray<FIU_TradeItemView> InitiatorItems;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Trade")
+	TArray<FIU_TradeItemView> RecipientItems;
+};
+
 /**
  * Payload sent from UE5 Dedicated Server to Go Backend for fenced periodic/logout saves.
  */
@@ -337,6 +674,11 @@ public:
 	static bool ParseCharacterSummaryFromJson(const FString& JsonString, FIU_BackendCharacterSummary& OutSummary);
 	static bool ParseInventorySnapshotFromJson(const FString& JsonString, FIU_InventorySnapshot& OutSnapshot);
 	static bool ParseMobLootResponseFromJson(const FString& JsonString, FIU_MobLootDropSummary& OutLoot, FIU_InventorySnapshot& OutSnapshot);
+	static bool ParsePartySnapshotFromJson(const FString& JsonString, FIU_PartySnapshot& OutSnapshot);
+	static bool ParseGuildSnapshotFromJson(const FString& JsonString, FIU_GuildSnapshot& OutSnapshot);
+	static bool ParseTradeSnapshotFromJson(const FString& JsonString, FIU_TradeSessionSnapshot& OutSnapshot);
+	static bool ParseTradeConfirmResponseFromJson(const FString& JsonString, FIU_TradeSessionSnapshot& OutTrade, FIU_InventorySnapshot& OutInv, bool& bOutHasInv);
+	static bool ParseChatMessageFromJson(const FString& JsonString, FIU_ChatMessageView& OutMessage);
 	static FString SerializeSavePayloadToJson(const FIU_CharacterSavePayload& Payload);
 
 	// ========================================================================
@@ -438,7 +780,8 @@ public:
 		float OutgoingDamage,
 		bool bKilledTarget,
 		const FString& IdempotencyKey,
-		TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback);
+		TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback,
+		int32 NearbyPartyMembers = 1);
 
 	void AllocateCharacterPotential(
 		const FString& CharacterID,
@@ -506,6 +849,161 @@ public:
 		const FString& SourceEntityID,
 		const FString& IdempotencyKey,
 		TFunction<void(bool bSuccess, const FIU_MobLootDropSummary& LootResult, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	// ========================================================================
+	// Step 5 Authoritative Party, Guild, Multi-Channel Chat & P2P Trade Bridge
+	// ========================================================================
+
+	void FetchPartyState(
+		const FString& CharacterID,
+		const FString& CharacterName,
+		int64 FencingEpoch,
+		int32 Level,
+		float HP,
+		float MaxHP,
+		float Energy,
+		float MaxEnergy,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void InviteToParty(
+		const FString& CharacterID,
+		const FString& CharacterName,
+		int32 Level,
+		int64 FencingEpoch,
+		const FString& TargetCharID,
+		const FString& TargetName,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void RespondPartyInvite(
+		const FString& CharacterID,
+		const FString& CharacterName,
+		int32 Level,
+		int64 FencingEpoch,
+		const FString& InviteID,
+		bool bAccept,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void LeaveParty(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void KickPartyMember(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TargetCharID,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void PromotePartyLeader(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TargetCharID,
+		TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void FetchGuildSnapshot(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void CreateGuild(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& GuildName,
+		const FString& GuildTag,
+		const FString& MOTD,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void JoinGuild(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& GuildID,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void LeaveGuild(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void KickGuildMember(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TargetCharID,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void SetGuildMemberRole(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TargetCharID,
+		const FString& NewRole,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void UpdateGuildMOTD(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& NewMOTD,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void DonateGuildCoins(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		int64 AmountCoin,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void FetchTradeSession(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void RequestPlayerTrade(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& RecipientCharID,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void RespondPlayerTrade(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TradeID,
+		bool bAccept,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void UpdateTradeOffer(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TradeID,
+		int64 CoinOffer,
+		const TArray<FString>& ItemInstanceIDs,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void LockTradeOffer(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TradeID,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void ConfirmPlayerTrade(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TradeID,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& TradeSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback);
+
+	void CancelPlayerTrade(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& TradeID,
+		TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void SendSocialChatMessage(
+		const FString& CharacterID,
+		const FString& CharacterName,
+		int64 FencingEpoch,
+		const FString& Channel,
+		const FString& Content,
+		const FVector& SenderPos,
+		const FString& TargetName,
+		TFunction<void(bool bSuccess, const FIU_ChatMessageView& SentMsg, const FString& ErrorMessage)> Callback);
 
 private:
 	void SendJsonRequest(

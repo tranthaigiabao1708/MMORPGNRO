@@ -312,10 +312,20 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("deaths"), NumVal)) { OutSummary.Deaths = static_cast<int32>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("fencing_epoch"), NumVal)) { OutSummary.FencingEpoch = static_cast<int64>(NumVal); }
 
+	RootObj->TryGetStringField(TEXT("guild_id"), OutSummary.GuildID);
+	RootObj->TryGetStringField(TEXT("guild_tag"), OutSummary.GuildTag);
+	RootObj->TryGetStringField(TEXT("guild_role"), OutSummary.GuildRole);
+	FString RawGuildName;
+	if (RootObj->TryGetStringField(TEXT("guild_name"), RawGuildName))
+	{
+		OutSummary.GuildName = SanitizeVietnameseForSlateASCII(RawGuildName);
+	}
+
 	RootObj->TryGetBoolField(TEXT("leveled_up"), OutSummary.bLeveledUp);
 	if (RootObj->TryGetNumberField(TEXT("old_level"), NumVal)) { OutSummary.OldLevel = static_cast<int32>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("exp_granted"), NumVal)) { OutSummary.ExpGranted = static_cast<int64>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("potential_granted"), NumVal)) { OutSummary.PotentialGranted = static_cast<int64>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("party_synergy_mult"), NumVal)) { OutSummary.PartySynergyMult = FMath::Max(1.0f, static_cast<float>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("potential_spent"), NumVal)) { OutSummary.PotentialSpent = static_cast<int64>(NumVal); }
 
 	return !OutSummary.CharacterID.IsEmpty();
@@ -875,7 +885,8 @@ void UIU_BackendSubsystem::GrantCharacterEXP(
 	float OutgoingDamage,
 	bool bKilledTarget,
 	const FString& IdempotencyKey,
-	TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback)
+	TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback,
+	int32 NearbyPartyMembers)
 {
 	const int64 ComputedReward = FMath::Max<int64>(1, FMath::RoundToInt64(static_cast<double>(OutgoingDamage) * 1.5));
 	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -885,6 +896,7 @@ void UIU_BackendSubsystem::GrantCharacterEXP(
 	Obj->SetNumberField(TEXT("outgoing_damage"), static_cast<double>(OutgoingDamage));
 	Obj->SetNumberField(TEXT("exp_gain"), static_cast<double>(ComputedReward));
 	Obj->SetNumberField(TEXT("potential_gain"), static_cast<double>(ComputedReward));
+	Obj->SetNumberField(TEXT("nearby_party_members"), FMath::Clamp(NearbyPartyMembers, 1, 5));
 	Obj->SetBoolField(TEXT("killed_target"), bKilledTarget);
 	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
 
@@ -1530,5 +1542,973 @@ void UIU_BackendSubsystem::RollMonsterLoot(
 				return;
 			}
 			if (Callback) { Callback(false, LootRes, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+// ============================================================================
+// Step 5 JSON Parsers & HMAC Bridge Implementations (Party / Guild / Trade / Chat)
+// ============================================================================
+
+bool UIU_BackendSubsystem::ParsePartySnapshotFromJson(const FString& JsonString, FIU_PartySnapshot& OutSnapshot)
+{
+	OutSnapshot = FIU_PartySnapshot();
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+
+	RootObj->TryGetBoolField(TEXT("in_party"), OutSnapshot.bInParty);
+	RootObj->TryGetStringField(TEXT("party_id"), OutSnapshot.PartyID);
+	RootObj->TryGetStringField(TEXT("leader_char_id"), OutSnapshot.LeaderCharID);
+	FString RawMsg;
+	if (RootObj->TryGetStringField(TEXT("action_message"), RawMsg))
+	{
+		OutSnapshot.ActionMessage = SanitizeVietnameseForSlateASCII(RawMsg);
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* MemArr = nullptr;
+	if (RootObj->TryGetArrayField(TEXT("members"), MemArr) && MemArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *MemArr)
+		{
+			if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> MObj = V->AsObject();
+				FIU_PartyMemberView MV;
+				MObj->TryGetStringField(TEXT("character_id"), MV.CharacterID);
+				FString RawN;
+				MObj->TryGetStringField(TEXT("character_name"), RawN);
+				MV.CharacterName = SanitizeVietnameseForSlateASCII(RawN);
+				double Num = 0.0;
+				if (MObj->TryGetNumberField(TEXT("level"), Num)) { MV.Level = FMath::Max(1, static_cast<int32>(Num)); }
+				if (MObj->TryGetNumberField(TEXT("hp"), Num)) { MV.HP = static_cast<float>(Num); }
+				if (MObj->TryGetNumberField(TEXT("max_hp"), Num)) { MV.MaxHP = FMath::Max(1.0f, static_cast<float>(Num)); }
+				if (MObj->TryGetNumberField(TEXT("energy"), Num)) { MV.Energy = static_cast<float>(Num); }
+				if (MObj->TryGetNumberField(TEXT("max_energy"), Num)) { MV.MaxEnergy = FMath::Max(1.0f, static_cast<float>(Num)); }
+				MObj->TryGetBoolField(TEXT("is_leader"), MV.bIsLeader);
+				OutSnapshot.Members.Add(MoveTemp(MV));
+			}
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* InvArr = nullptr;
+	if (RootObj->TryGetArrayField(TEXT("pending_invites"), InvArr) && InvArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *InvArr)
+		{
+			if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> IObj = V->AsObject();
+				FIU_PartyInviteView IV;
+				IObj->TryGetStringField(TEXT("invite_id"), IV.InviteID);
+				IObj->TryGetStringField(TEXT("inviter_char_id"), IV.InviterCharID);
+				FString RawN;
+				IObj->TryGetStringField(TEXT("inviter_name"), RawN);
+				IV.InviterName = SanitizeVietnameseForSlateASCII(RawN);
+				OutSnapshot.PendingInvites.Add(MoveTemp(IV));
+			}
+		}
+	}
+	return true;
+}
+
+bool UIU_BackendSubsystem::ParseGuildSnapshotFromJson(const FString& JsonString, FIU_GuildSnapshot& OutSnapshot)
+{
+	OutSnapshot = FIU_GuildSnapshot();
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+
+	RootObj->TryGetBoolField(TEXT("in_guild"), OutSnapshot.bInGuild);
+	double Num = 0.0;
+	if (RootObj->TryGetNumberField(TEXT("standard_coin"), Num))
+	{
+		OutSnapshot.StandardCoin = FMath::Max<int64>(0, static_cast<int64>(Num));
+	}
+	FString RawMsg;
+	if (RootObj->TryGetStringField(TEXT("action_message"), RawMsg))
+	{
+		OutSnapshot.ActionMessage = SanitizeVietnameseForSlateASCII(RawMsg);
+	}
+
+	const TSharedPtr<FJsonObject>* GuildObjPtr = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("guild"), GuildObjPtr) && GuildObjPtr && GuildObjPtr->IsValid())
+	{
+		const TSharedPtr<FJsonObject>& GObj = *GuildObjPtr;
+		GObj->TryGetStringField(TEXT("guild_id"), OutSnapshot.GuildID);
+		FString RawGName, RawLeader, RawMOTD;
+		GObj->TryGetStringField(TEXT("guild_name"), RawGName);
+		GObj->TryGetStringField(TEXT("guild_tag"), OutSnapshot.GuildTag);
+		GObj->TryGetStringField(TEXT("leader_char_id"), OutSnapshot.LeaderCharID);
+		GObj->TryGetStringField(TEXT("leader_name"), RawLeader);
+		GObj->TryGetStringField(TEXT("motd_announcement"), RawMOTD);
+		GObj->TryGetStringField(TEXT("my_role"), OutSnapshot.MyRole);
+		OutSnapshot.GuildName = SanitizeVietnameseForSlateASCII(RawGName);
+		OutSnapshot.LeaderName = SanitizeVietnameseForSlateASCII(RawLeader);
+		OutSnapshot.MOTD = SanitizeVietnameseForSlateASCII(RawMOTD);
+
+		if (GObj->TryGetNumberField(TEXT("guild_level"), Num)) { OutSnapshot.GuildLevel = FMath::Max(1, static_cast<int32>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("guild_exp"), Num)) { OutSnapshot.GuildExp = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("member_count"), Num)) { OutSnapshot.MemberCount = FMath::Max(0, static_cast<int32>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("member_cap"), Num)) { OutSnapshot.MemberCap = FMath::Max(1, static_cast<int32>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("treasury_standard_coin"), Num)) { OutSnapshot.TreasuryStandardCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("my_weekly_contribution"), Num)) { OutSnapshot.MyWeeklyContribution = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (GObj->TryGetNumberField(TEXT("my_total_contribution"), Num)) { OutSnapshot.MyTotalContribution = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+
+		const TArray<TSharedPtr<FJsonValue>>* MemArr = nullptr;
+		if (GObj->TryGetArrayField(TEXT("members"), MemArr) && MemArr)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *MemArr)
+			{
+				if (V.IsValid() && V->Type == EJson::Object)
+				{
+					const TSharedPtr<FJsonObject> MObj = V->AsObject();
+					FIU_GuildMemberView MV;
+					MObj->TryGetStringField(TEXT("character_id"), MV.CharacterID);
+					FString RawN;
+					MObj->TryGetStringField(TEXT("character_name"), RawN);
+					MV.CharacterName = SanitizeVietnameseForSlateASCII(RawN);
+					MObj->TryGetStringField(TEXT("member_role"), MV.MemberRole);
+					if (MObj->TryGetNumberField(TEXT("level"), Num)) { MV.Level = FMath::Max(1, static_cast<int32>(Num)); }
+					if (MObj->TryGetNumberField(TEXT("weekly_contribution"), Num)) { MV.WeeklyContribution = static_cast<int64>(Num); }
+					if (MObj->TryGetNumberField(TEXT("total_contribution"), Num)) { MV.TotalContribution = static_cast<int64>(Num); }
+					OutSnapshot.Members.Add(MoveTemp(MV));
+				}
+			}
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* DirArr = nullptr;
+	if (RootObj->TryGetArrayField(TEXT("directory"), DirArr) && DirArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *DirArr)
+		{
+			if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> DObj = V->AsObject();
+				FIU_GuildDirectoryEntry DE;
+				DObj->TryGetStringField(TEXT("guild_id"), DE.GuildID);
+				FString RawGN, RawLN, RawM;
+				DObj->TryGetStringField(TEXT("guild_name"), RawGN);
+				DObj->TryGetStringField(TEXT("guild_tag"), DE.GuildTag);
+				DObj->TryGetStringField(TEXT("leader_name"), RawLN);
+				DObj->TryGetStringField(TEXT("motd_announcement"), RawM);
+				DE.GuildName = SanitizeVietnameseForSlateASCII(RawGN);
+				DE.LeaderName = SanitizeVietnameseForSlateASCII(RawLN);
+				DE.MOTD = SanitizeVietnameseForSlateASCII(RawM);
+				if (DObj->TryGetNumberField(TEXT("guild_level"), Num)) { DE.GuildLevel = FMath::Max(1, static_cast<int32>(Num)); }
+				if (DObj->TryGetNumberField(TEXT("member_count"), Num)) { DE.MemberCount = FMath::Max(0, static_cast<int32>(Num)); }
+				if (DObj->TryGetNumberField(TEXT("member_cap"), Num)) { DE.MemberCap = FMath::Max(1, static_cast<int32>(Num)); }
+				OutSnapshot.Directory.Add(MoveTemp(DE));
+			}
+		}
+	}
+	return true;
+}
+
+static bool ParseTradeObjectInternal(const TSharedPtr<FJsonObject>& Obj, FIU_TradeSessionSnapshot& OutSnap)
+{
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	OutSnap = FIU_TradeSessionSnapshot();
+	Obj->TryGetBoolField(TEXT("has_active_trade"), OutSnap.bHasActiveTrade);
+	Obj->TryGetStringField(TEXT("trade_id"), OutSnap.TradeID);
+	Obj->TryGetStringField(TEXT("state"), OutSnap.State);
+	Obj->TryGetStringField(TEXT("initiator_char_id"), OutSnap.InitiatorCharID);
+	Obj->TryGetStringField(TEXT("recipient_char_id"), OutSnap.RecipientCharID);
+
+	FString RawIN, RawRN, RawMsg;
+	Obj->TryGetStringField(TEXT("initiator_name"), RawIN);
+	Obj->TryGetStringField(TEXT("recipient_name"), RawRN);
+	Obj->TryGetStringField(TEXT("action_message"), RawMsg);
+	OutSnap.InitiatorName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawIN);
+	OutSnap.RecipientName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawRN);
+	OutSnap.ActionMessage = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawMsg);
+
+	double Num = 0.0;
+	if (Obj->TryGetNumberField(TEXT("initiator_coin"), Num)) { OutSnap.InitiatorCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("recipient_coin"), Num)) { OutSnap.RecipientCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("tax_coin_preview"), Num)) { OutSnap.TaxCoinPreview = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("remaining_inspect_ms"), Num)) { OutSnap.RemainingInspectMs = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("offer_version"), Num)) { OutSnap.OfferVersion = static_cast<int32>(Num); }
+
+	Obj->TryGetBoolField(TEXT("initiator_locked"), OutSnap.bInitiatorLocked);
+	Obj->TryGetBoolField(TEXT("recipient_locked"), OutSnap.bRecipientLocked);
+	Obj->TryGetBoolField(TEXT("initiator_confirmed"), OutSnap.bInitiatorConfirmed);
+	Obj->TryGetBoolField(TEXT("recipient_confirmed"), OutSnap.bRecipientConfirmed);
+
+	auto ParseTradeItems = [](const TSharedPtr<FJsonObject>& Parent, const TCHAR* Field, TArray<FIU_TradeItemView>& Dest)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Parent->TryGetArrayField(Field, Arr) || !Arr)
+		{
+			return;
+		}
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> IObj = V->AsObject();
+				FIU_TradeItemView TV;
+				IObj->TryGetStringField(TEXT("instance_id"), TV.InstanceID);
+				IObj->TryGetStringField(TEXT("item_def_id"), TV.ItemDefID);
+				FString RawDisp;
+				IObj->TryGetStringField(TEXT("display_name"), RawDisp);
+				TV.DisplayName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawDisp);
+				IObj->TryGetStringField(TEXT("rarity"), TV.Rarity);
+				double N = 0.0;
+				if (IObj->TryGetNumberField(TEXT("stack_count"), N)) { TV.StackCount = FMath::Max(1, static_cast<int32>(N)); }
+				if (IObj->TryGetNumberField(TEXT("enhance_level"), N)) { TV.EnhanceLevel = FMath::Max(0, static_cast<int32>(N)); }
+
+				TArray<FString> AfParts;
+				const TArray<TSharedPtr<FJsonValue>>* AfArr = nullptr;
+				if (IObj->TryGetArrayField(TEXT("affixes"), AfArr) && AfArr)
+				{
+					for (const TSharedPtr<FJsonValue>& AfV : *AfArr)
+					{
+						if (AfV.IsValid() && AfV->Type == EJson::Object)
+						{
+							FString AttrID;
+							double Val = 0.0;
+							AfV->AsObject()->TryGetStringField(TEXT("attr_id"), AttrID);
+							AfV->AsObject()->TryGetNumberField(TEXT("value"), Val);
+							if (!AttrID.IsEmpty())
+							{
+								AfParts.Add(FormatAttrPairForUI(AttrID, Val));
+							}
+						}
+					}
+				}
+				TV.StatSummaryText = FString::Join(AfParts, TEXT(", "));
+				Dest.Add(MoveTemp(TV));
+			}
+		}
+	};
+
+	ParseTradeItems(Obj, TEXT("initiator_items"), OutSnap.InitiatorItems);
+	ParseTradeItems(Obj, TEXT("recipient_items"), OutSnap.RecipientItems);
+	return true;
+}
+
+bool UIU_BackendSubsystem::ParseTradeSnapshotFromJson(const FString& JsonString, FIU_TradeSessionSnapshot& OutSnapshot)
+{
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	return ParseTradeObjectInternal(RootObj, OutSnapshot);
+}
+
+bool UIU_BackendSubsystem::ParseTradeConfirmResponseFromJson(
+	const FString& JsonString,
+	FIU_TradeSessionSnapshot& OutTrade,
+	FIU_InventorySnapshot& OutInv,
+	bool& bOutHasInv)
+{
+	bOutHasInv = false;
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject>* TradeObj = nullptr;
+	if (!RootObj->TryGetObjectField(TEXT("trade"), TradeObj) || !TradeObj || !TradeObj->IsValid())
+	{
+		return ParseTradeObjectInternal(RootObj, OutTrade);
+	}
+	const bool bTradeOK = ParseTradeObjectInternal(*TradeObj, OutTrade);
+	const TSharedPtr<FJsonObject>* InvObj = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("inventory"), InvObj) && InvObj && InvObj->IsValid())
+	{
+		bOutHasInv = ParseInventorySnapshotObject(*InvObj, OutInv);
+	}
+	return bTradeOK;
+}
+
+bool UIU_BackendSubsystem::ParseChatMessageFromJson(const FString& JsonString, FIU_ChatMessageView& OutMessage)
+{
+	OutMessage = FIU_ChatMessageView();
+	TSharedPtr<FJsonObject> Obj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), Obj) || !Obj.IsValid())
+	{
+		return false;
+	}
+
+	double Num = 0.0;
+	if (Obj->TryGetNumberField(TEXT("seq"), Num)) { OutMessage.Seq = static_cast<int64>(Num); }
+	Obj->TryGetStringField(TEXT("channel"), OutMessage.Channel);
+	Obj->TryGetStringField(TEXT("sender_char_id"), OutMessage.SenderCharID);
+	Obj->TryGetStringField(TEXT("sender_guild_tag"), OutMessage.SenderGuildTag);
+	Obj->TryGetStringField(TEXT("party_id"), OutMessage.PartyID);
+	Obj->TryGetStringField(TEXT("guild_id"), OutMessage.GuildID);
+	Obj->TryGetStringField(TEXT("target_char_id"), OutMessage.TargetCharID);
+
+	FString RawSN, RawTN, RawContent;
+	Obj->TryGetStringField(TEXT("sender_name"), RawSN);
+	Obj->TryGetStringField(TEXT("target_name"), RawTN);
+	Obj->TryGetStringField(TEXT("content"), RawContent);
+	OutMessage.SenderName = SanitizeVietnameseForSlateASCII(RawSN);
+	OutMessage.TargetName = SanitizeVietnameseForSlateASCII(RawTN);
+	OutMessage.Content = SanitizeVietnameseForSlateASCII(RawContent);
+
+	double PX = 0.0, PY = 0.0, PZ = 0.0;
+	Obj->TryGetNumberField(TEXT("pos_x"), PX);
+	Obj->TryGetNumberField(TEXT("pos_y"), PY);
+	Obj->TryGetNumberField(TEXT("pos_z"), PZ);
+	OutMessage.SenderPosition = FVector(PX, PY, PZ);
+	Obj->TryGetBoolField(TEXT("show_bubble"), OutMessage.bShowBubble);
+
+	return !OutMessage.Content.IsEmpty();
+}
+
+void UIU_BackendSubsystem::FetchPartyState(
+	const FString& CharacterID,
+	const FString& CharacterName,
+	int64 FencingEpoch,
+	int32 Level,
+	float HP,
+	float MaxHP,
+	float Energy,
+	float MaxEnergy,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetStringField(TEXT("character_name"), CharacterName);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetNumberField(TEXT("level"), Level);
+	Obj->SetNumberField(TEXT("hp"), HP);
+	Obj->SetNumberField(TEXT("max_hp"), MaxHP);
+	Obj->SetNumberField(TEXT("energy"), Energy);
+	Obj->SetNumberField(TEXT("max_energy"), MaxEnergy);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::InviteToParty(
+	const FString& CharacterID,
+	const FString& CharacterName,
+	int32 Level,
+	int64 FencingEpoch,
+	const FString& TargetCharID,
+	const FString& TargetName,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetStringField(TEXT("character_name"), CharacterName);
+	Obj->SetNumberField(TEXT("level"), Level);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("target_char_id"), TargetCharID);
+	Obj->SetStringField(TEXT("target_name"), TargetName);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/invite"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RespondPartyInvite(
+	const FString& CharacterID,
+	const FString& CharacterName,
+	int32 Level,
+	int64 FencingEpoch,
+	const FString& InviteID,
+	bool bAccept,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetStringField(TEXT("character_name"), CharacterName);
+	Obj->SetNumberField(TEXT("level"), Level);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("invite_id"), InviteID);
+	Obj->SetBoolField(TEXT("accept"), bAccept);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/respond"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::LeaveParty(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/leave"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::KickPartyMember(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TargetCharID,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("target_char_id"), TargetCharID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/kick"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::PromotePartyLeader(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TargetCharID,
+	TFunction<void(bool bSuccess, const FIU_PartySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("target_char_id"), TargetCharID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/party/promote"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PartySnapshot Snap;
+			if (bConnected && Code == 200 && ParsePartySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::FetchGuildSnapshot(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::CreateGuild(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& GuildName,
+	const FString& GuildTag,
+	const FString& MOTD,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("guild_name"), GuildName);
+	Obj->SetStringField(TEXT("guild_tag"), GuildTag);
+	Obj->SetStringField(TEXT("motd_announcement"), MOTD);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/create"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && (Code == 201 || Code == 200) && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::JoinGuild(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& GuildID,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("guild_id"), GuildID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/join"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::LeaveGuild(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/leave"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::KickGuildMember(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TargetCharID,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("target_char_id"), TargetCharID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/kick"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::SetGuildMemberRole(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TargetCharID,
+	const FString& NewRole,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("target_char_id"), TargetCharID);
+	Obj->SetStringField(TEXT("member_role"), NewRole);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/role"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::UpdateGuildMOTD(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& NewMOTD,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("motd_announcement"), NewMOTD);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/motd"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::DonateGuildCoins(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	int64 AmountCoin,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_GuildSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetNumberField(TEXT("amount_coin"), static_cast<double>(AmountCoin));
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/guild/donate"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_GuildSnapshot Snap;
+			if (bConnected && Code == 200 && ParseGuildSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::FetchTradeSession(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RequestPlayerTrade(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& RecipientCharID,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("recipient_char_id"), RecipientCharID);
+	Obj->SetStringField(TEXT("zone_id"), ServerZoneID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/request"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RespondPlayerTrade(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TradeID,
+	bool bAccept,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("trade_id"), TradeID);
+	Obj->SetBoolField(TEXT("accept"), bAccept);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/respond"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::UpdateTradeOffer(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TradeID,
+	int64 CoinOffer,
+	const TArray<FString>& ItemInstanceIDs,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TArray<TSharedPtr<FJsonValue>> ItemArr;
+	for (const FString& ID : ItemInstanceIDs)
+	{
+		if (!ID.TrimStartAndEnd().IsEmpty())
+		{
+			ItemArr.Add(MakeShared<FJsonValueString>(ID.TrimStartAndEnd()));
+		}
+	}
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("trade_id"), TradeID);
+	Obj->SetNumberField(TEXT("coin_offer"), static_cast<double>(CoinOffer));
+	Obj->SetArrayField(TEXT("item_instance_ids"), ItemArr);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/offer"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::LockTradeOffer(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TradeID,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("trade_id"), TradeID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/lock"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::ConfirmPlayerTrade(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TradeID,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& TradeSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("trade_id"), TradeID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/confirm"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot TSnap;
+			FIU_InventorySnapshot ISnap;
+			bool bHasInv = false;
+			if (bConnected && Code == 200 && ParseTradeConfirmResponseFromJson(RespBody, TSnap, ISnap, bHasInv))
+			{
+				if (Callback) { Callback(true, TSnap, ISnap, bHasInv, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, TSnap, ISnap, false, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::CancelPlayerTrade(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& TradeID,
+	TFunction<void(bool bSuccess, const FIU_TradeSessionSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("trade_id"), TradeID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/trade/cancel"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_TradeSessionSnapshot Snap;
+			if (bConnected && Code == 200 && ParseTradeSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::SendSocialChatMessage(
+	const FString& CharacterID,
+	const FString& CharacterName,
+	int64 FencingEpoch,
+	const FString& Channel,
+	const FString& Content,
+	const FVector& SenderPos,
+	const FString& TargetName,
+	TFunction<void(bool bSuccess, const FIU_ChatMessageView& SentMsg, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetStringField(TEXT("character_name"), CharacterName);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("channel"), Channel);
+	Obj->SetStringField(TEXT("content"), Content);
+	Obj->SetStringField(TEXT("target_name"), TargetName);
+	Obj->SetStringField(TEXT("zone_id"), ServerZoneID);
+	Obj->SetNumberField(TEXT("pos_x"), SenderPos.X);
+	Obj->SetNumberField(TEXT("pos_y"), SenderPos.Y);
+	Obj->SetNumberField(TEXT("pos_z"), SenderPos.Z);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/social/chat/send"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_ChatMessageView Msg;
+			if (bConnected && Code == 200 && ParseChatMessageFromJson(RespBody, Msg))
+			{
+				if (Callback) { Callback(true, Msg, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Msg, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
 		});
 }

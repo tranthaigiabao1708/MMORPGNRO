@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +15,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/infinite-universe/backend/internal/modules/economy"
 	"github.com/infinite-universe/backend/internal/modules/gamedata"
+	"github.com/infinite-universe/backend/internal/modules/guild"
 	"github.com/infinite-universe/backend/internal/modules/inventory"
+	"github.com/infinite-universe/backend/internal/modules/party"
 	"github.com/infinite-universe/backend/internal/modules/progression"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -86,6 +89,10 @@ type CharacterState struct {
 	EnemyKills            int32     `json:"enemy_kills"`
 	PvPKills              int32     `json:"pvp_kills"`
 	Deaths                int32     `json:"deaths"`
+	GuildID               string    `json:"guild_id,omitempty"`
+	GuildName             string    `json:"guild_name,omitempty"`
+	GuildTag              string    `json:"guild_tag,omitempty"`
+	GuildRole             string    `json:"guild_role,omitempty"`
 	FencingEpoch          int64     `json:"fencing_epoch"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
@@ -112,11 +119,12 @@ type SaveCheckpointInput struct {
 // GrantEXPResult is returned when a monster defeat grants LV EXP + Potential Points on the Dedicated Server.
 type GrantEXPResult struct {
 	CharacterState
-	ExpGranted       int64 `json:"exp_granted"`
-	PotentialGranted int64 `json:"potential_granted"`
-	LeveledUp        bool  `json:"leveled_up"`
-	OldLevel         int   `json:"old_level"`
-	Idempotent       bool  `json:"idempotent"`
+	ExpGranted       int64   `json:"exp_granted"`
+	PotentialGranted int64   `json:"potential_granted"`
+	PartySynergyMult float64 `json:"party_synergy_mult"`
+	LeveledUp        bool    `json:"leveled_up"`
+	OldLevel         int     `json:"old_level"`
+	Idempotent       bool    `json:"idempotent"`
 }
 
 // AllocatePotentialResult is returned when a player spends Potential Points to upgrade HP, Ki, or Attack Power.
@@ -286,11 +294,15 @@ func (s *Service) ListByAccount(ctx context.Context, accountID uuid.UUID) ([]Cha
 		       c.appearance_data,
 		       a.hp, a.max_hp, a.energy, a.max_energy, a.phys_atk, a.defense,
 		       p.potential_exp,
-		       COALESCE(w.standard_coin, 0)
+		       COALESCE(w.standard_coin, 0),
+		       COALESCE(g.guild_id::text, ''), COALESCE(g.guild_name::text, ''),
+		       COALESCE(g.guild_tag::text, ''), COALESCE(gm.member_role, '')
 		  FROM characters c
 		  JOIN character_attributes a ON a.character_id = c.id
 		  JOIN character_potential p ON p.character_id = c.id
 		  LEFT JOIN character_wallets w ON w.character_id = c.id
+		  LEFT JOIN guild_members gm ON gm.character_id = c.id
+		  LEFT JOIN guilds g ON g.guild_id = gm.guild_id
 		 WHERE c.account_id = $1 AND c.deleted_at IS NULL
 		 ORDER BY c.created_at ASC
 	`, accountID)
@@ -311,6 +323,7 @@ func (s *Service) ListByAccount(ctx context.Context, accountID uuid.UUID) ([]Cha
 			&st.HP, &dbMaxHP, &st.Energy, &dbMaxEnergy, &dbPhysAtk, &dbDef,
 			&st.PotentialPoints,
 			&st.StandardCoin,
+			&st.GuildID, &st.GuildName, &st.GuildTag, &st.GuildRole,
 		); err != nil {
 			return nil, err
 		}
@@ -405,6 +418,13 @@ func (s *Service) AdvanceEpochAndLoad(ctx context.Context, characterID uuid.UUID
 	eqBonus, err := inventory.ComputeEquippedBonusesTx(ctx, tx, s.catalog, characterID)
 	if err != nil {
 		return CharacterState{}, fmt.Errorf("compute equipped bonuses on claim: %w", err)
+	}
+
+	if gb, gbErr := guild.LookupCharacterGuildTx(ctx, tx, characterID); gbErr == nil {
+		st.GuildID = gb.GuildID
+		st.GuildName = gb.GuildName
+		st.GuildTag = gb.GuildTag
+		st.GuildRole = gb.GuildRole
 	}
 
 	var meta PersistedMeta
@@ -519,6 +539,12 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 
 	_ = tx.QueryRow(ctx, `SELECT potential_exp FROM character_potential WHERE character_id = $1`, st.ID).Scan(&st.PotentialPoints)
 	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, st.ID).Scan(&st.StandardCoin)
+	if gb, gbErr := guild.LookupCharacterGuildTx(ctx, tx, st.ID); gbErr == nil {
+		st.GuildID = gb.GuildID
+		st.GuildName = gb.GuildName
+		st.GuildTag = gb.GuildTag
+		st.GuildRole = gb.GuildRole
+	}
 
 	snapPayload, _ := json.Marshal(map[string]any{
 		"level":            st.Level,
@@ -572,17 +598,44 @@ func (s *Service) GrantEXPFenced(
 	killedTarget bool,
 	idempotencyKey string,
 ) (GrantEXPResult, error) {
+	return s.GrantEXPWithPartyFenced(ctx, characterID, fencingEpoch, serverID, outgoingDamage, expGain, potentialGain, 1, killedTarget, idempotencyKey)
+}
+
+// GrantEXPWithPartyFenced awards per-hit 1.5x Dame SM & TN scaled by Party Synergy (1.15x..1.45x within 120m).
+func (s *Service) GrantEXPWithPartyFenced(
+	ctx context.Context,
+	characterID uuid.UUID,
+	fencingEpoch int64,
+	serverID string,
+	outgoingDamage float64,
+	expGain int64,
+	potentialGain int64,
+	nearbyPartyMembers int,
+	killedTarget bool,
+	idempotencyKey string,
+) (GrantEXPResult, error) {
 	if fencingEpoch < 1 {
 		return GrantEXPResult{}, ErrStaleFencingEpoch
 	}
+	synergyMult := party.ComputeSynergyMultiplier(nearbyPartyMembers)
 	if outgoingDamage > 0 {
-		expGain, potentialGain = progression.ComputeHitProgressionReward(outgoingDamage)
+		baseExp, basePot := progression.ComputeHitProgressionReward(outgoingDamage)
+		if synergyMult > 1.0 {
+			expGain = max(1, int64(math.Round(float64(baseExp)*synergyMult)))
+			potentialGain = max(1, int64(math.Round(float64(basePot)*synergyMult)))
+		} else {
+			expGain, potentialGain = baseExp, basePot
+		}
 	} else {
 		if expGain <= 0 {
 			expGain = progression.DefaultHitEXP
 		}
 		if potentialGain <= 0 {
 			potentialGain = expGain
+		}
+		if synergyMult > 1.0 {
+			expGain = max(1, int64(math.Round(float64(expGain)*synergyMult)))
+			potentialGain = max(1, int64(math.Round(float64(potentialGain)*synergyMult)))
 		}
 	}
 
@@ -685,6 +738,12 @@ func (s *Service) GrantEXPFenced(
 		  FROM character_attributes WHERE character_id = $1
 	`, characterID).Scan(&st.HP, &dbMaxHP, &st.Energy, &dbMaxEnergy, &dbPhysAtk, &dbDef)
 	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, characterID).Scan(&st.StandardCoin)
+	if gb, gbErr := guild.LookupCharacterGuildTx(ctx, tx, characterID); gbErr == nil {
+		st.GuildID = gb.GuildID
+		st.GuildName = gb.GuildName
+		st.GuildTag = gb.GuildTag
+		st.GuildRole = gb.GuildRole
+	}
 
 	if leveledUp {
 		snapPayload, _ := json.Marshal(map[string]any{
@@ -730,6 +789,7 @@ func (s *Service) GrantEXPFenced(
 		CharacterState:   st,
 		ExpGranted:       expGain,
 		PotentialGranted: potentialGain,
+		PartySynergyMult: synergyMult,
 		LeveledUp:        leveledUp,
 		OldLevel:         oldLevel,
 	}
@@ -863,6 +923,12 @@ func (s *Service) AllocatePotentialFenced(
 	}
 
 	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, characterID).Scan(&st.StandardCoin)
+	if gb, gbErr := guild.LookupCharacterGuildTx(ctx, tx, characterID); gbErr == nil {
+		st.GuildID = gb.GuildID
+		st.GuildName = gb.GuildName
+		st.GuildTag = gb.GuildTag
+		st.GuildRole = gb.GuildRole
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return AllocatePotentialResult{}, err

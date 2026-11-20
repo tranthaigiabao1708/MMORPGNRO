@@ -19,6 +19,7 @@
 #include "Components/Button.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Components/EditableTextBox.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -51,6 +52,11 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		WhiteHeartLobeBrush = FSlateRoundedBoxBrush(
 			FLinearColor(1.0f, 1.0f, 1.0f, 1.0f),
 			9.5f);
+		SocialOverlayBrush = FSlateRoundedBoxBrush(
+			FLinearColor(0.06f, 0.08f, 0.12f, 0.80f),
+			6.0f,
+			FLinearColor(0.86f, 0.54f, 0.14f, 0.90f),
+			1.4f);
 
 		UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("RootCanvas"));
 		WidgetTree->RootWidget = RootCanvas;
@@ -388,6 +394,104 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 			CDSlot->SetHorizontalAlignment(HAlign_Center);
 			CDSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 0.0f));
 		}
+
+		// ====================================================================
+		// 4. TOP-LEFT PARTY SYNERGY & INVITE OVERLAY (Step 5 Co-op 5-Player Party)
+		// ====================================================================
+		PartyOverlayBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PartyOverlayBorder"));
+		PartyOverlayBorder->SetBrush(SocialOverlayBrush);
+		PartyOverlayBorder->SetPadding(FMargin(8.0f, 5.0f));
+		PartyOverlayBorder->SetVisibility(ESlateVisibility::Collapsed);
+		if (UCanvasPanelSlot* PartySlot = RootCanvas->AddChildToCanvas(PartyOverlayBorder))
+		{
+			PartySlot->SetAnchors(FAnchors(0.0f, 0.0f));
+			PartySlot->SetPosition(FVector2D(28.0f, 198.0f));
+			PartySlot->SetAutoSize(true);
+		}
+
+		UVerticalBox* PartyVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PartyVBox"));
+		PartyOverlayBorder->SetContent(PartyVBox);
+
+		PartyOverlayText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PartyOverlayText"));
+		StyleHUDText(PartyOverlayText, FLinearColor(0.48f, 1.0f, 0.68f), 9);
+		PartyVBox->AddChildToVerticalBox(PartyOverlayText);
+
+		PartyQuickActionBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("PartyQuickActionBtn"));
+		PartyQuickActionBtn->SetBackgroundColor(FLinearColor(0.18f, 0.56f, 0.26f, 0.95f));
+		PartyQuickActionLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PartyQuickActionLbl"));
+		PartyQuickActionLbl->SetText(FText::FromString(TEXT(" [Y] DONG Y ")));
+		StyleHUDText(PartyQuickActionLbl, FLinearColor::White, 8);
+		PartyQuickActionBtn->SetContent(PartyQuickActionLbl);
+		if (UVerticalBoxSlot* PBtnSlot = PartyVBox->AddChildToVerticalBox(PartyQuickActionBtn))
+		{
+			PBtnSlot->SetHorizontalAlignment(HAlign_Left);
+			PBtnSlot->SetPadding(FMargin(0.0f, 3.0f, 0.0f, 0.0f));
+		}
+
+		// ====================================================================
+		// 5. BOTTOM-CENTER NRO MULTI-CHANNEL CHAT BAR (Between Skill Hub & Dau Than!)
+		// ====================================================================
+		UBorder* ChatCard = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("NROChatCard"));
+		ChatCard->SetBrush(SocialOverlayBrush);
+		ChatCard->SetPadding(FMargin(7.0f, 5.0f));
+		if (UCanvasPanelSlot* ChatSlot = RootCanvas->AddChildToCanvas(ChatCard))
+		{
+			ChatSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+			ChatSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+			ChatSlot->SetPosition(FVector2D(18.0f, -12.0f));
+			ChatSlot->SetAutoSize(true);
+		}
+
+		USizeBox* ChatWidth = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ChatWidthBox"));
+		ChatWidth->SetWidthOverride(420.0f);
+		ChatCard->SetContent(ChatWidth);
+
+		UVerticalBox* ChatVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ChatVBox"));
+		ChatWidth->SetContent(ChatVBox);
+
+		ChatHistoryText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ChatHistoryText"));
+		StyleHUDText(ChatHistoryText, FLinearColor(0.95f, 0.96f, 0.90f), 8);
+		if (UVerticalBoxSlot* CHS = ChatVBox->AddChildToVerticalBox(ChatHistoryText))
+		{
+			CHS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		}
+
+		UHorizontalBox* ChatInputRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("ChatInputRow"));
+		ChatVBox->AddChildToVerticalBox(ChatInputRow);
+
+		ChatChannelButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ChatChannelButton"));
+		ChatChannelButton->SetBackgroundColor(FLinearColor(0.84f, 0.48f, 0.08f, 1.0f));
+		ChatChannelLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ChatChannelLabel"));
+		ChatChannelLabel->SetText(FText::FromString(TEXT(" [KV] ")));
+		StyleHUDText(ChatChannelLabel, FLinearColor::White, 8);
+		ChatChannelButton->SetContent(ChatChannelLabel);
+		if (UHorizontalBoxSlot* CCS = ChatInputRow->AddChildToHorizontalBox(ChatChannelButton))
+		{
+			CCS->SetVerticalAlignment(VAlign_Center);
+			CCS->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+		}
+
+		USizeBox* EditWidth = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("ChatEditWidth"));
+		EditWidth->SetWidthOverride(296.0f);
+		ChatInputBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("ChatInputBox"));
+		ChatInputBox->SetHintText(FText::FromString(TEXT("Enter: Chat | Y: Doi | T: Giao dich...")));
+		EditWidth->SetContent(ChatInputBox);
+		if (UHorizontalBoxSlot* CIS = ChatInputRow->AddChildToHorizontalBox(EditWidth))
+		{
+			CIS->SetVerticalAlignment(VAlign_Center);
+			CIS->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+		}
+
+		ChatSendButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ChatSendButton"));
+		ChatSendButton->SetBackgroundColor(FLinearColor(0.16f, 0.58f, 0.28f, 1.0f));
+		UTextBlock* SendLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ChatSendLbl"));
+		SendLbl->SetText(FText::FromString(TEXT(" GUI ")));
+		StyleHUDText(SendLbl, FLinearColor::White, 8);
+		ChatSendButton->SetContent(SendLbl);
+		ChatInputRow->AddChildToHorizontalBox(ChatSendButton);
+
+		RecentChatLines.Add(TEXT("[HE THONG] Enter: Chat (Bong bong 3D) | Y: Moi Party | T: Giao dich P2P | Alt+LMB: Ping!"));
+		RebuildChatHistoryText();
 	}
 
 	return Super::RebuildWidget();
@@ -413,6 +517,22 @@ void UIU_PlayerHUDWidget::NativeConstruct()
 	if (OpenProfileButton)
 	{
 		OpenProfileButton->OnClicked.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleOpenProfilePillClicked);
+	}
+	if (PartyQuickActionBtn)
+	{
+		PartyQuickActionBtn->OnClicked.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandlePartyActionBtnClicked);
+	}
+	if (ChatChannelButton)
+	{
+		ChatChannelButton->OnClicked.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCycleChatChannelClicked);
+	}
+	if (ChatSendButton)
+	{
+		ChatSendButton->OnClicked.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleSendChatClicked);
+	}
+	if (ChatInputBox)
+	{
+		ChatInputBox->OnTextCommitted.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleChatTextCommitted);
 	}
 
 	BindToPlayerPawn(GetOwningPlayerPawn());
@@ -608,12 +728,14 @@ void UIU_PlayerHUDWidget::EnsurePlayerStateBound(APawn* CurrentPawn)
 		OldPS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 		OldPS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 		OldPS->OnCharacterEconomyChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
+		OldPS->OnCharacterSocialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterSocialChanged);
 	}
 
 	BoundPlayerState = IUPS;
 	IUPS->OnCharacterEXPChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 	IUPS->OnCharacterPotentialChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 	IUPS->OnCharacterEconomyChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
+	IUPS->OnCharacterSocialChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterSocialChanged);
 	HandleCharacterEXPChanged(IUPS->GetCurrentEXP(), IUPS->GetNextLevelEXP(), IUPS->GetCharacterLevel());
 	RefreshPotentialReadout();
 	UpdateElixirHubVisuals();
@@ -643,6 +765,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 		PS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 		PS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 		PS->OnCharacterEconomyChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
+		PS->OnCharacterSocialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterSocialChanged);
 	}
 
 	BoundAttributeComp.Reset();
@@ -687,9 +810,13 @@ void UIU_PlayerHUDWidget::HandleCharacterEXPChanged(int64 CurrentEXP, int64 Next
 		FString NamePrefix;
 		if (const AIU_PlayerState* PS = BoundPlayerState.Get())
 		{
+			if (!PS->GetGuildTag().IsEmpty())
+			{
+				NamePrefix += FString::Printf(TEXT("[%s] "), *PS->GetGuildTag());
+			}
 			if (!PS->GetPersistedCharacterName().IsEmpty())
 			{
-				NamePrefix = FString::Printf(TEXT("[%s] "), *PS->GetPersistedCharacterName());
+				NamePrefix += FString::Printf(TEXT("[%s] "), *PS->GetPersistedCharacterName());
 			}
 		}
 		LevelEXPValueText->SetText(FText::FromString(
@@ -717,6 +844,219 @@ void UIU_PlayerHUDWidget::HandleCharacterEconomyChanged(int64 StandardCoin, int3
 	DisplayedElixirCount = ElixirCount;
 	RefreshPotentialReadout();
 	UpdateElixirHubVisuals();
+}
+
+void UIU_PlayerHUDWidget::HandleCharacterSocialChanged(const FString&, const FString&, const FString&)
+{
+	if (const AIU_PlayerState* PS = BoundPlayerState.Get())
+	{
+		HandleCharacterEXPChanged(PS->GetCurrentEXP(), PS->GetNextLevelEXP(), PS->GetCharacterLevel());
+	}
+}
+
+void UIU_PlayerHUDWidget::ApplyPartySnapshot(const FIU_PartySnapshot& Snapshot)
+{
+	DisplayedParty = Snapshot;
+	RebuildPartyOverlayText();
+}
+
+void UIU_PlayerHUDWidget::ApplyTradeInviteBanner(const FIU_TradeSessionSnapshot& Snapshot)
+{
+	DisplayedTradeInvite = Snapshot;
+	RebuildPartyOverlayText();
+}
+
+void UIU_PlayerHUDWidget::RebuildPartyOverlayText()
+{
+	if (!PartyOverlayBorder || !PartyOverlayText)
+	{
+		return;
+	}
+
+	const AIU_PlayerState* PS = BoundPlayerState.Get();
+	const FString MyCharID = PS ? PS->GetPersistedCharacterUUID() : TEXT("");
+	const bool bHasPendingTradeInvite = DisplayedTradeInvite.bHasActiveTrade &&
+		DisplayedTradeInvite.State == TEXT("PENDING_INVITE") &&
+		DisplayedTradeInvite.RecipientCharID == MyCharID;
+	const bool bHasPendingPartyInvite = DisplayedParty.PendingInvites.Num() > 0;
+
+	if (!DisplayedParty.bInParty && !bHasPendingPartyInvite && !bHasPendingTradeInvite)
+	{
+		PartyOverlayBorder->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	PartyOverlayBorder->SetVisibility(ESlateVisibility::Visible);
+	FString Lines;
+	if (DisplayedParty.bInParty)
+	{
+		const int32 Count = DisplayedParty.Members.Num();
+		const int32 BonusPct = FMath::RoundToInt((AIU_PlayerState::ComputePartySynergyMultiplier(Count) - 1.0f) * 100.0f);
+		Lines += FString::Printf(TEXT("[TO DOI %d/5 | CONG HUONG +%d%% SM & TN]\n"), Count, BonusPct);
+		for (const FIU_PartyMemberView& M : DisplayedParty.Members)
+		{
+			Lines += FString::Printf(
+				TEXT("%sLv.%d %s (HP %.0f/%.0f)\n"),
+				M.bIsLeader ? TEXT("[DT] ") : TEXT(" - "),
+				M.Level,
+				*M.CharacterName,
+				M.HP,
+				M.MaxHP);
+		}
+	}
+	if (bHasPendingPartyInvite)
+	{
+		Lines += FString::Printf(TEXT("[LOI MOI DOI] %s moi vao Party! -> Bam [Y]\n"), *DisplayedParty.PendingInvites[0].InviterName);
+	}
+	if (bHasPendingTradeInvite)
+	{
+		Lines += FString::Printf(TEXT("[GIAO DICH P2P] %s moi giao dich! -> Bam [T]\n"), *DisplayedTradeInvite.InitiatorName);
+	}
+	Lines.TrimEndInline();
+	PartyOverlayText->SetText(FText::FromString(Lines));
+
+	if (PartyQuickActionBtn && PartyQuickActionLbl)
+	{
+		if (bHasPendingTradeInvite)
+		{
+			PartyQuickActionBtn->SetVisibility(ESlateVisibility::Visible);
+			PartyQuickActionLbl->SetText(FText::FromString(TEXT(" [T] MO GIAO DICH ")));
+		}
+		else if (bHasPendingPartyInvite)
+		{
+			PartyQuickActionBtn->SetVisibility(ESlateVisibility::Visible);
+			PartyQuickActionLbl->SetText(FText::FromString(TEXT(" [Y] VAO TO DOI ")));
+		}
+		else if (DisplayedParty.bInParty)
+		{
+			PartyQuickActionBtn->SetVisibility(ESlateVisibility::Visible);
+			PartyQuickActionLbl->SetText(FText::FromString(TEXT(" ROI TO DOI ")));
+		}
+		else
+		{
+			PartyQuickActionBtn->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void UIU_PlayerHUDWidget::HandlePartyActionBtnClicked()
+{
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer());
+	if (!IUPC)
+	{
+		return;
+	}
+	const AIU_PlayerState* PS = BoundPlayerState.Get();
+	const FString MyCharID = PS ? PS->GetPersistedCharacterUUID() : TEXT("");
+	if (DisplayedTradeInvite.bHasActiveTrade && DisplayedTradeInvite.State == TEXT("PENDING_INVITE") && DisplayedTradeInvite.RecipientCharID == MyCharID)
+	{
+		IUPC->Server_RequestTradeRespond(DisplayedTradeInvite.TradeID, true);
+		return;
+	}
+	if (DisplayedParty.PendingInvites.Num() > 0)
+	{
+		IUPC->Server_RequestPartyRespond(DisplayedParty.PendingInvites[0].InviteID, true);
+		return;
+	}
+	if (DisplayedParty.bInParty)
+	{
+		IUPC->Server_RequestPartyLeave();
+	}
+}
+
+void UIU_PlayerHUDWidget::AppendChatMessage(const FIU_ChatMessageView& Message)
+{
+	const TCHAR* ChShort = (Message.Channel == TEXT("ZONE")) ? TEXT("TG")
+		: (Message.Channel == TEXT("PARTY")) ? TEXT("TD")
+		: (Message.Channel == TEXT("GUILD")) ? TEXT("BG")
+		: (Message.Channel == TEXT("WHISPER")) ? TEXT("MAT")
+		: (Message.Channel == TEXT("SYSTEM")) ? TEXT("HT")
+		: TEXT("KV");
+
+	const FString TagPart = Message.SenderGuildTag.IsEmpty() ? TEXT("") : FString::Printf(TEXT("[%s]"), *Message.SenderGuildTag);
+	const FString Line = FString::Printf(TEXT("[%s] %s%s: %s"), ChShort, *TagPart, *Message.SenderName, *Message.Content);
+	RecentChatLines.Add(Line);
+	while (RecentChatLines.Num() > 4)
+	{
+		RecentChatLines.RemoveAt(0);
+	}
+	RebuildChatHistoryText();
+}
+
+void UIU_PlayerHUDWidget::RebuildChatHistoryText()
+{
+	if (ChatHistoryText)
+	{
+		ChatHistoryText->SetText(FText::FromString(FString::Join(RecentChatLines, TEXT("\n"))));
+	}
+}
+
+void UIU_PlayerHUDWidget::HandleCycleChatChannelClicked()
+{
+	if (SelectedChatChannel == TEXT("LOCAL"))       { SelectedChatChannel = TEXT("ZONE");  if (ChatChannelLabel) { ChatChannelLabel->SetText(FText::FromString(TEXT(" [TG] "))); } }
+	else if (SelectedChatChannel == TEXT("ZONE"))   { SelectedChatChannel = TEXT("PARTY"); if (ChatChannelLabel) { ChatChannelLabel->SetText(FText::FromString(TEXT(" [TD] "))); } }
+	else if (SelectedChatChannel == TEXT("PARTY"))  { SelectedChatChannel = TEXT("GUILD"); if (ChatChannelLabel) { ChatChannelLabel->SetText(FText::FromString(TEXT(" [BG] "))); } }
+	else                                            { SelectedChatChannel = TEXT("LOCAL"); if (ChatChannelLabel) { ChatChannelLabel->SetText(FText::FromString(TEXT(" [KV] "))); } }
+}
+
+void UIU_PlayerHUDWidget::HandleSendChatClicked()
+{
+	FocusOrSubmitChatBar();
+}
+
+void UIU_PlayerHUDWidget::HandleChatTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	if (CommitMethod == ETextCommit::OnEnter)
+	{
+		const FString Trimmed = Text.ToString().TrimStartAndEnd();
+		if (!Trimmed.IsEmpty())
+		{
+			if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+			{
+				IUPC->Server_RequestSendChat(SelectedChatChannel, Trimmed, TEXT(""));
+			}
+			if (ChatInputBox)
+			{
+				ChatInputBox->SetText(FText::GetEmpty());
+			}
+		}
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			FInputModeGameOnly GameInput;
+			PC->SetInputMode(GameInput);
+		}
+	}
+}
+
+void UIU_PlayerHUDWidget::FocusOrSubmitChatBar()
+{
+	if (!ChatInputBox)
+	{
+		return;
+	}
+	const FString Trimmed = ChatInputBox->GetText().ToString().TrimStartAndEnd();
+	if (!Trimmed.IsEmpty())
+	{
+		if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+		{
+			IUPC->Server_RequestSendChat(SelectedChatChannel, Trimmed, TEXT(""));
+		}
+		ChatInputBox->SetText(FText::GetEmpty());
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			FInputModeGameOnly GameInput;
+			PC->SetInputMode(GameInput);
+		}
+		return;
+	}
+
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetWidgetToFocus(ChatInputBox->TakeWidget());
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+	}
 }
 
 void UIU_PlayerHUDWidget::RefreshPotentialReadout()

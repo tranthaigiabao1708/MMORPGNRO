@@ -374,7 +374,7 @@ func AddOrStackItemTx(
 
 	// Lock existing bag items for this character to prevent slot collisions under concurrency!
 	rows, err := tx.Query(ctx, `
-		SELECT id, item_def_id, bag_slot_index, stack_count
+		SELECT id, item_def_id, bag_slot_index, stack_count, is_bound
 		  FROM inventory_items
 		 WHERE character_id = $1 AND bag_type = 'INVENTORY'
 		 ORDER BY bag_slot_index ASC NULLS LAST
@@ -384,17 +384,18 @@ func AddOrStackItemTx(
 		return uuid.Nil, -1, err
 	}
 	type existingRow struct {
-		id    uuid.UUID
-		defID string
-		slot  int
-		stack int
+		id      uuid.UUID
+		defID   string
+		slot    int
+		stack   int
+		isBound bool
 	}
 	var bagRows []existingRow
 	occupied := make(map[int]bool)
 	for rows.Next() {
 		var r existingRow
 		var slotPtr *int
-		if err := rows.Scan(&r.id, &r.defID, &slotPtr, &r.stack); err != nil {
+		if err := rows.Scan(&r.id, &r.defID, &slotPtr, &r.stack, &r.isBound); err != nil {
 			rows.Close()
 			return uuid.Nil, -1, err
 		}
@@ -410,13 +411,13 @@ func AddOrStackItemTx(
 	var lastID uuid.UUID
 	lastSlot := -1
 
-	// 1. Try stacking into existing partial stacks if maxStack > 1
+	// 1. Try stacking into existing partial stacks if maxStack > 1 and bound flag matches!
 	if maxStack > 1 {
 		for _, r := range bagRows {
 			if remaining <= 0 {
 				break
 			}
-			if r.defID == itemDefID && r.stack < maxStack {
+			if r.defID == itemDefID && r.isBound == isBound && r.stack < maxStack {
 				add := min(remaining, maxStack-r.stack)
 				newStack := r.stack + add
 				if _, err := tx.Exec(ctx, `

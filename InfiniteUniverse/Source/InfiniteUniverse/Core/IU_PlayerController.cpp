@@ -11,6 +11,10 @@
 #include "UI/IU_LoginCharacterWidget.h"
 #include "UI/IU_PotentialUpgradeWidget.h"
 #include "UI/IU_InventoryEquipmentWidget.h"
+#include "UI/IU_PlayerTradeWidget.h"
+#include "Combat/IU_TargetingComponent.h"
+#include "EngineUtils.h"
+#include "Engine/World.h"
 #include "CoreGlobals.h"
 #include "HAL/PlatformTime.h"
 #include "Templates/Atomic.h"
@@ -356,6 +360,9 @@ void AIU_PlayerController::SetupInputComponent()
 		InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar5);
 		InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar6);
 		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &AIU_PlayerController::HandleQuickUseElixir);
+		InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AIU_PlayerController::HandleChatEnterKey);
+		InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &AIU_PlayerController::HandleQuickPartyKey);
+		InputComponent->BindKey(EKeys::T, IE_Pressed, this, &AIU_PlayerController::HandleQuickTradeKey);
 	}
 }
 
@@ -462,10 +469,32 @@ void AIU_PlayerController::HandleToggleRotationMode(const FInputActionValue& Val
 
 void AIU_PlayerController::HandleMeleeAttack(const FInputActionValue& Value)
 {
-	if (AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter())
+	AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter();
+	if (!IUChar)
 	{
-		IUChar->MeleeAttackInput();
+		return;
 	}
+
+	// Step 5 Co-op Utility: Alt + LeftMouseButton places a 6.0s 3D Tactical Party Ping!
+	if (IsInputKeyDown(EKeys::LeftAlt) || IsInputKeyDown(EKeys::RightAlt))
+	{
+		FVector CamOrigin, CamDir;
+		IUChar->GetCameraAimRay(CamOrigin, CamDir);
+		FVector PingLoc = IUChar->GetActorLocation() + IUChar->GetActorForwardVector() * 450.0f;
+		if (UWorld* W = GetWorld())
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(IUTacticalPingTrace), false, IUChar);
+			if (W->LineTraceSingleByChannel(Hit, CamOrigin + CamDir * 80.0f, CamOrigin + CamDir * 9000.0f, ECC_Visibility, Params))
+			{
+				PingLoc = Hit.ImpactPoint;
+			}
+		}
+		Server_RequestPlaceTacticalPing(PingLoc);
+		return;
+	}
+
+	IUChar->MeleeAttackInput();
 }
 
 void AIU_PlayerController::HandleKiBlast(const FInputActionValue& Value)
@@ -955,6 +984,10 @@ void AIU_PlayerController::Client_ReceiveInventorySnapshot_Implementation(const 
 	{
 		ActiveInventoryWidget->ApplyInventorySnapshot(Snapshot);
 	}
+	if (ActiveTradeWidget)
+	{
+		ActiveTradeWidget->RefreshFromCachedInventory();
+	}
 	if (!Snapshot.ActionResult.IsEmpty())
 	{
 		if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
@@ -1291,6 +1324,1161 @@ void AIU_PlayerController::Server_RequestEnhanceItem_Implementation(const FStrin
 				if (bSuccess)
 				{
 					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+// ============================================================================
+// Step 5 Party, Guild, Multi-Channel Chat, Tactical Ping & P2P Trade Implementation
+// ============================================================================
+
+bool AIU_PlayerController::IsPlayerTradePanelVisible() const
+{
+	return ActiveTradeWidget && ActiveTradeWidget->GetVisibility() == ESlateVisibility::Visible;
+}
+
+void AIU_PlayerController::SetPlayerTradePanelVisible(bool bVisible, bool bUpdateMouseInputMode)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (bVisible && IsInventoryPanelVisible())
+	{
+		SetInventoryPanelVisible(false, false);
+	}
+	if (!ActiveTradeWidget && bVisible)
+	{
+		ActiveTradeWidget = CreateWidget<UIU_PlayerTradeWidget>(this, UIU_PlayerTradeWidget::StaticClass());
+		if (ActiveTradeWidget)
+		{
+			ActiveTradeWidget->AddToViewport(12);
+			ActiveTradeWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	if (!ActiveTradeWidget)
+	{
+		return;
+	}
+
+	if (bVisible)
+	{
+		Server_RequestRefreshInventory();
+		if (bHasCachedTradeSnapshot)
+		{
+			ActiveTradeWidget->ApplyTradeSnapshot(CachedTradeSnapshot);
+		}
+	}
+	ActiveTradeWidget->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	if (bUpdateMouseInputMode)
+	{
+		bShowMouseCursor = bVisible;
+		if (bVisible)
+		{
+			FInputModeGameAndUI UIInput;
+			UIInput.SetWidgetToFocus(ActiveTradeWidget->TakeWidget());
+			UIInput.SetHideCursorDuringCapture(false);
+			SetInputMode(UIInput);
+		}
+		else
+		{
+			FInputModeGameOnly GameInput;
+			SetInputMode(GameInput);
+		}
+	}
+}
+
+AIU_PlayerCharacter* AIU_PlayerController::FindClosestOtherPlayerCharacter(float MaxDistanceCm) const
+{
+	const AIU_PlayerCharacter* SelfChar = GetIUPlayerCharacter();
+	const UWorld* W = GetWorld();
+	if (!SelfChar || !W)
+	{
+		return nullptr;
+	}
+
+	if (const UIU_TargetingComponent* TC = SelfChar->GetTargetingComponent())
+	{
+		if (AIU_PlayerCharacter* LockedP = Cast<AIU_PlayerCharacter>(TC->GetLockedTarget()))
+		{
+			if (IsValid(LockedP) && LockedP != SelfChar &&
+				FVector::Dist(SelfChar->GetActorLocation(), LockedP->GetActorLocation()) <= MaxDistanceCm)
+			{
+				return LockedP;
+			}
+		}
+	}
+
+	AIU_PlayerCharacter* Best = nullptr;
+	float BestDist = MaxDistanceCm;
+	for (TActorIterator<AIU_PlayerCharacter> It(W); It; ++It)
+	{
+		AIU_PlayerCharacter* Cand = *It;
+		if (!IsValid(Cand) || Cand == SelfChar)
+		{
+			continue;
+		}
+		const float D = FVector::Dist(SelfChar->GetActorLocation(), Cand->GetActorLocation());
+		if (D <= BestDist)
+		{
+			BestDist = D;
+			Best = Cand;
+		}
+	}
+	return Best;
+}
+
+void AIU_PlayerController::HandleChatEnterKey()
+{
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			HUDWidget->FocusOrSubmitChatBar();
+		}
+	}
+}
+
+void AIU_PlayerController::HandleQuickPartyKey()
+{
+	if (bHasCachedPartySnapshot && CachedPartySnapshot.PendingInvites.Num() > 0)
+	{
+		Server_RequestPartyRespond(CachedPartySnapshot.PendingInvites[0].InviteID, true);
+		return;
+	}
+	FString TargetUUID;
+	if (const AIU_PlayerCharacter* Ally = FindClosestOtherPlayerCharacter(2000.0f))
+	{
+		if (const AIU_PlayerState* AllyPS = Ally->GetPlayerState<AIU_PlayerState>())
+		{
+			TargetUUID = AllyPS->GetPersistedCharacterUUID();
+		}
+	}
+	Server_RequestPartyInvite(TargetUUID);
+}
+
+void AIU_PlayerController::HandleQuickTradeKey()
+{
+	const AIU_PlayerState* MyPS = GetPlayerState<AIU_PlayerState>();
+	const FString MyUUID = MyPS ? MyPS->GetPersistedCharacterUUID() : TEXT("");
+
+	if (bHasCachedTradeSnapshot && CachedTradeSnapshot.bHasActiveTrade)
+	{
+		if (CachedTradeSnapshot.State == TEXT("PENDING_INVITE") && CachedTradeSnapshot.RecipientCharID == MyUUID)
+		{
+			Server_RequestTradeRespond(CachedTradeSnapshot.TradeID, true);
+			return;
+		}
+		SetPlayerTradePanelVisible(!IsPlayerTradePanelVisible(), true);
+		return;
+	}
+
+	FString TargetUUID;
+	if (const AIU_PlayerCharacter* Ally = FindClosestOtherPlayerCharacter(600.0f))
+	{
+		if (const AIU_PlayerState* AllyPS = Ally->GetPlayerState<AIU_PlayerState>())
+		{
+			TargetUUID = AllyPS->GetPersistedCharacterUUID();
+		}
+	}
+	Server_RequestTradeWithCharacter(TargetUUID);
+}
+
+void AIU_PlayerController::SyncAllWorldControllersPartyStateOnServer()
+{
+	UWorld* W = GetWorld();
+	if (!W)
+	{
+		return;
+	}
+	for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AIU_PlayerController* OtherPC = Cast<AIU_PlayerController>(It->Get()))
+		{
+			OtherPC->Server_RequestRefreshParty();
+		}
+	}
+}
+
+void AIU_PlayerController::SyncPartnerTradeStateOnServer(const FString& CharIDA, const FString& CharIDB, bool bRefreshInventories)
+{
+	UWorld* W = GetWorld();
+	if (!W)
+	{
+		return;
+	}
+	for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
+	{
+		AIU_PlayerController* OtherPC = Cast<AIU_PlayerController>(It->Get());
+		if (!OtherPC) { continue; }
+		const AIU_PlayerState* PS = OtherPC->GetPlayerState<AIU_PlayerState>();
+		if (!PS) { continue; }
+		const FString CID = PS->GetPersistedCharacterUUID();
+		if (!CID.IsEmpty() && (CID == CharIDA || CID == CharIDB))
+		{
+			OtherPC->Server_RequestRefreshTrade();
+			if (bRefreshInventories)
+			{
+				OtherPC->Server_RequestRefreshInventory();
+			}
+		}
+	}
+}
+
+void AIU_PlayerController::Client_ReceivePartySnapshot_Implementation(const FIU_PartySnapshot& Snapshot)
+{
+	CachedPartySnapshot = Snapshot;
+	bHasCachedPartySnapshot = true;
+
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			HUDWidget->ApplyPartySnapshot(Snapshot);
+		}
+		if (!Snapshot.ActionMessage.IsEmpty())
+		{
+			IUHUD->NotifyInventoryToast(Snapshot.ActionMessage, true);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshParty_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	float HP = 200.0f, MaxHP = 200.0f, Ki = 200.0f, MaxKi = 200.0f;
+	if (const APawn* P = GetPawn())
+	{
+		if (const UIU_AttributeComponent* Attr = P->FindComponentByClass<UIU_AttributeComponent>())
+		{
+			HP = Attr->GetHP();
+			MaxHP = Attr->GetMaxHP();
+			Ki = Attr->GetKi();
+			MaxKi = Attr->GetMaxKi();
+		}
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	const FString MyCharID = IUPS->GetPersistedCharacterUUID();
+
+	Backend->FetchPartyState(
+		MyCharID,
+		IUPS->GetPersistedCharacterName(),
+		IUPS->GetActiveFencingEpoch(),
+		IUPS->GetCharacterLevel(),
+		HP,
+		MaxHP,
+		Ki,
+		MaxKi,
+		[WeakPC, WeakPS, MyCharID](bool bSuccess, const FIU_PartySnapshot& Snap, const FString&)
+		{
+			if (!bSuccess) { return; }
+			if (AIU_PlayerState* PS = WeakPS.Get())
+			{
+				PS->ApplyAuthoritativePartyIdentity(
+					Snap.bInParty ? Snap.PartyID : TEXT(""),
+					Snap.bInParty && Snap.LeaderCharID == MyCharID);
+			}
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				PC->Client_ReceivePartySnapshot(Snap);
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPartyInvite_Implementation(const FString& TargetCharUUID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	FString ResolvedTargetID = TargetCharUUID.TrimStartAndEnd();
+	FString ResolvedTargetName;
+	if (ResolvedTargetID.IsEmpty())
+	{
+		if (const AIU_PlayerCharacter* Ally = FindClosestOtherPlayerCharacter(2500.0f))
+		{
+			if (const AIU_PlayerState* AllyPS = Ally->GetPlayerState<AIU_PlayerState>())
+			{
+				ResolvedTargetID = AllyPS->GetPersistedCharacterUUID();
+				ResolvedTargetName = AllyPS->GetPersistedCharacterName();
+			}
+		}
+	}
+	if (ResolvedTargetID.IsEmpty())
+	{
+		Client_NotifyInventoryFeedback(TEXT("Khong tim thay nguoi choi nao o gan de moi vao Party!"), true);
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->InviteToParty(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetPersistedCharacterName(),
+		IUPS->GetCharacterLevel(),
+		IUPS->GetActiveFencingEpoch(),
+		ResolvedTargetID,
+		ResolvedTargetName,
+		[WeakPC](bool bSuccess, const FIU_PartySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceivePartySnapshot(Snap);
+					PC->SyncAllWorldControllersPartyStateOnServer();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPartyRespond_Implementation(const FString& InviteID, bool bAccept)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->RespondPartyInvite(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetPersistedCharacterName(),
+		IUPS->GetCharacterLevel(),
+		IUPS->GetActiveFencingEpoch(),
+		InviteID.TrimStartAndEnd(),
+		bAccept,
+		[WeakPC](bool bSuccess, const FIU_PartySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceivePartySnapshot(Snap);
+					PC->SyncAllWorldControllersPartyStateOnServer();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPartyLeave_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->LeaveParty(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC](bool bSuccess, const FIU_PartySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceivePartySnapshot(Snap);
+					PC->SyncAllWorldControllersPartyStateOnServer();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPartyKick_Implementation(const FString& TargetCharUUID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->KickPartyMember(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TargetCharUUID.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_PartySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceivePartySnapshot(Snap);
+					PC->SyncAllWorldControllersPartyStateOnServer();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPartyPromote_Implementation(const FString& TargetCharUUID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->PromotePartyLeader(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TargetCharUUID.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_PartySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceivePartySnapshot(Snap);
+					PC->SyncAllWorldControllersPartyStateOnServer();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestPlaceTacticalPing_Implementation(FVector WorldLocation)
+{
+	if (WorldLocation.ContainsNaN())
+	{
+		return;
+	}
+	UWorld* W = GetWorld();
+	AIU_GameState* GS = W ? W->GetGameState<AIU_GameState>() : nullptr;
+	const AIU_PlayerState* PS = GetPlayerState<AIU_PlayerState>();
+	if (!GS || !PS)
+	{
+		return;
+	}
+	FString PingPartyKey = PS->GetPartyID();
+	if (PingPartyKey.IsEmpty())
+	{
+		PingPartyKey = FString::Printf(TEXT("SOLO:%s"), *PS->GetPersistedCharacterUUID());
+	}
+	const FString Sender = PS->GetPersistedCharacterName().IsEmpty() ? TEXT("Warrior") : PS->GetPersistedCharacterName();
+	GS->BroadcastPartyTacticalPing(PingPartyKey, Sender, WorldLocation, 6.0f);
+}
+
+void AIU_PlayerController::Client_ReceiveGuildSnapshot_Implementation(const FIU_GuildSnapshot& Snapshot)
+{
+	CachedGuildSnapshot = Snapshot;
+	bHasCachedGuildSnapshot = true;
+
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->ApplyGuildSnapshot(Snapshot);
+	}
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+		{
+			IUHUD->NotifyInventoryToast(Snapshot.ActionMessage, true);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshGuild_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->FetchGuildSnapshot(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC, WeakPS](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString&)
+		{
+			if (!bSuccess) { return; }
+			if (AIU_PlayerState* PS = WeakPS.Get())
+			{
+				PS->ApplyAuthoritativeGuildIdentity(
+					Snap.bInGuild ? Snap.GuildID : TEXT(""),
+					Snap.bInGuild ? Snap.GuildName : TEXT(""),
+					Snap.bInGuild ? Snap.GuildTag : TEXT(""),
+					Snap.bInGuild ? Snap.MyRole : TEXT(""));
+			}
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				PC->Client_ReceiveGuildSnapshot(Snap);
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestCreateGuild_Implementation(const FString& GuildName, const FString& GuildTag, const FString& MOTD)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	const FString IdemKey = FString::Printf(
+		TEXT("srv_gcreate_%s_ep%lld_seq%llu"),
+		*IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		++GServerEconOpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->CreateGuild(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		GuildName.TrimStartAndEnd(),
+		GuildTag.TrimStartAndEnd().ToUpper(),
+		MOTD.TrimStartAndEnd(),
+		IdemKey,
+		[WeakPC, WeakPS](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					if (AIU_PlayerState* PS = WeakPS.Get())
+					{
+						PS->ApplyAuthoritativeGuildIdentity(Snap.GuildID, Snap.GuildName, Snap.GuildTag, Snap.MyRole);
+					}
+					PC->Client_ReceiveGuildSnapshot(Snap);
+					PC->Server_RequestRefreshInventory();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestJoinGuild_Implementation(const FString& GuildID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->JoinGuild(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		GuildID.TrimStartAndEnd(),
+		[WeakPC, WeakPS](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					if (AIU_PlayerState* PS = WeakPS.Get())
+					{
+						PS->ApplyAuthoritativeGuildIdentity(Snap.GuildID, Snap.GuildName, Snap.GuildTag, Snap.MyRole);
+					}
+					PC->Client_ReceiveGuildSnapshot(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestLeaveGuild_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->LeaveGuild(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC, WeakPS](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					if (AIU_PlayerState* PS = WeakPS.Get())
+					{
+						PS->ApplyAuthoritativeGuildIdentity(TEXT(""), TEXT(""), TEXT(""), TEXT(""));
+					}
+					PC->Client_ReceiveGuildSnapshot(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestDonateGuildCoins_Implementation(int64 AmountCoin)
+{
+	if (AmountCoin <= 0) { return; }
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	const FString IdemKey = FString::Printf(
+		TEXT("srv_gdonate_%s_ep%lld_seq%llu"),
+		*IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		++GServerEconOpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->DonateGuildCoins(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		AmountCoin,
+		IdemKey,
+		[WeakPC](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveGuildSnapshot(Snap);
+					PC->Server_RequestRefreshInventory();
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestUpdateGuildMOTD_Implementation(const FString& NewMOTD)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->UpdateGuildMOTD(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		NewMOTD.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess) { PC->Client_ReceiveGuildSnapshot(Snap); }
+				else { PC->Client_NotifyInventoryFeedback(ErrMsg, true); }
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestKickGuildMember_Implementation(const FString& TargetCharUUID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->KickGuildMember(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TargetCharUUID.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess) { PC->Client_ReceiveGuildSnapshot(Snap); }
+				else { PC->Client_NotifyInventoryFeedback(ErrMsg, true); }
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestSetGuildMemberRole_Implementation(const FString& TargetCharUUID, const FString& NewRole)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->SetGuildMemberRole(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TargetCharUUID.TrimStartAndEnd(),
+		NewRole.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_GuildSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess) { PC->Client_ReceiveGuildSnapshot(Snap); }
+				else { PC->Client_NotifyInventoryFeedback(ErrMsg, true); }
+			}
+		});
+}
+
+void AIU_PlayerController::Client_ReceiveChatMessage_Implementation(const FIU_ChatMessageView& Message)
+{
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			HUDWidget->AppendChatMessage(Message);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestSendChat_Implementation(
+	const FString& Channel,
+	const FString& Content,
+	const FString& TargetName)
+{
+	const FString Trimmed = Content.TrimStartAndEnd();
+	if (Trimmed.IsEmpty())
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	APawn* SenderPawn = GetPawn();
+	if (!IUPS || !SenderPawn)
+	{
+		return;
+	}
+	const FVector Pos = SenderPawn->GetActorLocation();
+
+	if (!IUPS->HasValidBackendLease())
+	{
+		// Offline/PIE fallback: display overhead speech bubble & echo locally
+		const FString Clean = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(Trimmed).Left(120);
+		IUPS->SetOverheadSpeechBubble(Clean, TEXT("LOCAL"), 4.5f);
+		FIU_ChatMessageView LocalMsg;
+		LocalMsg.Channel = TEXT("LOCAL");
+		LocalMsg.SenderName = IUPS->GetPersistedCharacterName().IsEmpty() ? TEXT("Warrior") : IUPS->GetPersistedCharacterName();
+		LocalMsg.Content = Clean;
+		LocalMsg.bShowBubble = true;
+		Client_ReceiveChatMessage(LocalMsg);
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->SendSocialChatMessage(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetPersistedCharacterName(),
+		IUPS->GetActiveFencingEpoch(),
+		Channel.TrimStartAndEnd(),
+		Trimmed,
+		Pos,
+		TargetName.TrimStartAndEnd(),
+		[WeakPC, WeakPS](bool bSuccess, const FIU_ChatMessageView& Msg, const FString& ErrMsg)
+		{
+			AIU_PlayerController* SenderPC = WeakPC.Get();
+			if (!SenderPC) { return; }
+			if (!bSuccess)
+			{
+				SenderPC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				return;
+			}
+
+			if (Msg.bShowBubble)
+			{
+				if (AIU_PlayerState* PS = WeakPS.Get())
+				{
+					PS->SetOverheadSpeechBubble(Msg.Content, Msg.Channel, 4.5f);
+				}
+			}
+
+			UWorld* W = SenderPC->GetWorld();
+			if (!W) { return; }
+			for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
+			{
+				AIU_PlayerController* ViewerPC = Cast<AIU_PlayerController>(It->Get());
+				if (!ViewerPC) { continue; }
+				const AIU_PlayerState* ViewerPS = ViewerPC->GetPlayerState<AIU_PlayerState>();
+				const APawn* ViewerPawn = ViewerPC->GetPawn();
+				if (!ViewerPS) { continue; }
+
+				bool bDeliver = false;
+				if (Msg.Channel == TEXT("ZONE") || Msg.Channel == TEXT("SYSTEM"))
+				{
+					bDeliver = true;
+				}
+				else if (Msg.Channel == TEXT("LOCAL"))
+				{
+					bDeliver = (ViewerPS->GetPersistedCharacterUUID() == Msg.SenderCharID) ||
+						(ViewerPawn && FVector::DistSquared(ViewerPawn->GetActorLocation(), Msg.SenderPosition) <= FMath::Square(6000.0));
+				}
+				else if (Msg.Channel == TEXT("PARTY"))
+				{
+					bDeliver = !Msg.PartyID.IsEmpty() && ViewerPS->GetPartyID() == Msg.PartyID;
+				}
+				else if (Msg.Channel == TEXT("GUILD"))
+				{
+					bDeliver = !Msg.GuildID.IsEmpty() && ViewerPS->GetGuildID() == Msg.GuildID;
+				}
+				else if (Msg.Channel == TEXT("WHISPER"))
+				{
+					bDeliver = (ViewerPS->GetPersistedCharacterUUID() == Msg.SenderCharID) ||
+						ViewerPS->GetPersistedCharacterName().Equals(Msg.TargetName, ESearchCase::IgnoreCase);
+				}
+
+				if (bDeliver)
+				{
+					ViewerPC->Client_ReceiveChatMessage(Msg);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Client_ReceiveTradeSnapshot_Implementation(const FIU_TradeSessionSnapshot& Snapshot)
+{
+	CachedTradeSnapshot = Snapshot;
+	bHasCachedTradeSnapshot = true;
+
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			HUDWidget->ApplyTradeInviteBanner(Snapshot);
+		}
+		if (!Snapshot.ActionMessage.IsEmpty())
+		{
+			IUHUD->NotifyInventoryToast(Snapshot.ActionMessage, Snapshot.State != TEXT("ABORTED_CONFLICT"));
+		}
+	}
+
+	if (Snapshot.State == TEXT("OPEN") || Snapshot.State == TEXT("BOTH_LOCKED"))
+	{
+		if (!IsPlayerTradePanelVisible())
+		{
+			SetPlayerTradePanelVisible(true, !GIsAutomationTesting);
+		}
+		if (ActiveTradeWidget)
+		{
+			ActiveTradeWidget->ApplyTradeSnapshot(Snapshot);
+		}
+	}
+	else if (Snapshot.State == TEXT("SETTLED") || Snapshot.State == TEXT("CANCELLED") || Snapshot.State == TEXT("ABORTED_CONFLICT"))
+	{
+		if (ActiveTradeWidget)
+		{
+			ActiveTradeWidget->ApplyTradeSnapshot(Snapshot);
+		}
+		if (IsPlayerTradePanelVisible())
+		{
+			SetPlayerTradePanelVisible(false, !GIsAutomationTesting);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshTrade_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->FetchTradeSession(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString&)
+		{
+			if (bSuccess)
+			{
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeWithCharacter_Implementation(const FString& OptionalTargetCharUUID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	AIU_PlayerCharacter* MyChar = GetIUPlayerCharacter();
+	if (!IUPS || !IUPS->HasValidBackendLease() || !MyChar || !MyChar->GetAttributeComponent() || MyChar->GetAttributeComponent()->IsDead())
+	{
+		return;
+	}
+
+	// Enforce <= 600 cm (6m) proximity & living target check on Server Authority!
+	AIU_PlayerCharacter* TargetChar = nullptr;
+	FString ResolvedTargetID = OptionalTargetCharUUID.TrimStartAndEnd();
+	if (!ResolvedTargetID.IsEmpty())
+	{
+		if (UWorld* W = GetWorld())
+		{
+			for (TActorIterator<AIU_PlayerCharacter> It(W); It; ++It)
+			{
+				AIU_PlayerCharacter* Cand = *It;
+				if (!IsValid(Cand) || Cand == MyChar) { continue; }
+				if (const AIU_PlayerState* CandPS = Cand->GetPlayerState<AIU_PlayerState>())
+				{
+					if (CandPS->GetPersistedCharacterUUID() == ResolvedTargetID)
+					{
+						TargetChar = Cand;
+						break;
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		TargetChar = FindClosestOtherPlayerCharacter(600.0f);
+		if (TargetChar)
+		{
+			if (const AIU_PlayerState* CandPS = TargetChar->GetPlayerState<AIU_PlayerState>())
+			{
+				ResolvedTargetID = CandPS->GetPersistedCharacterUUID();
+			}
+		}
+	}
+
+	if (!TargetChar || ResolvedTargetID.IsEmpty() ||
+		FVector::Dist(MyChar->GetActorLocation(), TargetChar->GetActorLocation()) > 600.0f ||
+		(TargetChar->GetAttributeComponent() && TargetChar->GetAttributeComponent()->IsDead()))
+	{
+		Client_NotifyInventoryFeedback(TEXT("Phai dung gan nguoi choi khac (<= 6m) de giao dich P2P!"), true);
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->RequestPlayerTrade(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		ResolvedTargetID,
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+					PC->SyncPartnerTradeStateOnServer(Snap.InitiatorCharID, Snap.RecipientCharID, false);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeRespond_Implementation(const FString& TradeID, bool bAccept)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->RespondPlayerTrade(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TradeID.TrimStartAndEnd(),
+		bAccept,
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+					PC->SyncPartnerTradeStateOnServer(Snap.InitiatorCharID, Snap.RecipientCharID, false);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeUpdateOffer_Implementation(int64 CoinOffer, const TArray<FString>& ItemInstanceIDs)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->UpdateTradeOffer(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TEXT(""),
+		CoinOffer,
+		ItemInstanceIDs,
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+					PC->SyncPartnerTradeStateOnServer(Snap.InitiatorCharID, Snap.RecipientCharID, false);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeLock_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->LockTradeOffer(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TEXT(""),
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+					PC->SyncPartnerTradeStateOnServer(Snap.InitiatorCharID, Snap.RecipientCharID, false);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeConfirm_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->ConfirmPlayerTrade(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TEXT(""),
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& TradeSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					if (bHasInv)
+					{
+						PC->ApplyAuthoritativeInventorySnapshotOnServer(InvSnap);
+					}
+					PC->Client_ReceiveTradeSnapshot(TradeSnap);
+					const bool bSettled = (TradeSnap.State == TEXT("SETTLED"));
+					PC->SyncPartnerTradeStateOnServer(TradeSnap.InitiatorCharID, TradeSnap.RecipientCharID, bSettled);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestTradeCancel_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->CancelPlayerTrade(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		TEXT(""),
+		[WeakPC](bool bSuccess, const FIU_TradeSessionSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->Client_ReceiveTradeSnapshot(Snap);
+					PC->SyncPartnerTradeStateOnServer(Snap.InitiatorCharID, Snap.RecipientCharID, false);
 				}
 				else
 				{

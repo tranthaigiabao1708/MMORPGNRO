@@ -12,6 +12,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 #include "CoreGlobals.h"
 #include "Templates/Atomic.h"
@@ -113,6 +114,50 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 					AttackerPS->AddEnemyKill();
 				}
 
+				// Step 5 Party Synergy & Personal Instanced Loot: collect living Party allies (including self) within 120m (12,000 cm)
+				int32 NearbyPartyMembers = 1;
+				TArray<APawn*> NearbyPartyPawns;
+				NearbyPartyPawns.Add(AttackerPawn);
+				if (UWorld* SynergyWorld = GetWorld())
+				{
+					const FString MyPartyID = AttackerPS->GetPartyID();
+					if (!MyPartyID.IsEmpty())
+					{
+						NearbyPartyPawns.Reset();
+						const FVector AttackerPos = AttackerPawn->GetActorLocation();
+						for (TActorIterator<AIU_PlayerCharacter> It(SynergyWorld); It; ++It)
+						{
+							AIU_PlayerCharacter* AllyPawn = *It;
+							if (!IsValid(AllyPawn))
+							{
+								continue;
+							}
+							const UIU_AttributeComponent* AllyAttr = AllyPawn->GetAttributeComponent();
+							if (AllyAttr && AllyAttr->IsDead())
+							{
+								continue;
+							}
+							if (const AIU_PlayerState* AllyPS = AllyPawn->GetPlayerState<AIU_PlayerState>())
+							{
+								if (AllyPS->GetPartyID() == MyPartyID &&
+									FVector::DistSquared(AttackerPos, AllyPawn->GetActorLocation()) <= FMath::Square(12000.0))
+								{
+									NearbyPartyPawns.AddUnique(AllyPawn);
+									if (NearbyPartyPawns.Num() >= 5)
+									{
+										break;
+									}
+								}
+							}
+						}
+						if (NearbyPartyPawns.IsEmpty())
+						{
+							NearbyPartyPawns.Add(AttackerPawn);
+						}
+						NearbyPartyMembers = FMath::Clamp(NearbyPartyPawns.Num(), 1, 5);
+					}
+				}
+
 				if (AttackerPS->HasValidBackendLease())
 				{
 					if (UWorld* World = GetWorld())
@@ -130,7 +175,6 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 
 								const float OutgoingDmg = EffectiveSpec.Amount;
 								TWeakObjectPtr<AIU_PlayerState> WeakAttackerPS(AttackerPS);
-								TWeakObjectPtr<AIU_PlayerController> WeakAttackerPC(Cast<AIU_PlayerController>(AttackerPawn->GetController()));
 
 								Backend->GrantCharacterEXP(
 									AttackerPS->GetPersistedCharacterUUID(),
@@ -158,64 +202,76 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 										}
 
 										UE_LOG(LogInfiniteUniverse, Log,
-											TEXT("[Progression] Hit Dmg=%.1f (Kill=%d) -> '%s' +%lld SucManh & +%lld TiemNang (1.5x Dame) | Lv.%d (%lld/%lld), TN=%lld, MaxHP=%.0f, Atk=%.0f"),
+											TEXT("[Progression] Hit Dmg=%.1f (Kill=%d, PartySynergy=x%.2f) -> '%s' +%lld SucManh & +%lld TiemNang | Lv.%d (%lld/%lld), TN=%lld"),
 											OutgoingDmg,
 											bTargetKilledByThisHit ? 1 : 0,
+											Updated.PartySynergyMult,
 											*Updated.CharacterName,
 											Updated.ExpGranted,
 											Updated.PotentialGranted,
 											Updated.Level,
 											Updated.CurrentExp,
 											Updated.NextLevelExp,
-											Updated.PotentialPoints,
-											Updated.MaxHP,
-											Updated.AttackPower);
-									});
+											Updated.PotentialPoints);
+									},
+									NearbyPartyMembers);
 
 								if (bTargetKilledByThisHit)
 								{
-									const FString LootIdemKey = FString::Printf(
-										TEXT("loot_%s_ep%lld_seq%llu"),
-										*Owner->GetName(),
-										AttackerPS->GetActiveFencingEpoch(),
-										HitSeq);
-
-									Backend->RollMonsterLoot(
-										AttackerPS->GetPersistedCharacterUUID(),
-										AttackerPS->GetActiveFencingEpoch(),
-										TEXT("mob.prototype_raider"),
-										LootIdemKey,
-										[WeakAttackerPS, WeakAttackerPC](bool bLootOK, const FIU_MobLootDropSummary& LootRes, const FIU_InventorySnapshot& Snap, const FString& LootErr)
+									for (APawn* LootPawn : NearbyPartyPawns)
+									{
+										AIU_PlayerState* LootPS = IsValid(LootPawn) ? LootPawn->GetPlayerState<AIU_PlayerState>() : nullptr;
+										if (!LootPS || !LootPS->HasValidBackendLease())
 										{
-											if (!bLootOK)
-											{
-												UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Loot] RollMonsterLoot failed: %s"), *LootErr);
-												return;
-											}
+											continue;
+										}
 
-											if (AIU_PlayerState* APS = WeakAttackerPS.Get())
-											{
-												APS->ApplyAuthoritativeEconomySummary(
-													Snap.StandardCoin,
-													Snap.ElixirCount,
-													Snap.CrimsonOreCount,
-													Snap.EquippedItems.Num());
-											}
+										TWeakObjectPtr<AIU_PlayerState> WeakLootPS(LootPS);
+										TWeakObjectPtr<AIU_PlayerController> WeakLootPC(Cast<AIU_PlayerController>(LootPawn->GetController()));
+										const FString LootIdemKey = FString::Printf(
+											TEXT("loot_%s_ep%lld_seq%llu_%s"),
+											*Owner->GetName(),
+											LootPS->GetActiveFencingEpoch(),
+											HitSeq,
+											*LootPS->GetPersistedCharacterUUID());
 
-											if (AIU_PlayerController* APC = WeakAttackerPC.Get())
+										Backend->RollMonsterLoot(
+											LootPS->GetPersistedCharacterUUID(),
+											LootPS->GetActiveFencingEpoch(),
+											TEXT("mob.prototype_raider"),
+											LootIdemKey,
+											[WeakLootPS, WeakLootPC](bool bLootOK, const FIU_MobLootDropSummary& LootRes, const FIU_InventorySnapshot& Snap, const FString& LootErr)
 											{
-												APC->Client_ReceiveInventorySnapshot(Snap);
-												APC->Client_NotifyLootDropped(LootRes.CoinsGranted, LootRes.DroppedItemLabels, LootRes.bBagFullSkipped);
-											}
+												if (!bLootOK)
+												{
+													UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Loot] RollMonsterLoot failed: %s"), *LootErr);
+													return;
+												}
 
-											UE_LOG(LogInfiniteUniverse, Log,
-												TEXT("[Loot] Raider defeated -> +%lld Vang (Total=%lld), DroppedItems=%d, UsedBag=%d/%d"),
-												LootRes.CoinsGranted,
-												LootRes.NewCoinBalance,
-												LootRes.DroppedItemLabels.Num(),
-												Snap.UsedBagSlots,
-												Snap.MaxBagSlots);
-										});
+												if (AIU_PlayerState* LPS = WeakLootPS.Get())
+												{
+													LPS->ApplyAuthoritativeEconomySummary(
+														Snap.StandardCoin,
+														Snap.ElixirCount,
+														Snap.CrimsonOreCount,
+														Snap.EquippedItems.Num());
+												}
+
+												if (AIU_PlayerController* LPC = WeakLootPC.Get())
+												{
+													LPC->Client_ReceiveInventorySnapshot(Snap);
+													LPC->Client_NotifyLootDropped(LootRes.CoinsGranted, LootRes.DroppedItemLabels, LootRes.bBagFullSkipped);
+												}
+
+												UE_LOG(LogInfiniteUniverse, Log,
+													TEXT("[Loot] Raider defeated -> +%lld Vang (Total=%lld), DroppedItems=%d, UsedBag=%d/%d"),
+													LootRes.CoinsGranted,
+													LootRes.NewCoinBalance,
+													LootRes.DroppedItemLabels.Num(),
+													Snap.UsedBagSlots,
+													Snap.MaxBagSlots);
+											});
+									}
 								}
 							}
 						}
@@ -223,7 +279,7 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 				}
 				else if (!GIsAutomationTesting)
 				{
-					AttackerPS->AwardOfflineHitProgress(EffectiveSpec.Amount);
+					AttackerPS->AwardOfflineHitProgress(EffectiveSpec.Amount, NearbyPartyMembers);
 					if (bTargetKilledByThisHit)
 					{
 						AttackerPS->AwardOfflineMobLoot(45);

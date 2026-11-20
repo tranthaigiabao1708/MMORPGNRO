@@ -22,6 +22,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Components/EditableTextBox.h"
 #include "Fonts/SlateFontInfo.h"
 #include "GameFramework/Pawn.h"
 
@@ -544,22 +545,160 @@ TSharedRef<SWidget> UIU_InventoryEquipmentWidget::RebuildWidget()
 			TabContentSwitcher->AddChild(SkillPotPane);
 		}
 
-		// ---- PANE 3: BANG HOI ----
+		// ---- PANE 3: BANG HOI (STEP 5 COMPLETE NRO GUILD MANAGEMENT!) ----
 		{
 			UBorder* GuildPane = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("GuildPane"));
-			GuildPane->SetBrushColor(FLinearColor(0.46f, 0.35f, 0.21f, 0.96f));
-			GuildPane->SetPadding(FMargin(12.0f, 12.0f));
+			GuildPane->SetBrushColor(FLinearColor(0.46f, 0.35f, 0.21f, 0.98f));
+			GuildPane->SetPadding(FMargin(8.0f, 7.0f));
 			USizeBox* GHeight = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 			GHeight->SetHeightOverride(318.0f);
-			UTextBlock* GuildTxt = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-			GuildTxt->SetText(FText::FromString(
-				TEXT("BANG HOI & TO DOI (STEP 5 SOCIAL SYSTEMS)\n\n")
-				TEXT("- Hien tai nhan vat chua gia nhap Bang Hoi.\n")
-				TEXT("- Cac tinh nang Bang Hoi, To Doi 5 nguoi, Kenh Chat WSS\n")
-				TEXT("  va Giao Dich Truc Tiep (P2P Trade) se mo tai Step 5.")));
-			StyleNROText(GuildTxt, 10, FLinearColor(0.98f, 0.94f, 0.84f));
-			GHeight->SetContent(GuildTxt);
 			GuildPane->SetContent(GHeight);
+
+			GuildModeSwitcher = WidgetTree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(), TEXT("GuildModeSwitcher"));
+			GHeight->SetContent(GuildModeSwitcher);
+
+			auto MakeGuildBtn = [&](const TCHAR* Lbl, const FLinearColor& BgCol) -> UButton*
+			{
+				UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+				B->SetBackgroundColor(BgCol);
+				UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				T->SetText(FText::FromString(Lbl));
+				StyleNROText(T, 8, FLinearColor(1.0f, 0.98f, 0.88f));
+				B->SetContent(T);
+				return B;
+			};
+
+			// Sub-Pane 0: Not In Guild (Create Guild + Browse Open Guilds)
+			{
+				UVerticalBox* NoGuildV = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("NoGuildVBox"));
+				GuildModeSwitcher->AddChild(NoGuildV);
+
+				UTextBlock* CreateTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				CreateTitle->SetText(FText::FromString(TEXT("THANH LAP BANG HOI MOI (PHI: 200 VANG | YEU CAU LV.2+):")));
+				StyleNROText(CreateTitle, 9, BrightGold);
+				if (UVerticalBoxSlot* S = NoGuildV->AddChildToVerticalBox(CreateTitle))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+				}
+
+				UHorizontalBox* InputRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UVerticalBoxSlot* S = NoGuildV->AddChildToVerticalBox(InputRow))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+				}
+
+				USizeBox* NameW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				NameW->SetWidthOverride(252.0f);
+				GuildCreateNameInput = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("GuildCreateNameInput"));
+				GuildCreateNameInput->SetText(FText::FromString(TEXT("Zenith Vanguards")));
+				GuildCreateNameInput->SetHintText(FText::FromString(TEXT("Ten Bang (3-24 ky tu)")));
+				NameW->SetContent(GuildCreateNameInput);
+				if (UHorizontalBoxSlot* S = InputRow->AddChildToHorizontalBox(NameW))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+				}
+
+				USizeBox* TagW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				TagW->SetWidthOverride(132.0f);
+				GuildCreateTagInput = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("GuildCreateTagInput"));
+				GuildCreateTagInput->SetText(FText::FromString(TEXT("ZNT")));
+				GuildCreateTagInput->SetHintText(FText::FromString(TEXT("TAG (2-5)")));
+				TagW->SetContent(GuildCreateTagInput);
+				InputRow->AddChildToHorizontalBox(TagW);
+
+				UHorizontalBox* CreateBtnRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UVerticalBoxSlot* S = NoGuildV->AddChildToVerticalBox(CreateBtnRow))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+				}
+				GuildCreateButton = MakeGuildBtn(TEXT(" LAP BANG HOI (-200 VANG) "), FLinearColor(0.16f, 0.58f, 0.24f, 1.0f));
+				GuildRefreshDirButton = MakeGuildBtn(TEXT(" TAI LAI DS BANG "), FLinearColor(0.32f, 0.42f, 0.56f, 1.0f));
+				if (UHorizontalBoxSlot* S = CreateBtnRow->AddChildToHorizontalBox(GuildCreateButton))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+				}
+				CreateBtnRow->AddChildToHorizontalBox(GuildRefreshDirButton);
+
+				UTextBlock* DirTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				DirTitle->SetText(FText::FromString(TEXT("DANH SACH BANG HOI DANG MO TUYEN THANH VIEN:")));
+				StyleNROText(DirTitle, 9, BrightGold);
+				if (UVerticalBoxSlot* S = NoGuildV->AddChildToVerticalBox(DirTitle))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+				}
+
+				USizeBox* DirScrollH = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				DirScrollH->SetHeightOverride(182.0f);
+				UScrollBox* DirScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+				GuildDirectoryListBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("GuildDirectoryListBox"));
+				DirScroll->AddChild(GuildDirectoryListBox);
+				DirScrollH->SetContent(DirScroll);
+				NoGuildV->AddChildToVerticalBox(DirScrollH);
+			}
+
+			// Sub-Pane 1: In Guild (Header + MOTD + Donate Vang + Roster)
+			{
+				UVerticalBox* InGuildV = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("InGuildVBox"));
+				GuildModeSwitcher->AddChild(InGuildV);
+
+				UBorder* SummaryCard = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+				SummaryCard->SetBrushColor(FLinearColor(0.30f, 0.21f, 0.12f, 0.98f));
+				SummaryCard->SetPadding(FMargin(7.0f, 5.0f));
+				GuildHeaderSummaryText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("GuildHeaderSummaryText"));
+				StyleNROText(GuildHeaderSummaryText, 9, BrightGold);
+				SummaryCard->SetContent(GuildHeaderSummaryText);
+				if (UVerticalBoxSlot* S = InGuildV->AddChildToVerticalBox(SummaryCard))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+				}
+
+				UHorizontalBox* MOTDRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UVerticalBoxSlot* S = InGuildV->AddChildToVerticalBox(MOTDRow))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+				}
+				USizeBox* MOTDW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				MOTDW->SetWidthOverride(305.0f);
+				GuildMOTDInputBox = WidgetTree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), TEXT("GuildMOTDInputBox"));
+				GuildMOTDInputBox->SetHintText(FText::FromString(TEXT("Thong bao Bang hoi...")));
+				MOTDW->SetContent(GuildMOTDInputBox);
+				if (UHorizontalBoxSlot* S = MOTDRow->AddChildToHorizontalBox(MOTDW))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+				}
+				GuildSaveMOTDButton = MakeGuildBtn(TEXT(" LUU TB "), FLinearColor(0.28f, 0.48f, 0.62f, 1.0f));
+				MOTDRow->AddChildToHorizontalBox(GuildSaveMOTDButton);
+
+				UHorizontalBox* DonateRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UVerticalBoxSlot* S = InGuildV->AddChildToVerticalBox(DonateRow))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+				}
+				GuildDonate50Button = MakeGuildBtn(TEXT(" GOP 50 VANG "), FLinearColor(0.78f, 0.50f, 0.08f, 1.0f));
+				GuildDonate150Button = MakeGuildBtn(TEXT(" GOP 150 VANG "), FLinearColor(0.86f, 0.56f, 0.08f, 1.0f));
+				GuildRefreshRosterButton = MakeGuildBtn(TEXT(" LAM MOI "), FLinearColor(0.26f, 0.42f, 0.56f, 1.0f));
+				GuildLeaveButton = MakeGuildBtn(TEXT(" ROI BANG "), FLinearColor(0.66f, 0.18f, 0.12f, 1.0f));
+
+				for (UButton* B : { GuildDonate50Button.Get(), GuildDonate150Button.Get(), GuildRefreshRosterButton.Get(), GuildLeaveButton.Get() })
+				{
+					if (B)
+					{
+						if (UHorizontalBoxSlot* S = DonateRow->AddChildToHorizontalBox(B))
+						{
+							S->SetPadding(FMargin(0.0f, 0.0f, 5.0f, 0.0f));
+						}
+					}
+				}
+
+				USizeBox* MemScrollH = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				MemScrollH->SetHeightOverride(158.0f);
+				UScrollBox* MemScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+				GuildMembersListBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("GuildMembersListBox"));
+				MemScroll->AddChild(GuildMembersListBox);
+				MemScrollH->SetContent(MemScroll);
+				InGuildV->AddChildToVerticalBox(MemScrollH);
+			}
+
 			TabContentSwitcher->AddChild(GuildPane);
 		}
 
@@ -673,6 +812,14 @@ void UIU_InventoryEquipmentWidget::NativeConstruct()
 	if (UpgradeKiButton) { UpgradeKiButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleUpgradeKiClicked); }
 	if (UpgradeAtkButton) { UpgradeAtkButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleUpgradeAtkClicked); }
 
+	if (GuildCreateButton) { GuildCreateButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleCreateGuildClicked); }
+	if (GuildRefreshDirButton) { GuildRefreshDirButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshGuildClicked); }
+	if (GuildSaveMOTDButton) { GuildSaveMOTDButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleSaveGuildMOTDClicked); }
+	if (GuildDonate50Button) { GuildDonate50Button->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleDonate50GuildClicked); }
+	if (GuildDonate150Button) { GuildDonate150Button->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleDonate150GuildClicked); }
+	if (GuildRefreshRosterButton) { GuildRefreshRosterButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshGuildClicked); }
+	if (GuildLeaveButton) { GuildLeaveButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleLeaveGuildClicked); }
+
 	if (FuncRefreshButton) { FuncRefreshButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshClicked); }
 	if (FuncDebugButton) { FuncDebugButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncToggleDebugClicked); }
 	if (FuncRotModeButton) { FuncRotModeButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncToggleRotClicked); }
@@ -695,6 +842,19 @@ void UIU_InventoryEquipmentWidget::SetActiveProfileTab(EIU_CharacterProfileTab N
 	if (TabContentSwitcher)
 	{
 		TabContentSwitcher->SetActiveWidgetIndex(static_cast<int32>(CurrentProfileTab));
+	}
+	if (CurrentProfileTab == EIU_CharacterProfileTab::BangHoi)
+	{
+		if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+		{
+			if (IUPC->HasCachedGuildSnapshot())
+			{
+				DisplayedGuildSnapshot = IUPC->GetCachedGuildSnapshot();
+				bHasGuildSnapshotData = true;
+			}
+			IUPC->Server_RequestRefreshGuild();
+		}
+		RebuildGuildPaneView();
 	}
 	UpdateTabHighlightVisuals();
 	UpdateAllReadouts();
@@ -749,10 +909,16 @@ void UIU_InventoryEquipmentWidget::RefreshBindingsAndRebuild()
 			DisplayedSnapshot = IUPC->GetCachedInventorySnapshot();
 			bHasSnapshotData = true;
 		}
+		if (IUPC->HasCachedGuildSnapshot())
+		{
+			DisplayedGuildSnapshot = IUPC->GetCachedGuildSnapshot();
+			bHasGuildSnapshotData = true;
+		}
 	}
 
 	UpdateAllReadouts();
 	RebuildPaperdollAndBagGrid();
+	RebuildGuildPaneView();
 }
 
 void UIU_InventoryEquipmentWidget::UnbindAll()
@@ -855,8 +1021,241 @@ void UIU_InventoryEquipmentWidget::ExecuteRowAction(
 		SetFeedbackMessage(TEXT("Dang ban vat pham nhan Vang..."));
 		IUPC->Server_RequestSellItem(ItemInstanceID, 1);
 		break;
+	case EIU_InvRowAction::JoinGuildByID:
+		SetFeedbackMessage(TEXT("Dang gui yeu cau gia nhap Bang hoi..."));
+		IUPC->Server_RequestJoinGuild(SlotID);
+		break;
+	case EIU_InvRowAction::PromoteGuildVice:
+		SetFeedbackMessage(TEXT("Dang phong chuc Pho Bang..."));
+		IUPC->Server_RequestSetGuildMemberRole(ItemInstanceID, TEXT("VICE_LEADER"));
+		break;
+	case EIU_InvRowAction::KickGuildMember:
+		SetFeedbackMessage(TEXT("Dang truc xuat thanh vien khoi Bang..."));
+		IUPC->Server_RequestKickGuildMember(ItemInstanceID);
+		break;
 	default:
 		break;
+	}
+}
+
+void UIU_InventoryEquipmentWidget::ApplyGuildSnapshot(const FIU_GuildSnapshot& Snapshot)
+{
+	DisplayedGuildSnapshot = Snapshot;
+	bHasGuildSnapshotData = true;
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		SetFeedbackMessage(Snapshot.ActionMessage, false);
+	}
+	RebuildGuildPaneView();
+	UpdateAllReadouts();
+}
+
+void UIU_InventoryEquipmentWidget::RebuildGuildPaneView()
+{
+	if (!WidgetTree || !GuildModeSwitcher)
+	{
+		return;
+	}
+
+	GuildModeSwitcher->SetActiveWidgetIndex(DisplayedGuildSnapshot.bInGuild ? 1 : 0);
+
+	if (!DisplayedGuildSnapshot.bInGuild)
+	{
+		if (!GuildDirectoryListBox) { return; }
+		GuildDirectoryListBox->ClearChildren();
+
+		if (DisplayedGuildSnapshot.Directory.Num() == 0)
+		{
+			UTextBlock* EmptyTxt = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			EmptyTxt->SetText(FText::FromString(TEXT("Chua co Bang Hoi nao tren may chu. Hay la nguoi dau tien lap Bang!")));
+			StyleNROText(EmptyTxt, 9, FLinearColor(0.95f, 0.92f, 0.84f));
+			GuildDirectoryListBox->AddChildToVerticalBox(EmptyTxt);
+			return;
+		}
+
+		for (const FIU_GuildDirectoryEntry& Dir : DisplayedGuildSnapshot.Directory)
+		{
+			UBorder* RowBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			RowBdr->SetBrushColor(FLinearColor(0.32f, 0.23f, 0.13f, 0.96f));
+			RowBdr->SetPadding(FMargin(6.0f, 4.0f));
+			if (UVerticalBoxSlot* RS = GuildDirectoryListBox->AddChildToVerticalBox(RowBdr))
+			{
+				RS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+			}
+
+			UHorizontalBox* RowH = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+			RowBdr->SetContent(RowH);
+
+			USizeBox* InfoW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+			InfoW->SetWidthOverride(305.0f);
+			UTextBlock* InfoT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			InfoT->SetText(FText::FromString(FString::Printf(
+				TEXT("[%s] %s (Lv.%d | TV: %d/%d)\nBang chu: %s"),
+				*Dir.GuildTag, *Dir.GuildName, Dir.GuildLevel, Dir.MemberCount, Dir.MemberCap, *Dir.LeaderName)));
+			StyleNROText(InfoT, 8, FLinearColor(0.98f, 0.95f, 0.85f));
+			InfoW->SetContent(InfoT);
+			RowH->AddChildToHorizontalBox(InfoW);
+
+			UButton* JoinBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+			JoinBtn->SetBackgroundColor(FLinearColor(0.16f, 0.58f, 0.26f, 1.0f));
+			UTextBlock* JoinLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			JoinLbl->SetText(FText::FromString(TEXT(" XIN VAO ")));
+			StyleNROText(JoinLbl, 8, FLinearColor::White);
+			JoinBtn->SetContent(JoinLbl);
+
+			UIU_InventoryActionProxy* Proxy = NewObject<UIU_InventoryActionProxy>(this);
+			Proxy->OwnerWidget = this;
+			Proxy->Action = EIU_InvRowAction::JoinGuildByID;
+			Proxy->SlotID = Dir.GuildID;
+			ActiveActionProxies.Add(Proxy);
+			JoinBtn->OnClicked.AddDynamic(Proxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+			RowH->AddChildToHorizontalBox(JoinBtn);
+		}
+		return;
+	}
+
+	if (GuildHeaderSummaryText)
+	{
+		GuildHeaderSummaryText->SetText(FText::FromString(FString::Printf(
+			TEXT("[%s] %s  |  Cap Bang Lv.%d (EXP: %lld)\nQuy Bang: %lld Vang  |  Thanh vien: %d/%d  |  Vai tro: %s (CH: %lld)"),
+			*DisplayedGuildSnapshot.GuildTag,
+			*DisplayedGuildSnapshot.GuildName,
+			DisplayedGuildSnapshot.GuildLevel,
+			DisplayedGuildSnapshot.GuildExp,
+			DisplayedGuildSnapshot.TreasuryStandardCoin,
+			DisplayedGuildSnapshot.MemberCount,
+			DisplayedGuildSnapshot.MemberCap,
+			*DisplayedGuildSnapshot.MyRole,
+			DisplayedGuildSnapshot.MyTotalContribution)));
+	}
+	if (GuildMOTDInputBox && !GuildMOTDInputBox->HasKeyboardFocus())
+	{
+		GuildMOTDInputBox->SetText(FText::FromString(DisplayedGuildSnapshot.MOTD));
+	}
+
+	if (!GuildMembersListBox) { return; }
+	GuildMembersListBox->ClearChildren();
+
+	const AIU_PlayerState* PS = BoundPS.Get();
+	const FString MyCharID = PS ? PS->GetPersistedCharacterUUID() : TEXT("");
+	const bool bAmLeader = (DisplayedGuildSnapshot.MyRole == TEXT("LEADER"));
+
+	for (const FIU_GuildMemberView& MV : DisplayedGuildSnapshot.Members)
+	{
+		UBorder* RowBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		RowBdr->SetBrushColor(FLinearColor(0.32f, 0.23f, 0.13f, 0.96f));
+		RowBdr->SetPadding(FMargin(6.0f, 3.5f));
+		if (UVerticalBoxSlot* RS = GuildMembersListBox->AddChildToVerticalBox(RowBdr))
+		{
+			RS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 3.5f));
+		}
+
+		UHorizontalBox* RowH = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		RowBdr->SetContent(RowH);
+
+		USizeBox* InfoW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		InfoW->SetWidthOverride(bAmLeader && MV.CharacterID != MyCharID ? 250.0f : 380.0f);
+		UTextBlock* InfoT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		InfoT->SetText(FText::FromString(FString::Printf(
+			TEXT("[%s] Lv.%d %s  |  Cong hien: %lld V"),
+			*MV.MemberRole, MV.Level, *MV.CharacterName, MV.TotalContribution)));
+		StyleNROText(InfoT, 8, (MV.MemberRole == TEXT("LEADER")) ? FLinearColor(1.0f, 0.90f, 0.28f) : FLinearColor(0.95f, 0.95f, 0.88f));
+		InfoW->SetContent(InfoT);
+		RowH->AddChildToHorizontalBox(InfoW);
+
+		if (bAmLeader && MV.CharacterID != MyCharID)
+		{
+			if (MV.MemberRole != TEXT("VICE_LEADER"))
+			{
+				UButton* PromBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+				PromBtn->SetBackgroundColor(FLinearColor(0.24f, 0.50f, 0.62f, 1.0f));
+				UTextBlock* PLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				PLbl->SetText(FText::FromString(TEXT(" PHO ")));
+				StyleNROText(PLbl, 7, FLinearColor::White);
+				PromBtn->SetContent(PLbl);
+
+				UIU_InventoryActionProxy* PProxy = NewObject<UIU_InventoryActionProxy>(this);
+				PProxy->OwnerWidget = this;
+				PProxy->Action = EIU_InvRowAction::PromoteGuildVice;
+				PProxy->ItemInstanceID = MV.CharacterID;
+				ActiveActionProxies.Add(PProxy);
+				PromBtn->OnClicked.AddDynamic(PProxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+				if (UHorizontalBoxSlot* S = RowH->AddChildToHorizontalBox(PromBtn))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 4.0f, 0.0f));
+				}
+			}
+
+			UButton* KickBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+			KickBtn->SetBackgroundColor(FLinearColor(0.66f, 0.18f, 0.12f, 1.0f));
+			UTextBlock* KLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			KLbl->SetText(FText::FromString(TEXT(" KICK ")));
+			StyleNROText(KLbl, 7, FLinearColor::White);
+			KickBtn->SetContent(KLbl);
+
+			UIU_InventoryActionProxy* KProxy = NewObject<UIU_InventoryActionProxy>(this);
+			KProxy->OwnerWidget = this;
+			KProxy->Action = EIU_InvRowAction::KickGuildMember;
+			KProxy->ItemInstanceID = MV.CharacterID;
+			ActiveActionProxies.Add(KProxy);
+			KickBtn->OnClicked.AddDynamic(KProxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+			RowH->AddChildToHorizontalBox(KickBtn);
+		}
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleCreateGuildClicked()
+{
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer());
+	if (!IUPC) { return; }
+	const FString NameStr = GuildCreateNameInput ? GuildCreateNameInput->GetText().ToString().TrimStartAndEnd() : TEXT("Zenith Vanguards");
+	const FString TagStr = GuildCreateTagInput ? GuildCreateTagInput->GetText().ToString().TrimStartAndEnd().ToUpper() : TEXT("ZNT");
+	SetFeedbackMessage(FString::Printf(TEXT("Dang thanh lap Bang [%s] %s (-200 Vang)..."), *TagStr, *NameStr));
+	IUPC->Server_RequestCreateGuild(NameStr, TagStr, TEXT("Doan ket san Boss cung Bang hoi!"));
+}
+
+void UIU_InventoryEquipmentWidget::HandleRefreshGuildClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang tai thong tin Bang hoi tu PostgreSQL 18..."));
+		IUPC->Server_RequestRefreshGuild();
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleSaveGuildMOTDClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		const FString NewMOTD = GuildMOTDInputBox ? GuildMOTDInputBox->GetText().ToString() : TEXT("");
+		IUPC->Server_RequestUpdateGuildMOTD(NewMOTD);
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleDonate50GuildClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang quyen gop 50 Vang vao Quy Bang..."));
+		IUPC->Server_RequestDonateGuildCoins(50);
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleDonate150GuildClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang quyen gop 150 Vang vao Quy Bang..."));
+		IUPC->Server_RequestDonateGuildCoins(150);
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleLeaveGuildClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang xu ly roi / giai tan Bang hoi..."));
+		IUPC->Server_RequestLeaveGuild();
 	}
 }
 
@@ -890,6 +1289,7 @@ void UIU_InventoryEquipmentWidget::UpdateAllReadouts()
 	const float MitPct = (Def > 0.0f) ? (100.0f - (10000.0f / (100.0f + Def))) : 0.0f;
 
 	FString CharName = (PS && !PS->GetPersistedCharacterName().IsEmpty()) ? PS->GetPersistedCharacterName() : TEXT("Chien Binh");
+	const FString GuildPrefix = (PS && !PS->GetGuildTag().IsEmpty()) ? FString::Printf(TEXT("[%s] "), *PS->GetGuildTag()) : TEXT("");
 
 	if (AvatarBadgeText)
 	{
@@ -914,7 +1314,7 @@ void UIU_InventoryEquipmentWidget::UpdateAllReadouts()
 
 	if (PaperdollNameplateText)
 	{
-		PaperdollNameplateText->SetText(FText::FromString(FString::Printf(TEXT("[ %s - Chien Binh Trai Dat ]"), *CharName)));
+		PaperdollNameplateText->SetText(FText::FromString(FString::Printf(TEXT("[ %s%s - Chien Binh Trai Dat ]"), *GuildPrefix, *CharName)));
 	}
 	if (PaperdollAvatarGlyphText)
 	{

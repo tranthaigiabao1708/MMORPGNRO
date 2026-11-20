@@ -16,6 +16,7 @@ void AIU_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AIU_GameState, bAllowGlobalPvPSparring);
 	DOREPLIFETIME(AIU_GameState, MartialSparringArenaBox);
+	DOREPLIFETIME(AIU_GameState, ActiveTacticalPings);
 }
 
 bool AIU_GameState::IsLocationInMartialArena(const FVector& WorldLocation) const
@@ -46,4 +47,36 @@ void AIU_GameState::SetAllowGlobalPvPSparring(bool bEnable)
 		bAllowGlobalPvPSparring = bEnable;
 		UE_LOG(LogInfiniteUniverse, Log, TEXT("[GameState] Global PvP Sparring set to %s"), bAllowGlobalPvPSparring ? TEXT("ENABLED") : TEXT("CO-OP ARENA ONLY"));
 	}
+}
+
+void AIU_GameState::BroadcastPartyTacticalPing(
+	const FString& InPartyID,
+	const FString& InSenderName,
+	const FVector& InWorldLoc,
+	float DurationSec)
+{
+	if (!HasAuthority() || InPartyID.IsEmpty())
+	{
+		return;
+	}
+	const float NowSrv = GetServerWorldTimeSeconds();
+	for (int32 i = ActiveTacticalPings.Num() - 1; i >= 0; --i)
+	{
+		if (ActiveTacticalPings[i].ExpireServerTime <= NowSrv)
+		{
+			ActiveTacticalPings.RemoveAt(i);
+		}
+	}
+	if (ActiveTacticalPings.Num() >= 12)
+	{
+		ActiveTacticalPings.RemoveAt(0);
+	}
+
+	FIU_TacticalPingEntry Entry;
+	Entry.PartyID = InPartyID;
+	Entry.SenderName = InSenderName.IsEmpty() ? TEXT("Ally") : InSenderName.Left(20);
+	Entry.WorldLocation = InWorldLoc;
+	Entry.ExpireServerTime = NowSrv + FMath::Clamp(DurationSec, 1.0f, 15.0f);
+	ActiveTacticalPings.Add(MoveTemp(Entry));
+	ForceNetUpdate();
 }

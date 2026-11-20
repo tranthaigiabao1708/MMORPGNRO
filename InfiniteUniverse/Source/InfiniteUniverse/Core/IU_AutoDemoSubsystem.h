@@ -33,6 +33,7 @@ private:
 	void TickMultiplayerNetClient(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
 	void TickStep3PersistenceShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
 	void TickStep4InventoryShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
+	void TickStep5SocialTradeShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
 	void SteerPlayerToward(AIU_PlayerCharacter* Player, APlayerController* RawPC, const FVector& GoalPos, float StopDistCm, bool bSprint, bool b3DPitch = false);
 
 	AIU_EnemyCharacter* FindClosestLivingEnemy(const FVector& Origin) const;
@@ -50,6 +51,7 @@ private:
 	int32 NetDemoClientRole = 0; // 1 = Client 1 (Recorder / Hero), 2 = Client 2 (Co-op Ally & PvP Sparring Partner)
 	int32 Step3PersistencePhase = 0; // 1 = Login -> Raid -> LevelUp -> Save/Disconnect, 2 = Post-Server-Restart Relogin Proof
 	int32 Step4EconomyPhase = 0; // 1 = StarterEquip -> Raid Loot/Vang -> Elixir/Equip/Enhance +1..+2 -> Logout, 2 = Post-Restart Relogin Proof
+	int32 Step5SocialPhase = 0; // 1 = Party + Synergy + Ping + Guild [ZNT] + Bubble Chat + 2-Step P2P Trade -> Logout, 2 = Post-Restart Guild/Trade Proof
 	bool bSentCleanNetClose = false;
 
 	bool bRecordFrames = false;
@@ -66,6 +68,14 @@ private:
 	bool bStep4UsedElixirAndEquippedLoot = false;
 	bool bStep4EnhancedArmorOnce = false;
 	bool bStep4EnhancedArmorTwice = false;
+	bool bStep5SentPartyAction = false;
+	bool bStep5SentPingAndChat = false;
+	bool bStep5ExecutedGuildAction = false;
+	bool bStep5SentGuildDonateAndChat = false;
+	bool bStep5InitiatedOrAcceptedTrade = false;
+	bool bStep5UpdatedTradeOffer = false;
+	bool bStep5LockedTradeOffer = false;
+	bool bStep5ConfirmedTrade = false;
 	double Step3PotentialAllocTime = 0.0;
 	double NextActionCooldownTime = 0.0;
 

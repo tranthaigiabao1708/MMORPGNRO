@@ -16,6 +16,7 @@ class AIU_PlayerCharacter;
 class UIU_LoginCharacterWidget;
 class UIU_PotentialUpgradeWidget;
 class UIU_InventoryEquipmentWidget;
+class UIU_PlayerTradeWidget;
 
 /**
  * Enhanced Input PlayerController decoupling hardware key bindings from character movement execution.
@@ -167,6 +168,25 @@ public:
 	bool HasCachedInventorySnapshot() const { return bHasCachedInventorySnapshot; }
 	const FIU_InventorySnapshot& GetCachedInventorySnapshot() const { return CachedInventorySnapshot; }
 
+	bool HasCachedGuildSnapshot() const { return bHasCachedGuildSnapshot; }
+	const FIU_GuildSnapshot& GetCachedGuildSnapshot() const { return CachedGuildSnapshot; }
+
+	bool HasCachedPartySnapshot() const { return bHasCachedPartySnapshot; }
+	const FIU_PartySnapshot& GetCachedPartySnapshot() const { return CachedPartySnapshot; }
+
+	bool HasCachedTradeSnapshot() const { return bHasCachedTradeSnapshot; }
+	const FIU_TradeSessionSnapshot& GetCachedTradeSnapshot() const { return CachedTradeSnapshot; }
+
+	/** Shows or hides the NRO 2-Step P2P Direct Trade modal (Key T). */
+	UFUNCTION(BlueprintCallable, Category = "IU|Trade")
+	void SetPlayerTradePanelVisible(bool bVisible, bool bUpdateMouseInputMode = true);
+
+	UFUNCTION(BlueprintPure, Category = "IU|Trade")
+	bool IsPlayerTradePanelVisible() const;
+
+	UFUNCTION(BlueprintPure, Category = "IU|Trade")
+	UIU_PlayerTradeWidget* GetActivePlayerTradeWidget() const { return ActiveTradeWidget; }
+
 	/** Server-enforced cooldown duration for Dau Than / consumables (default 3.0s). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "IU|Inventory", meta = (ClampMin = "0.1", ClampMax = "60.0"))
 	float ConsumableCooldownSeconds = 3.0f;
@@ -208,8 +228,96 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
 	void Server_RequestEnhanceItem(const FString& ItemInstanceID);
 
+	// ========================================================================
+	// Step 5 Party, Guild, Multi-Channel Chat, Tactical Ping & P2P Trade RPCs
+	// ========================================================================
+
+	UFUNCTION(Client, Reliable, Category = "IU|Party")
+	void Client_ReceivePartySnapshot(const FIU_PartySnapshot& Snapshot);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestRefreshParty();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPartyInvite(const FString& TargetCharUUID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPartyRespond(const FString& InviteID, bool bAccept);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPartyLeave();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPartyKick(const FString& TargetCharUUID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPartyPromote(const FString& TargetCharUUID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Party")
+	void Server_RequestPlaceTacticalPing(FVector WorldLocation);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Guild")
+	void Client_ReceiveGuildSnapshot(const FIU_GuildSnapshot& Snapshot);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestRefreshGuild();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestCreateGuild(const FString& GuildName, const FString& GuildTag, const FString& MOTD);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestJoinGuild(const FString& GuildID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestLeaveGuild();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestDonateGuildCoins(int64 AmountCoin);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestUpdateGuildMOTD(const FString& NewMOTD);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestKickGuildMember(const FString& TargetCharUUID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Guild")
+	void Server_RequestSetGuildMemberRole(const FString& TargetCharUUID, const FString& NewRole);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Social")
+	void Client_ReceiveChatMessage(const FIU_ChatMessageView& Message);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Social")
+	void Server_RequestSendChat(const FString& Channel, const FString& Content, const FString& TargetName);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Trade")
+	void Client_ReceiveTradeSnapshot(const FIU_TradeSessionSnapshot& Snapshot);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestRefreshTrade();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeWithCharacter(const FString& OptionalTargetCharUUID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeRespond(const FString& TradeID, bool bAccept);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeUpdateOffer(int64 CoinOffer, const TArray<FString>& ItemInstanceIDs);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeLock();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeConfirm();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
+	void Server_RequestTradeCancel();
+
 private:
 	void ApplyAuthoritativeInventorySnapshotOnServer(const FIU_InventorySnapshot& Snapshot);
+	void SyncAllWorldControllersPartyStateOnServer();
+	void SyncPartnerTradeStateOnServer(const FString& CharIDA, const FString& CharIDB, bool bRefreshInventories = false);
+	AIU_PlayerCharacter* FindClosestOtherPlayerCharacter(float MaxDistanceCm) const;
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;
 
 	void HandleMove(const FInputActionValue& Value);
@@ -243,6 +351,9 @@ private:
 	void HandleSkillHotbar5();
 	void HandleSkillHotbar6();
 	void HandleQuickUseElixir();
+	void HandleChatEnterKey();
+	void HandleQuickPartyKey();
+	void HandleQuickTradeKey();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_LoginCharacterWidget> ActiveAuthWidget;
@@ -253,7 +364,16 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_InventoryEquipmentWidget> ActiveInventoryWidget;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_PlayerTradeWidget> ActiveTradeWidget;
+
 	FIU_InventorySnapshot CachedInventorySnapshot;
 	bool bHasCachedInventorySnapshot = false;
+	FIU_GuildSnapshot CachedGuildSnapshot;
+	bool bHasCachedGuildSnapshot = false;
+	FIU_PartySnapshot CachedPartySnapshot;
+	bool bHasCachedPartySnapshot = false;
+	FIU_TradeSessionSnapshot CachedTradeSnapshot;
+	bool bHasCachedTradeSnapshot = false;
 	double LastConsumableUseServerTime = -100.0;
 };

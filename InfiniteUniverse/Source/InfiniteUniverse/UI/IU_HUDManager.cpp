@@ -536,17 +536,58 @@ void AIU_HUDManager::DrawHUD()
 		}
 	}
 
-	// 2b. World-Space Overhead HP Bars & Co-op / PvP Sparring Tags for Remote Players (Step 2 Multiplayer)
+	// 2b. World-Space Overhead HP Bars, [TAG] Guild Nameplates, NRO 3D Speech Bubbles & Tactical Party Pings (Step 2 + Step 5)
 	const AIU_GameState* GameState = World->GetGameState<AIU_GameState>();
+	const AIU_PlayerState* LocalIUPS = OwningPawn ? OwningPawn->GetPlayerState<AIU_PlayerState>() : nullptr;
+	const FString LocalPartyID = LocalIUPS ? LocalIUPS->GetPartyID() : TEXT("");
+	const float ServerNow = GameState ? GameState->GetServerWorldTimeSeconds() : static_cast<float>(World->GetTimeSeconds());
+
 	for (TActorIterator<AIU_PlayerCharacter> It(World); It; ++It)
 	{
 		AIU_PlayerCharacter* OtherPlayer = *It;
-		if (!IsValid(OtherPlayer) || OtherPlayer == OwningPawn)
+		if (!IsValid(OtherPlayer))
 		{
 			continue;
 		}
 		const UIU_AttributeComponent* PAttr = OtherPlayer->GetAttributeComponent();
-		if (!PAttr || PAttr->IsDead() || OtherPlayer == LockedTarget)
+		const AIU_PlayerState* OtherIUPS = OtherPlayer->GetPlayerState<AIU_PlayerState>();
+
+		// Render NRO 3D Overhead Speech Bubble above BOTH Local & Remote players when active!
+		if (OtherIUPS && HUDFont && ServerNow < OtherIUPS->GetOverheadChatExpireServerTime())
+		{
+			const FString BubbleMsg = OtherIUPS->GetOverheadChatBubbleText();
+			if (!BubbleMsg.IsEmpty() && FVector::DistSquared(PlayerPos, OtherPlayer->GetActorLocation()) <= FMath::Square(6200.0))
+			{
+				const FVector BubbleWorld = OtherPlayer->GetActorLocation() + FVector(0.0f, 0.0f, (OtherPlayer == OwningPawn) ? 132.0f : 152.0f);
+				const FVector BubbleProj = Project(BubbleWorld);
+				if (BubbleProj.Z > 0.0f && BubbleProj.X >= 10.0f && BubbleProj.X <= Canvas->ClipX - 10.0f)
+				{
+					float StrW = 0.0f, StrH = 0.0f;
+					Canvas->StrLen(HUDFont, BubbleMsg, StrW, StrH);
+					const float Scale = 0.86f;
+					const float BoxW = FMath::Clamp(StrW * Scale + 20.0f, 84.0f, 360.0f);
+					const float BoxH = 24.0f;
+					const float BX = FMath::Clamp(BubbleProj.X - BoxW * 0.5f, 8.0f, Canvas->ClipX - BoxW - 8.0f);
+					const float BY = BubbleProj.Y - BoxH;
+
+					const FString Ch = OtherIUPS->GetOverheadChatChannel();
+					const FLinearColor FillCol = (Ch == TEXT("PARTY"))
+						? FLinearColor(0.84f, 0.98f, 1.0f, 0.96f)
+						: (Ch == TEXT("GUILD"))
+						? FLinearColor(1.0f, 0.95f, 0.76f, 0.96f)
+						: FLinearColor(0.99f, 0.97f, 0.90f, 0.96f);
+
+					// Crisp NRO speech bubble frame + bottom pointer stem
+					DrawRect(FLinearColor(0.14f, 0.08f, 0.03f, 0.95f), BX - 2.0f, BY - 2.0f, BoxW + 4.0f, BoxH + 4.0f);
+					DrawRect(FillCol, BX, BY, BoxW, BoxH);
+					DrawRect(FLinearColor(0.14f, 0.08f, 0.03f, 0.95f), BubbleProj.X - 4.0f, BY + BoxH, 8.0f, 6.0f);
+					DrawRect(FillCol, BubbleProj.X - 2.5f, BY + BoxH - 1.0f, 5.0f, 5.0f);
+					DrawText(BubbleMsg, FLinearColor(0.10f, 0.06f, 0.02f, 1.0f), BX + 9.0f, BY + 3.0f, HUDFont, Scale);
+				}
+			}
+		}
+
+		if (OtherPlayer == OwningPawn || !PAttr || PAttr->IsDead() || OtherPlayer == LockedTarget)
 		{
 			continue;
 		}
@@ -563,36 +604,40 @@ void AIU_HUDManager::DrawHUD()
 			continue;
 		}
 
-		const bool bCanSpar = GameState ? GameState->ArePlayersAllowedToSpar(OwningPawn, OtherPlayer) : true;
-		const float BarW = 84.0f;
+		const bool bSameParty = (!LocalPartyID.IsEmpty() && OtherIUPS && OtherIUPS->GetPartyID() == LocalPartyID);
+		const bool bCanSpar = !bSameParty && (GameState ? GameState->ArePlayersAllowedToSpar(OwningPawn, OtherPlayer) : true);
+		const float BarW = 86.0f;
 		const float BarH = 7.0f;
 		const float BarX = HeadProj.X - (BarW * 0.5f);
 		const float BarY = HeadProj.Y;
 
 		DrawRect(FLinearColor(0.03f, 0.04f, 0.06f, 0.80f), BarX - 1.0f, BarY - 1.0f, BarW + 2.0f, BarH + 2.0f);
-		const FLinearColor PlayerBarCol = bCanSpar
-			? FLinearColor(1.0f, 0.55f, 0.12f, 0.95f)
-			: FLinearColor(0.15f, 0.90f, 0.85f, 0.92f);
+		const FLinearColor PlayerBarCol = bSameParty
+			? FLinearColor(0.24f, 0.98f, 0.48f, 0.96f)
+			: (bCanSpar ? FLinearColor(1.0f, 0.55f, 0.12f, 0.95f) : FLinearColor(0.15f, 0.90f, 0.85f, 0.92f));
 		DrawRect(PlayerBarCol, BarX, BarY, BarW * PAttr->GetHPPercent(), BarH);
 
 		if (HUDFont)
 		{
 			int32 PlayerID = 0;
 			int32 OtherLv = 1;
-			FString OtherName;
+			FString OtherName, OtherGuildTag;
 			if (const APlayerState* OtherPS = OtherPlayer->GetPlayerState())
 			{
 				PlayerID = OtherPS->GetPlayerId();
-				if (const AIU_PlayerState* OtherIUPS = Cast<AIU_PlayerState>(OtherPS))
+				if (OtherIUPS)
 				{
 					OtherLv = OtherIUPS->GetCharacterLevel();
 					OtherName = OtherIUPS->GetPersistedCharacterName();
+					OtherGuildTag = OtherIUPS->GetGuildTag();
 				}
 			}
 			FString RoleTag;
 			if (!OtherName.IsEmpty())
 			{
-				RoleTag = FString::Printf(TEXT("[Lv.%d %s]"), OtherLv, *OtherName);
+				const FString GPrefix = OtherGuildTag.IsEmpty() ? TEXT("") : FString::Printf(TEXT("[%s] "), *OtherGuildTag);
+				const FString PSuffix = bSameParty ? TEXT(" [PT]") : TEXT("");
+				RoleTag = FString::Printf(TEXT("%sLv.%d %s%s"), *GPrefix, OtherLv, *OtherName, *PSuffix);
 			}
 			else
 			{
@@ -600,7 +645,47 @@ void AIU_HUDManager::DrawHUD()
 					? FString::Printf(TEXT("[SPAR RIVAL #%d]"), PlayerID)
 					: FString::Printf(TEXT("[CO-OP ALLY #%d]"), PlayerID);
 			}
-			DrawText(RoleTag, PlayerBarCol, BarX - 18.0f, BarY - 20.0f, HUDFont, 0.88f);
+			DrawText(RoleTag, PlayerBarCol, BarX - 24.0f, BarY - 20.0f, HUDFont, 0.88f);
+		}
+	}
+
+	// 2c. Render 3D Tactical Party Pings (Alt + LMB, 6.0s Sky Beam + Distance Readout)
+	if (GameState && HUDFont)
+	{
+		const FString SoloPingKey = LocalIUPS ? FString::Printf(TEXT("SOLO:%s"), *LocalIUPS->GetPersistedCharacterUUID()) : TEXT("");
+		for (const FIU_TacticalPingEntry& Ping : GameState->ActiveTacticalPings)
+		{
+			if (ServerNow >= Ping.ExpireServerTime)
+			{
+				continue;
+			}
+			const bool bVisibleToMe = (!LocalPartyID.IsEmpty() && Ping.PartyID == LocalPartyID) ||
+				(!SoloPingKey.IsEmpty() && Ping.PartyID == SoloPingKey);
+			if (!bVisibleToMe)
+			{
+				continue;
+			}
+
+			const FVector BaseProj = Project(Ping.WorldLocation);
+			const FVector TopProj = Project(Ping.WorldLocation + FVector(0.0f, 0.0f, 360.0f));
+			if (BaseProj.Z > 0.0f && TopProj.Z > 0.0f)
+			{
+				const FLinearColor BeamOuter(0.18f, 0.92f, 1.0f, 0.88f);
+				const FLinearColor BeamCore(1.0f, 0.96f, 0.55f, 0.98f);
+				DrawLine(BaseProj.X, BaseProj.Y, TopProj.X, TopProj.Y, BeamOuter, 4.5f);
+				DrawLine(BaseProj.X, BaseProj.Y, TopProj.X, TopProj.Y, BeamCore, 1.8f);
+
+				const float R = 10.0f;
+				DrawLine(BaseProj.X, BaseProj.Y - R, BaseProj.X + R, BaseProj.Y, BeamCore, 2.0f);
+				DrawLine(BaseProj.X + R, BaseProj.Y, BaseProj.X, BaseProj.Y + R, BeamCore, 2.0f);
+				DrawLine(BaseProj.X, BaseProj.Y + R, BaseProj.X - R, BaseProj.Y, BeamCore, 2.0f);
+				DrawLine(BaseProj.X - R, BaseProj.Y, BaseProj.X, BaseProj.Y - R, BeamCore, 2.0f);
+
+				const float DistMeters = FVector::Dist(PlayerPos, Ping.WorldLocation) / 100.0f;
+				const FString PingTxt = FString::Printf(TEXT("[PING: %s | %.0fm]"), *Ping.SenderName, DistMeters);
+				DrawRect(FLinearColor(0.02f, 0.08f, 0.14f, 0.86f), TopProj.X - 68.0f, TopProj.Y - 22.0f, 138.0f, 20.0f);
+				DrawText(PingTxt, BeamCore, TopProj.X - 62.0f, TopProj.Y - 20.0f, HUDFont, 0.78f);
+			}
 		}
 	}
 

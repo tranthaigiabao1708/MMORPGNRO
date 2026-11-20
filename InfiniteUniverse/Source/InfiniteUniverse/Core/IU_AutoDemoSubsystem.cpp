@@ -46,14 +46,16 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	int32 ParsedNetRole = 0;
 	int32 ParsedStep3Phase = 0;
 	int32 ParsedStep4Phase = 0;
+	int32 ParsedStep5Phase = 0;
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), ParsedNetRole);
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), ParsedStep3Phase);
 	FParse::Value(Cmd, TEXT("AutoStep4Phase="), ParsedStep4Phase);
+	FParse::Value(Cmd, TEXT("AutoStep5Phase="), ParsedStep5Phase);
 
 	FString AutoAuthUser;
 	FParse::Value(Cmd, TEXT("AutoAuthUser="), AutoAuthUser);
 	// When client boots onto temporary local map while awaiting AutoAuth -> ClientTravel(?Ticket=...), wait for NM_Client world!
-	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0 || ParsedStep4Phase > 0) && World->GetNetMode() != NM_Client)
+	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0 || ParsedStep4Phase > 0 || ParsedStep5Phase > 0) && World->GetNetMode() != NM_Client)
 	{
 		return false;
 	}
@@ -62,7 +64,8 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 		FParse::Param(Cmd, TEXT("AutoServerTelemetry")) ||
 		ParsedNetRole > 0 ||
 		ParsedStep3Phase > 0 ||
-		ParsedStep4Phase > 0;
+		ParsedStep4Phase > 0 ||
+		ParsedStep5Phase > 0;
 }
 
 TStatId UIU_AutoDemoSubsystem::GetStatId() const
@@ -80,13 +83,20 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), NetDemoClientRole);
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), Step3PersistencePhase);
 	FParse::Value(Cmd, TEXT("AutoStep4Phase="), Step4EconomyPhase);
-	if ((Step3PersistencePhase > 0 || Step4EconomyPhase > 0) && NetDemoClientRole == 0)
+	FParse::Value(Cmd, TEXT("AutoStep5Phase="), Step5SocialPhase);
+	if ((Step3PersistencePhase > 0 || Step4EconomyPhase > 0 || Step5SocialPhase > 0) && NetDemoClientRole == 0)
 	{
 		NetDemoClientRole = 1;
 	}
 
 	bRecordFrames = FParse::Param(Cmd, TEXT("RecordDemoFrames"));
-	if (Step4EconomyPhase > 0)
+	if (Step5SocialPhase > 0)
+	{
+		TargetDurationSeconds = (Step5SocialPhase == 1) ? 33.5 : 10.5;
+		DemoFramesSubdir = FString::Printf(TEXT("Step5Frames_Phase%d_Client%d"), Step5SocialPhase, NetDemoClientRole);
+		CSVOutputFilename = FString::Printf(TEXT("Step5_Phase%d_Client%dProfile.csv"), Step5SocialPhase, NetDemoClientRole);
+	}
+	else if (Step4EconomyPhase > 0)
 	{
 		TargetDurationSeconds = (Step4EconomyPhase == 1) ? 25.5 : 10.0;
 		DemoFramesSubdir = FString::Printf(TEXT("Step4Frames_Phase%d_Client%d"), Step4EconomyPhase, NetDemoClientRole);
@@ -344,6 +354,11 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 	if (bSinglePlayerMode && Player && RawPC)
 	{
 		TickSinglePlayerShowcase(World, Player, RawPC);
+	}
+	else if (Step5SocialPhase > 0 && Player && RawPC)
+	{
+		ConnectedPlaySeconds += ClampedDt;
+		TickStep5SocialTradeShowcase(World, Player, RawPC);
 	}
 	else if (Step4EconomyPhase > 0 && Player && RawPC)
 	{
@@ -1419,6 +1434,370 @@ void UIU_AutoDemoSubsystem::TickStep4InventoryShowcase(UWorld* World, AIU_Player
 			Attr ? Attr->GetMaxHP() : 200.0f,
 			Attr ? Attr->GetAttackPower() : 100.0f,
 			Attr ? Attr->GetDefense() : 20.0f));
+	}
+}
+
+void UIU_AutoDemoSubsystem::TickStep5SocialTradeShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC)
+{
+	AIU_HUDManager* HUD = Cast<AIU_HUDManager>(RawPC->GetHUD());
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(RawPC);
+	auto SetBanner = [HUD](const FString& Text)
+	{
+		if (HUD)
+		{
+			HUD->SetShowcaseStepBanner(Text);
+		}
+	};
+
+	const AIU_PlayerState* IUPS = Player->GetPlayerState<AIU_PlayerState>();
+	const int32 CurLv = IUPS ? IUPS->GetCharacterLevel() : 1;
+	const int64 CoinBal = IUPS ? IUPS->GetStandardCoin() : 0;
+	const FString CharName = (IUPS && !IUPS->GetPersistedCharacterName().IsEmpty()) ? IUPS->GetPersistedCharacterName() : TEXT("Hero");
+	const FString GuildTag = IUPS ? IUPS->GetGuildTag() : TEXT("");
+	const int64 CurEpoch = IUPS ? IUPS->GetActiveFencingEpoch() : 0;
+	AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player);
+
+	// =========================================================================
+	// PHASE 2: Post-Dedicated-Server-Restart Guild [ZNT], Traded Gear & Ledger Vang Verification!
+	// =========================================================================
+	if (Step5SocialPhase == 2)
+	{
+		if (LastTriggeredStage != 502)
+		{
+			LastTriggeredStage = 502;
+			Player->StopSprintInput();
+			Player->StopJumpInput();
+			Player->StopDescendInput();
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+				IUPC->Server_RequestRefreshGuild();
+			}
+		}
+
+		if (IUPC && NetDemoClientRole == 1)
+		{
+			if (ConnectedPlaySeconds >= 1.8 && ConnectedPlaySeconds < 5.4)
+			{
+				if (!IUPC->IsInventoryPanelVisible() ||
+					(IUPC->GetActiveCharacterProfileWidget() && IUPC->GetActiveCharacterProfileWidget()->GetActiveProfileTab() != EIU_CharacterProfileTab::BangHoi))
+				{
+					IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::BangHoi, false);
+				}
+			}
+			else if (ConnectedPlaySeconds >= 5.4 && ConnectedPlaySeconds < 8.8)
+			{
+				if (!IUPC->IsInventoryPanelVisible() ||
+					(IUPC->GetActiveCharacterProfileWidget() && IUPC->GetActiveCharacterProfileWidget()->GetActiveProfileTab() != EIU_CharacterProfileTab::HanhTrang))
+				{
+					IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::HanhTrang, false);
+				}
+			}
+			else if (IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
+			}
+		}
+
+		if (Ally)
+		{
+			const FVector ToAlly = Ally->GetActorLocation() - Player->GetActorLocation();
+			if (!ToAlly.IsNearlyZero(10.0f))
+			{
+				RawPC->SetControlRotation(FRotator(-9.0f, ToAlly.Rotation().Yaw, 0.0f));
+			}
+		}
+		else
+		{
+			Player->ApplyLookInput(FVector2D(0.60f, 0.0f));
+		}
+
+		SetBanner(FString::Printf(
+			TEXT("STEP 5 [RESTORED]: [%s] %s Lv.%d | Vang:%lld | Ep#%lld (Bang Hoi & Do Giao Dich Bao Toan 100%%)"),
+			GuildTag.IsEmpty() ? TEXT("---") : *GuildTag,
+			*CharName,
+			CurLv,
+			CoinBal,
+			CurEpoch));
+		return;
+	}
+
+	// =========================================================================
+	// PHASE 1: Party + 3D Ping + Speech Bubble -> Co-op Raid (+15% Synergy) -> Guild [ZNT] -> 2-Step P2P Trade -> Logout
+	// =========================================================================
+	const double T = ConnectedPlaySeconds;
+	const FVector RaidAnchor(-1850.0f, (NetDemoClientRole == 1) ? -140.0f : 140.0f, 95.0f);
+	const FVector CourtyardSpot(-320.0f, (NetDemoClientRole == 1) ? -105.0f : 105.0f, 112.0f);
+
+	if (T < 4.5)
+	{
+		if (LastTriggeredStage != 511)
+		{
+			LastTriggeredStage = 511;
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+			}
+			SetBanner(TEXT("STEP 5 [1/5]: Lap Party 5 Nguoi [Y], Bong Bong Chat 3D & Ping Khong Chien [Alt+LMB]"));
+		}
+
+		if (Ally)
+		{
+			SteerPlayerToward(Player, RawPC, Ally->GetActorLocation(), 210.0f, false, false);
+		}
+
+		if (IUPC && !bStep5SentPartyAction)
+		{
+			if (NetDemoClientRole == 1 && T >= 1.2 && Ally)
+			{
+				bStep5SentPartyAction = true;
+				IUPC->Server_RequestPartyInvite(TEXT(""));
+			}
+			else if (NetDemoClientRole == 2 && T >= 2.2)
+			{
+				bStep5SentPartyAction = true;
+				IUPC->Server_RequestPartyRespond(TEXT(""), true);
+			}
+		}
+
+		if (IUPC && !bStep5SentPingAndChat && T >= 2.8)
+		{
+			bStep5SentPingAndChat = true;
+			if (NetDemoClientRole == 1)
+			{
+				IUPC->Server_RequestPlaceTacticalPing(FVector(-620.0f, 0.0f, 112.0f));
+				IUPC->Server_RequestSendChat(TEXT("LOCAL"), TEXT("Anh em vao Party san Raider nhan +15% SM/TN!"), TEXT(""));
+			}
+			else
+			{
+				IUPC->Server_RequestSendChat(TEXT("LOCAL"), TEXT("San sang! Tien ve khu Raider thoi!"), TEXT(""));
+			}
+		}
+	}
+	else if (T < 16.2 && (CoinBal < 260 || CurLv < 2))
+	{
+		if (LastTriggeredStage != 512)
+		{
+			LastTriggeredStage = 512;
+			SetBanner(TEXT("STEP 5 [2/5]: Party Co-op Raid (1.5x Dame * 1.15 Party Synergy + Personal Party Loot)"));
+		}
+
+		AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
+		if (!TargetEnemy)
+		{
+			TargetEnemy = FindClosestLivingEnemy(Player->GetActorLocation());
+		}
+
+		if (TargetEnemy && !TargetEnemy->IsDead())
+		{
+			if (Player->GetTargetingComponent()->GetLockedTarget() != TargetEnemy)
+			{
+				Player->GetTargetingComponent()->SetLockedTarget(TargetEnemy);
+			}
+			SteerPlayerToward(Player, RawPC, TargetEnemy->GetActorLocation(), 145.0f, true, false);
+			if (ElapsedSeconds >= NextActionCooldownTime)
+			{
+				const float DistE = FVector::Dist2D(Player->GetActorLocation(), TargetEnemy->GetActorLocation());
+				if (DistE > 220.0f)
+				{
+					Player->KiBlastInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.48;
+				}
+				else
+				{
+					Player->MeleeAttackInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.21;
+				}
+			}
+		}
+		else
+		{
+			SteerPlayerToward(Player, RawPC, RaidAnchor, 90.0f, true, false);
+		}
+	}
+	else if (T < 21.4)
+	{
+		if (LastTriggeredStage != 513)
+		{
+			LastTriggeredStage = 513;
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+			}
+			SetBanner(TEXT("STEP 5 [3/5]: Tab [Bang Hoi] -> Lap Bang [ZNT] (-200 Vang), Gia Nhap & Gop Quy Bang!"));
+		}
+
+		if (FVector::Dist2D(Player->GetActorLocation(), CourtyardSpot) > 90.0f)
+		{
+			SteerPlayerToward(Player, RawPC, CourtyardSpot, 70.0f, true, false);
+		}
+		else
+		{
+			Player->StopSprintInput();
+			Player->ApplyMovementInput(FVector2D::ZeroVector);
+			if (Ally)
+			{
+				const FVector ToAlly = Ally->GetActorLocation() - Player->GetActorLocation();
+				if (!ToAlly.IsNearlyZero(5.0f))
+				{
+					RawPC->SetControlRotation(FRotator(-8.5f, ToAlly.Rotation().Yaw, 0.0f));
+				}
+			}
+		}
+
+		if (IUPC && !bStep5ExecutedGuildAction)
+		{
+			if (NetDemoClientRole == 1 && T >= 16.6)
+			{
+				bStep5ExecutedGuildAction = true;
+				IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::BangHoi, false);
+				IUPC->Server_RequestCreateGuild(TEXT("Zenith Vanguards"), TEXT("ZNT"), TEXT("Bang hoi Chien Binh Vu Tru!"));
+			}
+			else if (NetDemoClientRole == 2 && T >= 17.8)
+			{
+				IUPC->Server_RequestRefreshGuild();
+				if (IUPC->HasCachedGuildSnapshot() && IUPC->GetCachedGuildSnapshot().Directory.Num() > 0)
+				{
+					FString TargetGuildID;
+					for (const FIU_GuildDirectoryEntry& DirEntry : IUPC->GetCachedGuildSnapshot().Directory)
+					{
+						if (DirEntry.GuildTag.Equals(TEXT("ZNT"), ESearchCase::IgnoreCase))
+						{
+							TargetGuildID = DirEntry.GuildID;
+							break;
+						}
+					}
+					if (!TargetGuildID.IsEmpty())
+					{
+						bStep5ExecutedGuildAction = true;
+						IUPC->Server_RequestJoinGuild(TargetGuildID);
+					}
+				}
+			}
+		}
+
+		if (IUPC && bStep5ExecutedGuildAction && !bStep5SentGuildDonateAndChat && T >= 19.3)
+		{
+			bStep5SentGuildDonateAndChat = true;
+			if (NetDemoClientRole == 2 && CoinBal >= 50)
+			{
+				IUPC->Server_RequestDonateGuildCoins(50);
+				IUPC->Server_RequestSendChat(TEXT("GUILD"), TEXT("Da vao Bang [ZNT] va gop 50 Vang vao Quy Bang!"), TEXT(""));
+			}
+			else if (NetDemoClientRole == 1)
+			{
+				IUPC->Server_RequestRefreshGuild();
+				IUPC->Server_RequestSendChat(TEXT("GUILD"), TEXT("Chao mung thanh vien moi cua Bang [ZNT]!"), TEXT(""));
+			}
+		}
+	}
+	else if (T < 30.2)
+	{
+		if (LastTriggeredStage != 514)
+		{
+			LastTriggeredStage = 514;
+			if (IUPC && IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
+			}
+			SetBanner(TEXT("STEP 5 [4/5]: Giao Dich P2P 2 Buoc (Khoa Do & 100 Vang -> Dem Nguoc 3.0s -> Xac Nhan!)"));
+		}
+
+		// Keep both players standing within 210cm (<= 600cm trade range) facing each other!
+		if (FVector::Dist2D(Player->GetActorLocation(), CourtyardSpot) > 85.0f)
+		{
+			SteerPlayerToward(Player, RawPC, CourtyardSpot, 65.0f, true, false);
+		}
+		else
+		{
+			Player->StopSprintInput();
+			Player->ApplyMovementInput(FVector2D::ZeroVector);
+			if (Ally)
+			{
+				const FVector ToAlly = Ally->GetActorLocation() - Player->GetActorLocation();
+				if (!ToAlly.IsNearlyZero(5.0f))
+				{
+					RawPC->SetControlRotation(FRotator(-8.5f, ToAlly.Rotation().Yaw, 0.0f));
+				}
+			}
+		}
+
+		if (IUPC && !bStep5InitiatedOrAcceptedTrade)
+		{
+			if (NetDemoClientRole == 1 && T >= 21.6 && Ally && FVector::Dist(Player->GetActorLocation(), Ally->GetActorLocation()) <= 580.0f)
+			{
+				bStep5InitiatedOrAcceptedTrade = true;
+				IUPC->Server_RequestTradeWithCharacter(TEXT(""));
+			}
+			else if (NetDemoClientRole == 2 && T >= 22.4 && IUPC->HasCachedTradeSnapshot() && IUPC->GetCachedTradeSnapshot().bHasActiveTrade)
+			{
+				bStep5InitiatedOrAcceptedTrade = true;
+				IUPC->Server_RequestTradeRespond(IUPC->GetCachedTradeSnapshot().TradeID, true);
+			}
+		}
+
+		if (IUPC && bStep5InitiatedOrAcceptedTrade && !bStep5UpdatedTradeOffer && T >= 23.4 &&
+			IUPC->HasCachedTradeSnapshot() && IUPC->GetCachedTradeSnapshot().State == TEXT("OPEN"))
+		{
+			bStep5UpdatedTradeOffer = true;
+			if (NetDemoClientRole == 1)
+			{
+				const int64 OfferCoins = FMath::Min<int64>(100, FMath::Max<int64>(20, CoinBal));
+				IUPC->Server_RequestTradeUpdateOffer(OfferCoins, TArray<FString>());
+			}
+			else
+			{
+				TArray<FString> UnboundOffer;
+				if (IUPC->HasCachedInventorySnapshot())
+				{
+					for (const FIU_InventoryItemView& It : IUPC->GetCachedInventorySnapshot().BagItems)
+					{
+						if (!It.bIsBound && !It.bIsPlayerLocked)
+						{
+							UnboundOffer.Add(It.InstanceID);
+							break;
+						}
+					}
+				}
+				IUPC->Server_RequestTradeUpdateOffer(0, UnboundOffer);
+			}
+		}
+
+		if (IUPC && bStep5UpdatedTradeOffer && !bStep5LockedTradeOffer && T >= 24.6)
+		{
+			bStep5LockedTradeOffer = true;
+			IUPC->Server_RequestTradeLock();
+		}
+
+		// Wait full > 3.2s after Lock (24.6s -> 28.2s) so 3.0s Anti-Scam Inspection Countdown completes visibly!
+		if (IUPC && bStep5LockedTradeOffer && !bStep5ConfirmedTrade && T >= 28.3)
+		{
+			bStep5ConfirmedTrade = true;
+			IUPC->Server_RequestTradeConfirm();
+		}
+	}
+	else
+	{
+		if (LastTriggeredStage != 515)
+		{
+			LastTriggeredStage = 515;
+			if (IUPC && NetDemoClientRole == 1)
+			{
+				IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::HanhTrang, false);
+			}
+		}
+		if (IUPC && NetDemoClientRole == 1 && T >= 32.8 && IUPC->IsInventoryPanelVisible())
+		{
+			IUPC->SetInventoryPanelVisible(false, false);
+		}
+		Player->StopSprintInput();
+		Player->ApplyMovementInput(FVector2D::ZeroVector);
+		SetBanner(FString::Printf(
+			TEXT("STEP 5 [5/5]: [%s] %s Lv.%d | Vang:%lld -> Giao Dich & Bang Hoi Hoan Tat -> LOGOUT!"),
+			GuildTag.IsEmpty() ? TEXT("ZNT") : *GuildTag,
+			*CharName,
+			CurLv,
+			CoinBal));
 	}
 }
 

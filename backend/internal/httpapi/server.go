@@ -17,8 +17,12 @@ import (
 	"github.com/infinite-universe/backend/internal/modules/character"
 	"github.com/infinite-universe/backend/internal/modules/economy"
 	"github.com/infinite-universe/backend/internal/modules/gamedata"
+	"github.com/infinite-universe/backend/internal/modules/guild"
 	"github.com/infinite-universe/backend/internal/modules/inventory"
 	"github.com/infinite-universe/backend/internal/modules/loot"
+	"github.com/infinite-universe/backend/internal/modules/party"
+	"github.com/infinite-universe/backend/internal/modules/social"
+	"github.com/infinite-universe/backend/internal/modules/trade"
 	"github.com/infinite-universe/backend/internal/modules/world"
 )
 
@@ -29,7 +33,7 @@ type ipBucket struct {
 	lastRefill time.Time
 }
 
-// Handler exposes the Step 3–4 Client REST API (/v1/*) and HMAC-authenticated UE5 Dedicated Server Bridge (/internal/v1/*).
+// Handler exposes the Step 3–5 Client REST API (/v1/*) and HMAC-authenticated UE5 Dedicated Server Bridge (/internal/v1/*).
 type Handler struct {
 	accounts   *account.Service
 	authMgr    *auth.Manager
@@ -38,6 +42,10 @@ type Handler struct {
 	economy    *economy.Service
 	inventory  *inventory.Service
 	loot       *loot.Service
+	partyCoord *party.Coordinator
+	guildSvc   *guild.Service
+	tradeSvc   *trade.Service
+	chatRouter *social.Router
 	logger     *slog.Logger
 
 	rateMu    sync.Mutex
@@ -78,6 +86,19 @@ func (h *Handler) AttachStep4Modules(
 	h.economy = eco
 	h.inventory = inv
 	h.loot = lootSvc
+}
+
+// AttachStep5Modules wires Step 5 5-Player Party, PostgreSQL Guilds, Atomic P2P Trade, and Multi-Channel Chat Router.
+func (h *Handler) AttachStep5Modules(
+	partyCoord *party.Coordinator,
+	guildSvc *guild.Service,
+	tradeSvc *trade.Service,
+	chatRouter *social.Router,
+) {
+	h.partyCoord = partyCoord
+	h.guildSvc = guildSvc
+	h.tradeSvc = tradeSvc
+	h.chatRouter = chatRouter
 }
 
 // SetAuthRateLimit configures the per-IP token bucket for /v1/auth/* endpoints.
@@ -151,6 +172,34 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/v1/inventory/sell", h.requireServerHMAC(h.handleInternalSellItem))
 	mux.HandleFunc("POST /internal/v1/economy/enhance", h.requireServerHMAC(h.handleInternalEnhanceEquipment))
 	mux.HandleFunc("POST /internal/v1/loot/roll-mob", h.requireServerHMAC(h.handleInternalRollMobLoot))
+
+	// Step 5 Authoritative 5-Player Party, PostgreSQL Guilds, Atomic 2-Step P2P Trade & Multi-Channel Chat Bridge
+	mux.HandleFunc("POST /internal/v1/party/get", h.requireServerHMAC(h.handleInternalPartyGet))
+	mux.HandleFunc("POST /internal/v1/party/invite", h.requireServerHMAC(h.handleInternalPartyInvite))
+	mux.HandleFunc("POST /internal/v1/party/respond", h.requireServerHMAC(h.handleInternalPartyRespond))
+	mux.HandleFunc("POST /internal/v1/party/leave", h.requireServerHMAC(h.handleInternalPartyLeave))
+	mux.HandleFunc("POST /internal/v1/party/kick", h.requireServerHMAC(h.handleInternalPartyKick))
+	mux.HandleFunc("POST /internal/v1/party/promote", h.requireServerHMAC(h.handleInternalPartyPromote))
+
+	mux.HandleFunc("POST /internal/v1/guild/get", h.requireServerHMAC(h.handleInternalGuildGet))
+	mux.HandleFunc("POST /internal/v1/guild/create", h.requireServerHMAC(h.handleInternalGuildCreate))
+	mux.HandleFunc("POST /internal/v1/guild/join", h.requireServerHMAC(h.handleInternalGuildJoin))
+	mux.HandleFunc("POST /internal/v1/guild/leave", h.requireServerHMAC(h.handleInternalGuildLeave))
+	mux.HandleFunc("POST /internal/v1/guild/kick", h.requireServerHMAC(h.handleInternalGuildKick))
+	mux.HandleFunc("POST /internal/v1/guild/role", h.requireServerHMAC(h.handleInternalGuildRole))
+	mux.HandleFunc("POST /internal/v1/guild/motd", h.requireServerHMAC(h.handleInternalGuildMOTD))
+	mux.HandleFunc("POST /internal/v1/guild/donate", h.requireServerHMAC(h.handleInternalGuildDonate))
+
+	mux.HandleFunc("POST /internal/v1/trade/get", h.requireServerHMAC(h.handleInternalTradeGet))
+	mux.HandleFunc("POST /internal/v1/trade/request", h.requireServerHMAC(h.handleInternalTradeRequest))
+	mux.HandleFunc("POST /internal/v1/trade/respond", h.requireServerHMAC(h.handleInternalTradeRespond))
+	mux.HandleFunc("POST /internal/v1/trade/offer", h.requireServerHMAC(h.handleInternalTradeOffer))
+	mux.HandleFunc("POST /internal/v1/trade/lock", h.requireServerHMAC(h.handleInternalTradeLock))
+	mux.HandleFunc("POST /internal/v1/trade/confirm", h.requireServerHMAC(h.handleInternalTradeConfirm))
+	mux.HandleFunc("POST /internal/v1/trade/cancel", h.requireServerHMAC(h.handleInternalTradeCancel))
+
+	mux.HandleFunc("POST /internal/v1/social/chat/send", h.requireServerHMAC(h.handleInternalChatSend))
+	mux.HandleFunc("POST /internal/v1/social/chat/fetch", h.requireServerHMAC(h.handleInternalChatFetch))
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -389,6 +438,9 @@ func (h *Handler) handleInternalClaimLease(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.worldCoord.ActivateLease(r.Context(), ticket.AccountID, ticket.CharacterID, req.ServerID, charState.ZoneID, charState.FencingEpoch)
+	if h.partyCoord != nil {
+		h.partyCoord.SyncMemberVitals(charState.ID.String(), charState.CharacterName, charState.Level, charState.HP, charState.MaxHP, charState.Energy, charState.MaxEnergy)
+	}
 	h.logger.Info("character lease claimed by dedicated server",
 		slog.String("character_id", charState.ID.String()),
 		slog.String("character_name", charState.CharacterName),
@@ -445,19 +497,23 @@ func (h *Handler) handleInternalSaveCharacter(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusInternalServerError, "ERR_SAVE_FAILED", err.Error())
 		return
 	}
+	if h.partyCoord != nil {
+		h.partyCoord.SyncMemberVitals(saved.ID.String(), saved.CharacterName, saved.Level, saved.HP, saved.MaxHP, saved.Energy, saved.MaxEnergy)
+	}
 	writeJSON(w, http.StatusOK, saved)
 }
 
 func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req struct {
-		CharacterID    string  `json:"character_id"`
-		FencingEpoch   int64   `json:"fencing_epoch"`
-		ServerID       string  `json:"server_id"`
-		OutgoingDamage float64 `json:"outgoing_damage"`
-		ExpGain        int64   `json:"exp_gain"`
-		PotentialGain  int64   `json:"potential_gain"`
-		KilledTarget   bool    `json:"killed_target"`
-		IdempotencyKey string  `json:"idempotency_key"`
+		CharacterID        string  `json:"character_id"`
+		FencingEpoch       int64   `json:"fencing_epoch"`
+		ServerID           string  `json:"server_id"`
+		OutgoingDamage     float64 `json:"outgoing_damage"`
+		ExpGain            int64   `json:"exp_gain"`
+		PotentialGain      int64   `json:"potential_gain"`
+		NearbyPartyMembers int     `json:"nearby_party_members"`
+		KilledTarget       bool    `json:"killed_target"`
+		IdempotencyKey     string  `json:"idempotency_key"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
@@ -474,7 +530,7 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	res, err := h.characters.GrantEXPFenced(
+	res, err := h.characters.GrantEXPWithPartyFenced(
 		r.Context(),
 		charUUID,
 		req.FencingEpoch,
@@ -482,6 +538,7 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		req.OutgoingDamage,
 		req.ExpGain,
 		req.PotentialGain,
+		req.NearbyPartyMembers,
 		req.KilledTarget,
 		req.IdempotencyKey,
 	)
@@ -492,6 +549,9 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		}
 		writeErr(w, http.StatusInternalServerError, "ERR_EXP_GRANT", err.Error())
 		return
+	}
+	if h.partyCoord != nil {
+		h.partyCoord.SyncMemberVitals(res.ID.String(), res.CharacterName, res.Level, res.HP, res.MaxHP, res.Energy, res.MaxEnergy)
 	}
 	writeJSON(w, http.StatusOK, res)
 }
@@ -552,11 +612,25 @@ func (h *Handler) handleInternalReleaseLease(w http.ResponseWriter, r *http.Requ
 		if err := h.worldCoord.ValidateActiveLease(r.Context(), req.SaveInput.CharacterID.String(), req.SaveInput.ServerID, req.SaveInput.FencingEpoch); err == nil {
 			_, _ = h.characters.SaveCheckpointFenced(r.Context(), *req.SaveInput)
 		}
+		if h.partyCoord != nil {
+			h.partyCoord.CleanupOnDisconnect(req.SaveInput.CharacterID.String())
+		}
+		if h.tradeSvc != nil {
+			h.tradeSvc.CleanupOnDisconnect(req.SaveInput.CharacterID)
+		}
 		h.worldCoord.ReleaseLease(r.Context(), req.SaveInput.CharacterID.String(), req.SaveInput.ServerID, req.SaveInput.FencingEpoch)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "saved_and_released"})
 		return
 	}
 
+	if h.partyCoord != nil {
+		h.partyCoord.CleanupOnDisconnect(req.CharacterID)
+	}
+	if h.tradeSvc != nil {
+		if parsed, err := uuid.Parse(strings.TrimSpace(req.CharacterID)); err == nil {
+			h.tradeSvc.CleanupOnDisconnect(parsed)
+		}
+	}
 	h.worldCoord.ReleaseLease(r.Context(), req.CharacterID, req.ServerID, req.FencingEpoch)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "released"})
 }

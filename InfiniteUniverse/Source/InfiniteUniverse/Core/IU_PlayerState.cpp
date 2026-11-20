@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "Core/IU_PlayerState.h"
+#include "Core/IU_GameState.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "Engine/World.h"
@@ -34,7 +35,29 @@ void AIU_PlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AIU_PlayerState, ElixirCount);
 	DOREPLIFETIME(AIU_PlayerState, CrimsonOreCount);
 	DOREPLIFETIME(AIU_PlayerState, EquippedItemCount);
+	DOREPLIFETIME(AIU_PlayerState, GuildID);
+	DOREPLIFETIME(AIU_PlayerState, GuildName);
+	DOREPLIFETIME(AIU_PlayerState, GuildTag);
+	DOREPLIFETIME(AIU_PlayerState, GuildRole);
+	DOREPLIFETIME(AIU_PlayerState, PartyID);
+	DOREPLIFETIME(AIU_PlayerState, bIsPartyLeader);
+	DOREPLIFETIME(AIU_PlayerState, OverheadChatBubbleText);
+	DOREPLIFETIME(AIU_PlayerState, OverheadChatChannel);
+	DOREPLIFETIME(AIU_PlayerState, OverheadChatExpireServerTime);
+	DOREPLIFETIME(AIU_PlayerState, PersistedCharacterUUID);
 	DOREPLIFETIME_CONDITION(AIU_PlayerState, ActiveFencingEpoch, COND_OwnerOnly);
+}
+
+float AIU_PlayerState::ComputePartySynergyMultiplier(int32 NearbyPartyMembers)
+{
+	switch (NearbyPartyMembers)
+	{
+	case 2: return 1.15f;
+	case 3: return 1.25f;
+	case 4: return 1.35f;
+	default:
+		return (NearbyPartyMembers >= 5) ? 1.45f : 1.0f;
+	}
 }
 
 void AIU_PlayerState::AddEnemyKill()
@@ -85,6 +108,10 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	EnemyKills = FMath::Max(0, Summary.EnemyKills);
 	PvPKills = FMath::Max(0, Summary.PvPKills);
 	Deaths = FMath::Max(0, Summary.Deaths);
+	GuildID = Summary.GuildID;
+	GuildName = Summary.GuildName;
+	GuildTag = Summary.GuildTag;
+	GuildRole = Summary.GuildRole;
 	ActiveFencingEpoch = Summary.FencingEpoch;
 	bLeaseRevokedDoNotSave = false;
 	bHasReceivedInitialLevel = true;
@@ -97,6 +124,7 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+	OnCharacterSocialChanged.Broadcast(GuildTag, GuildName, PartyID);
 	ForceNetUpdate();
 }
 
@@ -148,14 +176,20 @@ void AIU_PlayerState::ApplyAuthoritativePotentialUpgrade(const FIU_BackendCharac
 	ForceNetUpdate();
 }
 
-void AIU_PlayerState::AwardOfflineHitProgress(float OutgoingDamage)
+void AIU_PlayerState::AwardOfflineHitProgress(float OutgoingDamage, int32 NearbyPartyMembers)
 {
 	if (!HasAuthority() || OutgoingDamage <= 0.0f)
 	{
 		return;
 	}
 
-	const int64 Reward = FMath::Max<int64>(1, FMath::RoundToInt64(static_cast<double>(OutgoingDamage) * 1.5));
+	const int64 BaseReward = FMath::Max<int64>(1, FMath::RoundToInt64(static_cast<double>(OutgoingDamage) * 1.5));
+	int64 SynergyPercent = 100;
+	if (NearbyPartyMembers >= 5)      { SynergyPercent = 145; }
+	else if (NearbyPartyMembers == 4) { SynergyPercent = 135; }
+	else if (NearbyPartyMembers == 3) { SynergyPercent = 125; }
+	else if (NearbyPartyMembers == 2) { SynergyPercent = 115; }
+	const int64 Reward = FMath::Max<int64>(1, (BaseReward * SynergyPercent + 50) / 100);
 	const int32 OldLv = CharacterLevel;
 	CurrentEXP += Reward;
 	bool bLeveled = false;
@@ -268,6 +302,51 @@ void AIU_PlayerState::ApplyAuthoritativeEconomySummary(
 	ForceNetUpdate();
 }
 
+void AIU_PlayerState::ApplyAuthoritativeGuildIdentity(
+	const FString& InGuildID,
+	const FString& InGuildName,
+	const FString& InGuildTag,
+	const FString& InGuildRole)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	GuildID = InGuildID;
+	GuildName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(InGuildName);
+	GuildTag = InGuildTag.ToUpper();
+	GuildRole = InGuildRole;
+	OnCharacterSocialChanged.Broadcast(GuildTag, GuildName, PartyID);
+	ForceNetUpdate();
+}
+
+void AIU_PlayerState::ApplyAuthoritativePartyIdentity(const FString& InPartyID, bool bInLeader)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	PartyID = InPartyID;
+	bIsPartyLeader = bInLeader;
+	OnCharacterSocialChanged.Broadcast(GuildTag, GuildName, PartyID);
+	ForceNetUpdate();
+}
+
+void AIU_PlayerState::SetOverheadSpeechBubble(const FString& CleanText, const FString& InChannel, float DurationSeconds)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	OverheadChatBubbleText = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(CleanText).Left(120);
+	OverheadChatChannel = InChannel;
+	const UWorld* W = GetWorld();
+	const AIU_GameState* GS = W ? W->GetGameState<AIU_GameState>() : nullptr;
+	const float SrvTime = GS ? GS->GetServerWorldTimeSeconds() : (W ? W->GetTimeSeconds() : 0.0f);
+	OverheadChatExpireServerTime = SrvTime + FMath::Clamp(DurationSeconds, 0.5f, 12.0f);
+	ForceNetUpdate();
+}
+
 bool AIU_PlayerState::TryOfflineUseElixir(APawn* TargetPawn)
 {
 	if (!HasAuthority() || !TargetPawn || ElixirCount <= 0)
@@ -358,4 +437,9 @@ void AIU_PlayerState::OnRep_PotentialState()
 void AIU_PlayerState::OnRep_EconomyState()
 {
 	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+}
+
+void AIU_PlayerState::OnRep_SocialIdentity()
+{
+	OnCharacterSocialChanged.Broadcast(GuildTag, GuildName, PartyID);
 }

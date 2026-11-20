@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Data/IU_GameplayTypes.h"
+#include "Network/IU_BackendSubsystem.h"
 #include "Styling/SlateBrush.h"
 #include "IU_PlayerHUDWidget.generated.h"
 
@@ -12,6 +13,7 @@ class UProgressBar;
 class UTextBlock;
 class UBorder;
 class UButton;
+class UEditableTextBox;
 class UIU_AttributeComponent;
 class UIU_CombatComponent;
 class UIU_FlightComponent;
@@ -54,6 +56,16 @@ public:
 
 	/** Starts a local visual countdown on the bottom-right Dau Than Hub when triggered. */
 	void NotifyElixirCooldownStarted(float DurationSeconds = 3.0f);
+
+	// ========================================================================
+	// Step 5 Party Frame, Invite Banners & Bottom-Center NRO Chat Box
+	// ========================================================================
+
+	void ApplyPartySnapshot(const FIU_PartySnapshot& Snapshot);
+	void ApplyTradeInviteBanner(const FIU_TradeSessionSnapshot& Snapshot);
+	void AppendChatMessage(const FIU_ChatMessageView& Message);
+	void FocusOrSubmitChatBar();
+	const FString& GetSelectedChatChannel() const { return SelectedChatChannel; }
 
 protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "IU|UI")
@@ -103,6 +115,9 @@ private:
 	void HandleCharacterEconomyChanged(int64 StandardCoin, int32 ElixirCount, int32 CrimsonOreCount, int32 EquippedCount);
 
 	UFUNCTION()
+	void HandleCharacterSocialChanged(const FString& GuildTag, const FString& GuildName, const FString& PartyID);
+
+	UFUNCTION()
 	void HandleCombatStateChanged(EIU_CombatState OldState, EIU_CombatState NewState);
 
 	UFUNCTION()
@@ -130,6 +145,14 @@ private:
 	void HandleElixirHubClicked();
 	UFUNCTION()
 	void HandleOpenProfilePillClicked();
+	UFUNCTION()
+	void HandlePartyActionBtnClicked();
+	UFUNCTION()
+	void HandleCycleChatChannelClicked();
+	UFUNCTION()
+	void HandleSendChatClicked();
+	UFUNCTION()
+	void HandleChatTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
 	void DispatchSkillSlotClick(int32 SlotNumber);
 	void UpdateSkillSlotFrameColors();
@@ -138,6 +161,8 @@ private:
 	void UnbindCurrentComponents();
 	void RefreshStatusText();
 	void RefreshPotentialReadout();
+	void RebuildPartyOverlayText();
+	void RebuildChatHistoryText();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UBorder>> SkillSlotOuterFrames; // Index 0..5 -> Slots 1..6
@@ -160,11 +185,37 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> OpenProfileButton;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> PartyOverlayBorder;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PartyOverlayText;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> PartyQuickActionBtn;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PartyQuickActionLbl;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ChatHistoryText;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> ChatChannelButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ChatChannelLabel;
+	UPROPERTY(Transient)
+	TObjectPtr<UEditableTextBox> ChatInputBox;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> ChatSendButton;
+
 	FSlateBrush ActiveSkillFrameBrush;
 	FSlateBrush InactiveSkillFrameBrush;
 	FSlateBrush ElixirReadyCircleBrush;
 	FSlateBrush ElixirCooldownCircleBrush;
 	FSlateBrush WhiteHeartLobeBrush;
+	FSlateBrush SocialOverlayBrush;
+
+	FIU_PartySnapshot DisplayedParty;
+	FIU_TradeSessionSnapshot DisplayedTradeInvite;
+	TArray<FString> RecentChatLines;
+	FString SelectedChatChannel = TEXT("LOCAL");
 
 	TWeakObjectPtr<UIU_AttributeComponent> BoundAttributeComp;
 	TWeakObjectPtr<UIU_CombatComponent> BoundCombatComp;
