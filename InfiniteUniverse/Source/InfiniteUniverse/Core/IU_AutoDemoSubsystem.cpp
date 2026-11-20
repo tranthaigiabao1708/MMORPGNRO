@@ -84,7 +84,7 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	bRecordFrames = FParse::Param(Cmd, TEXT("RecordDemoFrames"));
 	if (Step3PersistencePhase > 0)
 	{
-		TargetDurationSeconds = (Step3PersistencePhase == 1) ? 19.5 : 8.5;
+		TargetDurationSeconds = (Step3PersistencePhase == 1) ? 21.5 : 9.5;
 		DemoFramesSubdir = FString::Printf(TEXT("Step3Frames_Phase%d_Client%d"), Step3PersistencePhase, NetDemoClientRole);
 		CSVOutputFilename = FString::Printf(TEXT("Step3_Phase%d_Client%dProfile.csv"), Step3PersistencePhase, NetDemoClientRole);
 	}
@@ -833,6 +833,7 @@ void UIU_AutoDemoSubsystem::TickSinglePlayerShowcase(UWorld* World, AIU_PlayerCh
 void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC)
 {
 	AIU_HUDManager* HUD = Cast<AIU_HUDManager>(RawPC->GetHUD());
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(RawPC);
 	auto SetBanner = [HUD](const FString& Text)
 	{
 		if (HUD)
@@ -843,6 +844,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 
 	const AIU_PlayerState* IUPS = Player->GetPlayerState<AIU_PlayerState>();
 	const int32 CurLv = IUPS ? IUPS->GetCharacterLevel() : 1;
+	const int64 PoolTN = IUPS ? IUPS->GetPotentialPoints() : 0;
 	const FString CharName = (IUPS && !IUPS->GetPersistedCharacterName().IsEmpty()) ? IUPS->GetPersistedCharacterName() : TEXT("Hero");
 	const int64 CurEpoch = IUPS ? IUPS->GetActiveFencingEpoch() : 0;
 
@@ -856,15 +858,25 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			Player->StopJumpInput();
 			Player->StopDescendInput();
 		}
+		if (IUPC && NetDemoClientRole == 1)
+		{
+			const bool bShowRestoredPanel = (ConnectedPlaySeconds >= 2.6 && ConnectedPlaySeconds <= 5.6);
+			if (IUPC->IsPotentialUpgradePanelVisible() != bShowRestoredPanel)
+			{
+				IUPC->SetPotentialUpgradePanelVisible(bShowRestoredPanel, false);
+			}
+		}
+
 		const FVector Loc = Player->GetActorLocation();
+		const UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
 		SetBanner(FString::Printf(
-			TEXT("STEP 3 [RESTORED AFTER SERVER RESTART]: %s Lv.%d | HP %.0f/%.0f | Pos(%.0f,%.0f) | Epoch #%lld"),
+			TEXT("STEP 3 [RESTORED]: %s Lv.%d | HP %.0f | Ki %.0f | Atk %.0f | TN %lld | Ep#%lld"),
 			*CharName,
 			CurLv,
-			Player->GetAttributeComponent()->GetHP(),
-			Player->GetAttributeComponent()->GetMaxHP(),
-			Loc.X,
-			Loc.Y,
+			Attr->GetMaxHP(),
+			Attr->GetMaxKi(),
+			Attr->GetAttackPower(),
+			PoolTN,
 			CurEpoch));
 
 		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
@@ -882,19 +894,19 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 		return;
 	}
 
-	// Phase 1: Register/Login -> 3D Flight to West Arena -> Defeat Raiders -> Level Up (Lv.1->Lv.2) -> Checkpoint Logout!
+	// Phase 1: Register/Login (200 HP/Ki, 100 Atk) -> Fly -> Defeat Raiders (+LV EXP & +350 TN) -> Spend TN (+100 HP, +100 Ki, +10 Atk) -> Logout!
 	const double T = ConnectedPlaySeconds;
 	const float LaneY = (NetDemoClientRole == 1) ? -220.0f : 320.0f;
 	const FVector RaidAnchor = (NetDemoClientRole == 1)
 		? FVector(-1850.0f, -200.0f, 95.0f)
 		: FVector(-2950.0f, 350.0f, 95.0f);
 
-	if (T < 2.4)
+	if (T < 2.2)
 	{
 		if (LastTriggeredStage != 201)
 		{
 			LastTriggeredStage = 201;
-			SetBanner(FString::Printf(TEXT("STEP 3 [1/4]: JWT + Ticket Auth -> Claimed PostgreSQL Lease (Epoch #%lld)"), CurEpoch));
+			SetBanner(FString::Printf(TEXT("STEP 3 [1/4]: Base 200 HP / 200 Ki / 100 SucDanh (Epoch #%lld)"), CurEpoch));
 		}
 		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
 		{
@@ -905,7 +917,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			Player->ApplyLookInput(FVector2D(0.85f, 0.0f));
 		}
 	}
-	else if (T < 7.2)
+	else if (T < 6.8)
 	{
 		if (LastTriggeredStage != 202)
 		{
@@ -915,15 +927,15 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 		}
 
 		const FVector SkyTarget(-1820.0f, LaneY, 410.0f);
-		if (T < 2.65)
+		if (T < 2.45)
 		{
 			Player->StartJumpInput();
 		}
-		else if (T < 2.85)
+		else if (T < 2.65)
 		{
 			Player->StopJumpInput();
 		}
-		else if (T < 5.6)
+		else if (T < 5.3)
 		{
 			if (!Player->GetFlightComponent()->IsFlying())
 			{
@@ -950,7 +962,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			}
 		}
 	}
-	else if (T < 16.4 && CurLv < 2)
+	else if (T < 16.8 && !bDispatchedStep3PotentialAllocations && (CurLv < 2 || PoolTN < 650))
 	{
 		if (LastTriggeredStage != 203)
 		{
@@ -961,7 +973,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			{
 				Player->ToggleFlightInput();
 			}
-			SetBanner(TEXT("STEP 3 [3/4]: Defeat Raiders (+55 EXP) -> Authoritative LEVEL UP!"));
+			SetBanner(TEXT("STEP 3 [3/4]: Raid Monsters -> +55 LV EXP (Lv Only) & +350 Tiem Nang!"));
 		}
 
 		AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
@@ -999,7 +1011,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 	}
 	else
 	{
-		// Move to safe West Overlook Checkpoint (-920, +/-180) outside Raider melee aggro & PvP Arena so LOGOUT saves clean Lv.2 + full HP!
+		// Allocate Potential Points (+100 HP [200 TN], +100 Ki [200 TN], +10 Atk [250 TN]) & move to Co-op Safe Overlook (-700, +/-180)!
 		if (LastTriggeredStage != 204)
 		{
 			LastTriggeredStage = 204;
@@ -1010,10 +1022,31 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 				Player->ToggleFlightInput();
 			}
 		}
-		const FVector CheckpointSpot(-920.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
-		if (FVector::Dist2D(Player->GetActorLocation(), CheckpointSpot) > 110.0f)
+
+		if (!bDispatchedStep3PotentialAllocations && IUPC && PoolTN >= 650)
 		{
-			SteerPlayerToward(Player, RawPC, CheckpointSpot, 85.0f, true, false);
+			bDispatchedStep3PotentialAllocations = true;
+			Step3PotentialAllocTime = ConnectedPlaySeconds;
+			IUPC->Server_RequestAllocatePotential(EIU_PotentialStatType::MaxHP);
+			IUPC->Server_RequestAllocatePotential(EIU_PotentialStatType::MaxKi);
+			IUPC->Server_RequestAllocatePotential(EIU_PotentialStatType::AttackPower);
+		}
+
+		if (IUPC && NetDemoClientRole == 1 && bDispatchedStep3PotentialAllocations)
+		{
+			const double SinceAlloc = ConnectedPlaySeconds - Step3PotentialAllocTime;
+			const bool bShowPanel = (SinceAlloc >= 0.35 && SinceAlloc <= 2.85);
+			if (IUPC->IsPotentialUpgradePanelVisible() != bShowPanel)
+			{
+				IUPC->SetPotentialUpgradePanelVisible(bShowPanel, false);
+			}
+		}
+
+		// X = -320 is deep inside Co-op Safe Courtyard (far from West Arena Raiders) -> clean logout & untouched Phase 2 spawn!
+		const FVector CheckpointSpot(-320.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
+		if (FVector::Dist2D(Player->GetActorLocation(), CheckpointSpot) > 105.0f)
+		{
+			SteerPlayerToward(Player, RawPC, CheckpointSpot, 80.0f, true, false);
 		}
 		else
 		{
@@ -1021,9 +1054,11 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			Player->ApplyMovementInput(FVector2D::ZeroVector);
 			Player->ApplyLookInput(FVector2D(0.65f, 0.0f));
 		}
+
+		const UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
 		SetBanner(FString::Printf(
-			TEXT("STEP 3 [4/4]: %s Lv.%d (MaxHP %.0f) -> Saving LOGOUT Snapshot!"),
-			*CharName, CurLv, Player->GetAttributeComponent()->GetMaxHP()));
+			TEXT("STEP 3 [4/4]: %s Lv.%d | HP %.0f | Ki %.0f | Atk %.0f (TN:%lld) -> LOGOUT!"),
+			*CharName, CurLv, Attr->GetMaxHP(), Attr->GetMaxKi(), Attr->GetAttackPower(), PoolTN));
 	}
 }
 

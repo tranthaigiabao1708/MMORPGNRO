@@ -279,6 +279,7 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("level"), NumVal)) { OutSummary.Level = FMath::Max(1, static_cast<int32>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("current_exp"), NumVal)) { OutSummary.CurrentExp = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("next_level_exp"), NumVal)) { OutSummary.NextLevelExp = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
+	if (RootObj->TryGetNumberField(TEXT("potential_points"), NumVal)) { OutSummary.PotentialPoints = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 
 	double PosX = 0.0, PosY = 0.0, PosZ = 112.0, Yaw = 0.0;
 	RootObj->TryGetNumberField(TEXT("pos_x"), PosX);
@@ -294,7 +295,15 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("max_hp"), NumVal)) { OutSummary.MaxHP = static_cast<float>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("energy"), NumVal)) { OutSummary.Energy = static_cast<float>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("max_energy"), NumVal)) { OutSummary.MaxEnergy = static_cast<float>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("attack_power"), NumVal)) { OutSummary.AttackPower = static_cast<float>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("attack_power_multiplier"), NumVal)) { OutSummary.AttackPowerMultiplier = static_cast<float>(NumVal); }
+
+	if (RootObj->TryGetNumberField(TEXT("hp_upgrades"), NumVal)) { OutSummary.HPUpgrades = static_cast<int32>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("ki_upgrades"), NumVal)) { OutSummary.KiUpgrades = static_cast<int32>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("atk_upgrades"), NumVal)) { OutSummary.AtkUpgrades = static_cast<int32>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("next_hp_cost"), NumVal)) { OutSummary.NextHPCost = static_cast<int64>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("next_ki_cost"), NumVal)) { OutSummary.NextKiCost = static_cast<int64>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("next_atk_cost"), NumVal)) { OutSummary.NextAtkCost = static_cast<int64>(NumVal); }
 
 	if (RootObj->TryGetNumberField(TEXT("enemy_kills"), NumVal)) { OutSummary.EnemyKills = static_cast<int32>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("pvp_kills"), NumVal)) { OutSummary.PvPKills = static_cast<int32>(NumVal); }
@@ -304,6 +313,8 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	RootObj->TryGetBoolField(TEXT("leveled_up"), OutSummary.bLeveledUp);
 	if (RootObj->TryGetNumberField(TEXT("old_level"), NumVal)) { OutSummary.OldLevel = static_cast<int32>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("exp_granted"), NumVal)) { OutSummary.ExpGranted = static_cast<int64>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("potential_granted"), NumVal)) { OutSummary.PotentialGranted = static_cast<int64>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("potential_spent"), NumVal)) { OutSummary.PotentialSpent = static_cast<int64>(NumVal); }
 
 	return !OutSummary.CharacterID.IsEmpty();
 }
@@ -860,6 +871,7 @@ void UIU_BackendSubsystem::GrantCharacterEXP(
 	const FString& CharacterID,
 	int64 FencingEpoch,
 	int64 ExpGain,
+	int64 PotentialGain,
 	const FString& IdempotencyKey,
 	TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback)
 {
@@ -868,6 +880,7 @@ void UIU_BackendSubsystem::GrantCharacterEXP(
 	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
 	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
 	Obj->SetNumberField(TEXT("exp_gain"), static_cast<double>(ExpGain));
+	Obj->SetNumberField(TEXT("potential_gain"), static_cast<double>(PotentialGain));
 	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
 
 	FString Body;
@@ -887,6 +900,39 @@ void UIU_BackendSubsystem::GrantCharacterEXP(
 			if (Callback)
 			{
 				Callback(false, Updated, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable during GrantEXP"));
+			}
+		});
+}
+
+void UIU_BackendSubsystem::AllocateCharacterPotential(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& StatTypeCode,
+	TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("stat_type"), StatTypeCode);
+
+	FString Body;
+	const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body);
+	FJsonSerializer::Serialize(Obj, Writer);
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/character/potential"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_BackendCharacterSummary Updated;
+			if (bConnected && Code == 200 && ParseCharacterSummaryFromJson(RespBody, Updated))
+			{
+				if (Callback) { Callback(true, Updated, TEXT("")); }
+				return;
+			}
+			if (Callback)
+			{
+				Callback(false, Updated, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable during AllocatePotential"));
 			}
 		});
 }

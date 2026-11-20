@@ -2,10 +2,14 @@
 
 #include "Core/IU_PlayerController.h"
 #include "Core/IU_GameState.h"
+#include "Core/IU_PlayerState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_HUDManager.h"
 #include "UI/IU_LoginCharacterWidget.h"
+#include "UI/IU_PotentialUpgradeWidget.h"
+#include "CoreGlobals.h"
 #include "Engine/GameInstance.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/LocalPlayer.h"
@@ -321,6 +325,10 @@ void AIU_PlayerController::SetupInputComponent()
 		InputComponent->BindKey(EKeys::F3, IE_Pressed, this, &AIU_PlayerController::HandleToggleDebugHUD);
 		InputComponent->BindKey(EKeys::F4, IE_Pressed, this, &AIU_PlayerController::HandleToggleGlobalPvP);
 		InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &AIU_PlayerController::HandleToggleAuthPanel);
+		InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AIU_PlayerController::HandleTogglePotentialPanel);
+		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeHP);
+		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeKi);
+		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeAtk);
 	}
 }
 
@@ -544,5 +552,169 @@ void AIU_PlayerController::Server_ToggleGlobalPvPSparring_Implementation()
 	if (AIU_GameState* GS = World->GetGameState<AIU_GameState>())
 	{
 		GS->SetAllowGlobalPvPSparring(!GS->bAllowGlobalPvPSparring);
+	}
+}
+
+bool AIU_PlayerController::IsPotentialUpgradePanelVisible() const
+{
+	return ActivePotentialWidget && ActivePotentialWidget->GetVisibility() == ESlateVisibility::Visible;
+}
+
+void AIU_PlayerController::SetPotentialUpgradePanelVisible(bool bVisible, bool bUpdateMouseInputMode)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (!ActivePotentialWidget && bVisible)
+	{
+		ActivePotentialWidget = CreateWidget<UIU_PotentialUpgradeWidget>(this, UIU_PotentialUpgradeWidget::StaticClass());
+		if (ActivePotentialWidget)
+		{
+			ActivePotentialWidget->AddToViewport(8);
+			ActivePotentialWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	if (!ActivePotentialWidget)
+	{
+		return;
+	}
+
+	if (bVisible)
+	{
+		ActivePotentialWidget->RefreshBindings();
+	}
+	ActivePotentialWidget->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	if (bUpdateMouseInputMode)
+	{
+		bShowMouseCursor = bVisible;
+		if (bVisible)
+		{
+			FInputModeGameAndUI UIInput;
+			UIInput.SetWidgetToFocus(ActivePotentialWidget->TakeWidget());
+			UIInput.SetHideCursorDuringCapture(false);
+			SetInputMode(UIInput);
+		}
+		else
+		{
+			FInputModeGameOnly GameInput;
+			SetInputMode(GameInput);
+		}
+	}
+}
+
+void AIU_PlayerController::HandleTogglePotentialPanel()
+{
+	SetPotentialUpgradePanelVisible(!IsPotentialUpgradePanelVisible(), true);
+}
+
+void AIU_PlayerController::HandleQuickUpgradeHP()
+{
+	Server_RequestAllocatePotential(EIU_PotentialStatType::MaxHP);
+}
+
+void AIU_PlayerController::HandleQuickUpgradeKi()
+{
+	Server_RequestAllocatePotential(EIU_PotentialStatType::MaxKi);
+}
+
+void AIU_PlayerController::HandleQuickUpgradeAtk()
+{
+	Server_RequestAllocatePotential(EIU_PotentialStatType::AttackPower);
+}
+
+void AIU_PlayerController::Server_RequestAllocatePotential_Implementation(EIU_PotentialStatType StatType)
+{
+	FString StatCode;
+	switch (StatType)
+	{
+	case EIU_PotentialStatType::MaxHP:
+		StatCode = TEXT("hp");
+		break;
+	case EIU_PotentialStatType::MaxKi:
+		StatCode = TEXT("ki");
+		break;
+	case EIU_PotentialStatType::AttackPower:
+		StatCode = TEXT("atk");
+		break;
+	default:
+		UE_LOG(LogInfiniteUniverse, Warning,
+			TEXT("[Security] Rejected invalid EIU_PotentialStatType=%d from '%s'."),
+			static_cast<int32>(StatType), *GetNameSafe(this));
+		return;
+	}
+
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	APawn* ControlledPawn = GetPawn();
+	if (!IUPS || !ControlledPawn)
+	{
+		return;
+	}
+
+	if (IUPS->HasValidBackendLease())
+	{
+		UGameInstance* GI = GetGameInstance();
+		UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+		if (!Backend)
+		{
+			return;
+		}
+
+		TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+		TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+		Backend->AllocateCharacterPotential(
+			IUPS->GetPersistedCharacterUUID(),
+			IUPS->GetActiveFencingEpoch(),
+			StatCode,
+			[WeakPC, WeakPS, StatCode](bool bSuccess, const FIU_BackendCharacterSummary& Updated, const FString& ErrMsg)
+			{
+				if (!bSuccess)
+				{
+					UE_LOG(LogInfiniteUniverse, Warning,
+						TEXT("[Potential] AllocateCharacterPotential('%s') rejected: %s"),
+						*StatCode, *ErrMsg);
+					return;
+				}
+
+				if (AIU_PlayerState* PS = WeakPS.Get())
+				{
+					PS->ApplyAuthoritativePotentialUpgrade(Updated);
+				}
+
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					if (APawn* P = PC->GetPawn())
+					{
+						if (UIU_AttributeComponent* Attr = P->FindComponentByClass<UIU_AttributeComponent>())
+						{
+							Attr->ApplyPersistedVitals(
+								Updated.MaxHP,
+								Updated.HP,
+								Updated.MaxEnergy,
+								Updated.Energy,
+								Updated.AttackPowerMultiplier,
+								Updated.AttackPower);
+						}
+					}
+				}
+
+				UE_LOG(LogInfiniteUniverse, Display,
+					TEXT("[Potential] Character '%s' spent %lld TN on '%s' -> HP %.0f/%.0f, Ki %.0f/%.0f, SucDanh %.0f (x%.2f), RemainingTN=%lld"),
+					*Updated.CharacterName,
+					Updated.PotentialSpent,
+					*StatCode,
+					Updated.HP,
+					Updated.MaxHP,
+					Updated.Energy,
+					Updated.MaxEnergy,
+					Updated.AttackPower,
+					Updated.AttackPowerMultiplier,
+					Updated.PotentialPoints);
+			});
+	}
+	else if (!GIsAutomationTesting)
+	{
+		IUPS->TryOfflineAllocatePotential(StatType, ControlledPawn);
 	}
 }

@@ -14,6 +14,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "EngineUtils.h"
+#include "CoreGlobals.h"
 #include "InfiniteUniverse.h"
 
 AIU_GameMode::AIU_GameMode()
@@ -230,7 +231,8 @@ void AIU_GameMode::PostLogin(APlayerController* NewPlayer)
 						LoadedState.HP,
 						LoadedState.MaxEnergy,
 						LoadedState.Energy,
-						LoadedState.AttackPowerMultiplier);
+						LoadedState.AttackPowerMultiplier,
+						LoadedState.AttackPower);
 				}
 
 				if (LoadedState.bHasSavedPosition)
@@ -537,5 +539,14 @@ void AIU_GameMode::RestartPlayer(AController* NewPlayer)
 	if (AIU_PlayerCharacter* PChar = Cast<AIU_PlayerCharacter>(NewPlayer->GetPawn()))
 	{
 		PChar->UpdateSavedSpawnTransform(BaseTM);
+
+		// In interactive gameplay (non-AutomationTest), initialize NRO starting baseline: 200 HP, 200 Ki, 100 Sức đánh!
+		if (!GIsAutomationTesting)
+		{
+			if (UIU_AttributeComponent* Attr = PChar->GetAttributeComponent())
+			{
+				Attr->ApplyPersistedVitals(200.0f, 200.0f, 200.0f, 200.0f, 1.0f, 100.0f);
+			}
+		}
 	}
 }

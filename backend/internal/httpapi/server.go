@@ -117,6 +117,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/v1/lease/renew", h.requireServerHMAC(h.handleInternalRenewLeases))
 	mux.HandleFunc("POST /internal/v1/character/save", h.requireServerHMAC(h.handleInternalSaveCharacter))
 	mux.HandleFunc("POST /internal/v1/character/exp", h.requireServerHMAC(h.handleInternalGrantEXP))
+	mux.HandleFunc("POST /internal/v1/character/potential", h.requireServerHMAC(h.handleInternalAllocatePotential))
 	mux.HandleFunc("POST /internal/v1/lease/release", h.requireServerHMAC(h.handleInternalReleaseLease))
 }
 
@@ -421,6 +422,7 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		FencingEpoch   int64  `json:"fencing_epoch"`
 		ServerID       string `json:"server_id"`
 		ExpGain        int64  `json:"exp_gain"`
+		PotentialGain  int64  `json:"potential_gain"`
 		IdempotencyKey string `json:"idempotency_key"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -438,13 +440,52 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	res, err := h.characters.GrantEXPFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.ExpGain, req.IdempotencyKey)
+	res, err := h.characters.GrantEXPFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.ExpGain, req.PotentialGain, req.IdempotencyKey)
 	if err != nil {
 		if errors.Is(err, character.ErrStaleFencingEpoch) {
 			writeErr(w, http.StatusConflict, "ERR_STALE_FENCING_EPOCH", err.Error())
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, "ERR_EXP_GRANT", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) handleInternalAllocatePotential(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID  string `json:"character_id"`
+		FencingEpoch int64  `json:"fencing_epoch"`
+		ServerID     string `json:"server_id"`
+		StatType     string `json:"stat_type"` // "hp" | "ki" | "atk"
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, err := uuid.Parse(strings.TrimSpace(req.CharacterID))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_CHARACTER_ID", "invalid UUID")
+		return
+	}
+
+	if err := h.worldCoord.ValidateActiveLease(r.Context(), charUUID.String(), req.ServerID, req.FencingEpoch); err != nil {
+		writeErr(w, http.StatusConflict, "ERR_LEASE_REVOKED", err.Error())
+		return
+	}
+
+	res, err := h.characters.AllocatePotentialFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.StatType)
+	if err != nil {
+		switch {
+		case errors.Is(err, character.ErrStaleFencingEpoch):
+			writeErr(w, http.StatusConflict, "ERR_STALE_FENCING_EPOCH", err.Error())
+		case errors.Is(err, character.ErrInsufficientPotential):
+			writeErr(w, http.StatusUnprocessableEntity, "ERR_INSUFFICIENT_POTENTIAL", err.Error())
+		case errors.Is(err, character.ErrInvalidPotentialStat):
+			writeErr(w, http.StatusBadRequest, "ERR_INVALID_STAT_TYPE", err.Error())
+		default:
+			writeErr(w, http.StatusInternalServerError, "ERR_POTENTIAL_ALLOCATE", err.Error())
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, res)

@@ -8,6 +8,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FIU_OnAttributeChangedSignature, float, CurrentValue, float, MaxValue, float, Delta);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnHealthDepletedSignature, AActor*, OwningActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnAttackPowerChangedSignature, float, NewAttackPower);
 
 /**
  * Event-driven HP and Ki attribute manager (Zero-Tick: uses timer only while regenerating Ki).
@@ -39,9 +40,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "500.0"))
 	float PassiveKiRegenPerSecond = 8.0f;
 
-	/** Outgoing combat damage multiplier attribute (1.0 = baseline 100% damage, editable in Blueprint/runtime). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "100.0"))
+	/** Outgoing combat damage multiplier attribute (1.0 = baseline 100 AttackPower, scales +0.10 per +10 Sức đánh). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "1000.0"))
 	float AttackPowerMultiplier = 1.0f;
+
+	/** Authoritative flat Attack Power ("Sức đánh": starts at 100, +10 per Potential upgrade). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_AttackPower, Category = "IU|Attributes", meta = (ClampMin = "10.0", ClampMax = "100000.0"))
+	float AttackPower = 100.0f;
 
 	/** Timer interval for smooth Ki regeneration (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.05", ClampMax = "1.0"))
@@ -67,9 +72,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
 	void ResetAttributesToFull();
 
-	/** Server-only: applies authoritative persisted MaxHP/HP, MaxKi/Ki, and AttackPowerMultiplier from Go Backend. */
+	/** Server-only: applies authoritative persisted MaxHP/HP, MaxKi/Ki, and AttackPower/Multiplier from Go Backend or Potential upgrade. */
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
-	void ApplyPersistedVitals(float InMaxHP, float InCurrentHP, float InMaxKi, float InCurrentKi, float InAttackMultiplier);
+	void ApplyPersistedVitals(float InMaxHP, float InCurrentHP, float InMaxKi, float InCurrentKi, float InAttackMultiplier, float InAttackPower = -1.0f);
 
 	// ========================================================================
 	// Pure Getters
@@ -99,6 +104,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
 	float GetAttackPowerMultiplier() const { return FMath::Max(0.1f, AttackPowerMultiplier); }
 
+	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
+	float GetAttackPower() const { return AttackPower; }
+
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
 	void SetAttackPowerMultiplier(float NewMultiplier);
 
@@ -115,6 +123,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "IU|Attributes|Events")
 	FIU_OnHealthDepletedSignature OnHealthDepleted;
 
+	UPROPERTY(BlueprintAssignable, Category = "IU|Attributes|Events")
+	FIU_OnAttackPowerChangedSignature OnAttackPowerChanged;
+
 private:
 	void UpdateKiRegenTimerState();
 	void OnKiRegenTimerTick();
@@ -124,6 +135,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_MaxKi(float OldMaxKi);
+
+	UFUNCTION()
+	void OnRep_AttackPower(float OldAttackPower);
 
 	UFUNCTION()
 	void OnRep_CurrentHP(float OldHP);

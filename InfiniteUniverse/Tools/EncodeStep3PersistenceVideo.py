@@ -81,10 +81,10 @@ def render_restart_interstitial(writer, frames_n=24, out_w=1920, out_h=588):
         )
         cv2.putText(
             card,
-            "Re-authenticating Clients -> Advancing fencing_epoch (#1 -> #2) -> Restoring Position, Lv.2 & MaxHP 125!",
-            (255, 380),
+            "Re-Login -> Epoch #1->#2 -> Restoring Lv.2 (EXP Only) + Potential Stats (300 HP, 300 Ki, 110 Atk)!",
+            (235, 380),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.74,
+            0.70,
             (120, 255, 165),
             2,
             cv2.LINE_AA,
@@ -122,18 +122,18 @@ def main():
         writer,
         p1_c1,
         p1_c2,
-        "CLIENT 1: JWT Login -> Raid -> LEVEL UP (Lv.2) -> Logout",
+        "CLIENT 1: Raid (+LV EXP & +TN) -> +HP/+Ki/+Atk -> Logout",
         "DEDICATED SERVER #1 + POSTGRESQL 18 (Epoch #1)",
-        "CLIENT 2: Co-op Raid Partner (Epoch #1)",
+        "CLIENT 2: Co-op Raid & Potential Upgrade (Epoch #1)",
     )
     total += render_restart_interstitial(writer, 24)
     total += render_split_frames(
         writer,
         p2_c1,
         p2_c2,
-        "CLIENT 1: Re-Login -> Restored Lv.2, MaxHP 125 & Saved Coords!",
+        "CLIENT 1: Restored Lv.2 + 300 HP / 300 Ki / 110 Atk!",
         "NEW DEDICATED SERVER #2 + POSTGRESQL 18 (Epoch #2)",
-        "CLIENT 2: Re-Login -> Restored State (Epoch #2)",
+        "CLIENT 2: Restored Lv.2 + Potential Stats (Epoch #2)",
     )
 
     writer.release()

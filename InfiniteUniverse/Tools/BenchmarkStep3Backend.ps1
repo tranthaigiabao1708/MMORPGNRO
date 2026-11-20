@@ -53,6 +53,7 @@ $Client = New-Object System.Net.Http.HttpClient
 $RenewTimes = New-Object System.Collections.Generic.List[double]
 $SaveTimes = New-Object System.Collections.Generic.List[double]
 $ExpTimes = New-Object System.Collections.Generic.List[double]
+$PotTimes = New-Object System.Collections.Generic.List[double]
 
 for ($i = 1; $i -le $Iterations; $i++) {
     # 1. Lease Renew
@@ -67,7 +68,7 @@ for ($i = 1; $i -le $Iterations; $i++) {
     $RenewTimes.Add($sw.Elapsed.TotalMilliseconds)
 
     # 2. Fenced Checkpoint Save (ACID characters + character_attributes + character_save_snapshots)
-    $sb = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`",`"snapshot_reason`":`"PERIODIC_60S`",`"zone_id`":`"zone.p01_west_hub`",`"pos_x`":-2050.5,`"pos_y`":140.0,`"pos_z`":112.0,`"rot_yaw`":90.0,`"is_alive`":true,`"hp`":125.0,`"energy`":110.0,`"enemy_kills`":$i,`"pvp_kills`":0,`"deaths`":0}"
+    $sb = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`",`"snapshot_reason`":`"PERIODIC_60S`",`"zone_id`":`"zone.p01_west_hub`",`"pos_x`":-2050.5,`"pos_y`":140.0,`"pos_z`":112.0,`"rot_yaw`":90.0,`"is_alive`":true,`"hp`":200.0,`"energy`":200.0,`"enemy_kills`":$i,`"pvp_kills`":0,`"deaths`":0}"
     $req2 = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$GatewayURL/internal/v1/character/save")
     $req2.Content = New-Object System.Net.Http.StringContent($sb, [System.Text.Encoding]::UTF8, "application/json")
     $req2.Headers.Add("X-IU-Server-HMAC", (Get-HMACSHA256Hex $HMACSecret $sb))
@@ -77,8 +78,8 @@ for ($i = 1; $i -le $Iterations; $i++) {
     if (-not $resp2.IsSuccessStatusCode) { throw "Save failed at iter $i" }
     $SaveTimes.Add($sw2.Elapsed.TotalMilliseconds)
 
-    # 3. Fenced GrantEXP (ACID FOR UPDATE + Level-Up progression)
-    $eb = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`",`"exp_gain`":15,`"idempotency_key`":`"bench_idem_${Tag}_$i`"}"
+    # 3. Fenced GrantEXP + Potential (ACID FOR UPDATE)
+    $eb = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`",`"exp_gain`":15,`"potential_gain`":25000,`"idempotency_key`":`"bench_idem_${Tag}_$i`"}"
     $req3 = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$GatewayURL/internal/v1/character/exp")
     $req3.Content = New-Object System.Net.Http.StringContent($eb, [System.Text.Encoding]::UTF8, "application/json")
     $req3.Headers.Add("X-IU-Server-HMAC", (Get-HMACSHA256Hex $HMACSecret $eb))
@@ -87,6 +88,18 @@ for ($i = 1; $i -le $Iterations; $i++) {
     $sw3.Stop()
     if (-not $resp3.IsSuccessStatusCode) { throw "Exp failed at iter $i" }
     $ExpTimes.Add($sw3.Elapsed.TotalMilliseconds)
+
+    # 4. Fenced AllocatePotential (ACID FOR UPDATE escalating cost)
+    $statCode = if ($i % 3 -eq 1) { "hp" } elseif ($i % 3 -eq 2) { "ki" } else { "atk" }
+    $pb = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`",`"stat_type`":`"$statCode`"}"
+    $req4 = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$GatewayURL/internal/v1/character/potential")
+    $req4.Content = New-Object System.Net.Http.StringContent($pb, [System.Text.Encoding]::UTF8, "application/json")
+    $req4.Headers.Add("X-IU-Server-HMAC", (Get-HMACSHA256Hex $HMACSecret $pb))
+    $sw4 = [System.Diagnostics.Stopwatch]::StartNew()
+    $resp4 = $Client.SendAsync($req4).GetAwaiter().GetResult()
+    $sw4.Stop()
+    if (-not $resp4.IsSuccessStatusCode) { throw "AllocatePotential failed at iter $i" }
+    $PotTimes.Add($sw4.Elapsed.TotalMilliseconds)
 }
 
 $RelBody = "{`"character_id`":`"$CharID`",`"fencing_epoch`":$Epoch,`"server_id`":`"bench-srv`"}"
@@ -95,7 +108,8 @@ Invoke-RestMethod -Method Post -Uri "$GatewayURL/internal/v1/lease/release" -Hea
 $Results = @(
     [PSCustomObject]@{ Endpoint = "POST /internal/v1/lease/renew"; Stats = (Get-Percentiles $RenewTimes.ToArray()) }
     [PSCustomObject]@{ Endpoint = "POST /internal/v1/character/save (3-Table ACID)"; Stats = (Get-Percentiles $SaveTimes.ToArray()) }
-    [PSCustomObject]@{ Endpoint = "POST /internal/v1/character/exp (FOR UPDATE ACID)"; Stats = (Get-Percentiles $ExpTimes.ToArray()) }
+    [PSCustomObject]@{ Endpoint = "POST /internal/v1/character/exp (LV+Potential ACID)"; Stats = (Get-Percentiles $ExpTimes.ToArray()) }
+    [PSCustomObject]@{ Endpoint = "POST /internal/v1/character/potential (Stat Upgrade)"; Stats = (Get-Percentiles $PotTimes.ToArray()) }
 )
 
 foreach ($r in $Results) {

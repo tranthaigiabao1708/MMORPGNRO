@@ -106,14 +106,14 @@ $Pass = "Step3HeroPass!2026"
 $Srv1Log = Join-Path $ProjectRoot "Saved\Logs\Step3_DedicatedServer_Run1.log"
 if (Test-Path $Srv1Log) { Remove-Item $Srv1Log -Force }
 
-$Srv1Args = "`"$UProjectPath`" /Game/Maps/Prototype/Lvl_Greybox_Prototype -server -unattended -nopause -NullRHI -NoSplash -port=$Port -UseBackend -RequireBackendTicket -BackendURL=http://127.0.0.1:$GatewayPort -ServerID=ue5-ded-srv1 -AutoServerTelemetry -DemoDuration=28.0 -CSVOutputName=Step3_DedicatedServer_Run1.csv -AbsLog=`"$Srv1Log`""
+$Srv1Args = "`"$UProjectPath`" /Game/Maps/Prototype/Lvl_Greybox_Prototype -server -unattended -nopause -NullRHI -NoSplash -port=$Port -UseBackend -RequireBackendTicket -BackendURL=http://127.0.0.1:$GatewayPort -ServerID=ue5-ded-srv1 -AutoServerTelemetry -DemoDuration=30.0 -CSVOutputName=Step3_DedicatedServer_Run1.csv -AbsLog=`"$Srv1Log`""
 Write-Host "`n=== [PHASE 1] Booting Dedicated Server #1 (ue5-ded-srv1) ===" -ForegroundColor Cyan
 $Srv1Proc = Start-Process -FilePath $UEEditorExe -ArgumentList $Srv1Args -PassThru
 Wait-ServerListening -Proc $Srv1Proc -LogFile $Srv1Log -ListenPort $Port
 Write-Host "[SRV #1] Listening on UDP :$Port (PID $($Srv1Proc.Id))" -ForegroundColor Green
 
-$Cli1ArgsP1 = "-windowed -WinX=0 -WinY=40 -ResX=960 -ResY=540 -NoVSync -unattended -BackendURL=http://127.0.0.1:$GatewayPort -AutoAuthUser=$HeroA -AutoAuthPass=$Pass -AutoCharName=$HeroA -AutoStep3Phase=1 -AutoNetDemo=1 -DemoDuration=20.0 -RecordDemoFrames -DemoFramesDir=Step3Frames_Phase1_Client1 -CSVOutputName=Step3_Phase1_Client1Profile.csv -Log=Step3_Phase1_Client1.log"
-$Cli2ArgsP1 = "-windowed -WinX=960 -WinY=40 -ResX=960 -ResY=540 -NoVSync -unattended -BackendURL=http://127.0.0.1:$GatewayPort -AutoAuthUser=$HeroB -AutoAuthPass=$Pass -AutoCharName=$HeroB -AutoStep3Phase=1 -AutoNetDemo=2 -DemoDuration=20.0 -RecordDemoFrames -DemoFramesDir=Step3Frames_Phase1_Client2 -CSVOutputName=Step3_Phase1_Client2Profile.csv -Log=Step3_Phase1_Client2.log"
+$Cli1ArgsP1 = "-windowed -WinX=0 -WinY=40 -ResX=960 -ResY=540 -NoVSync -unattended -BackendURL=http://127.0.0.1:$GatewayPort -AutoAuthUser=$HeroA -AutoAuthPass=$Pass -AutoCharName=$HeroA -AutoStep3Phase=1 -AutoNetDemo=1 -DemoDuration=22.0 -RecordDemoFrames -DemoFramesDir=Step3Frames_Phase1_Client1 -CSVOutputName=Step3_Phase1_Client1Profile.csv -Log=Step3_Phase1_Client1.log"
+$Cli2ArgsP1 = "-windowed -WinX=960 -WinY=40 -ResX=960 -ResY=540 -NoVSync -unattended -BackendURL=http://127.0.0.1:$GatewayPort -AutoAuthUser=$HeroB -AutoAuthPass=$Pass -AutoCharName=$HeroB -AutoStep3Phase=1 -AutoNetDemo=2 -DemoDuration=22.0 -RecordDemoFrames -DemoFramesDir=Step3Frames_Phase1_Client2 -CSVOutputName=Step3_Phase1_Client2Profile.csv -Log=Step3_Phase1_Client2.log"
 
 $C1P1 = Start-Process -FilePath $ClientExe -ArgumentList $Cli1ArgsP1 -PassThru
 Start-Sleep -Milliseconds 300
@@ -132,7 +132,7 @@ Stop-TestUEProcesses
 
 # Inspect PostgreSQL state right after Server #1 shutdown!
 $env:PGPASSWORD = "iu_dev_secret_2026"
-$SqlCheck1 = & $PsqlExe -h 127.0.0.1 -p $PGPort -U iu_admin -d infinite_universe -t -A -c "SELECT c.character_name, c.level, c.current_exp, ROUND(c.pos_x::numeric,1), ROUND(c.pos_y::numeric,1), c.fencing_epoch, a.max_hp, (SELECT COUNT(*) FROM character_save_snapshots s WHERE s.character_id = c.id) FROM characters c JOIN character_attributes a ON a.character_id = c.id WHERE c.character_name IN ('$HeroA', '$HeroB') ORDER BY c.character_name;"
+$SqlCheck1 = & $PsqlExe -h 127.0.0.1 -p $PGPort -U iu_admin -d infinite_universe -t -A -c "SELECT c.character_name, c.level, c.current_exp, p.potential_exp, ROUND(c.pos_x::numeric,1), ROUND(c.pos_y::numeric,1), c.fencing_epoch, a.max_hp, a.max_energy, a.phys_atk, (SELECT COUNT(*) FROM character_save_snapshots s WHERE s.character_id = c.id) FROM characters c JOIN character_attributes a ON a.character_id = c.id JOIN character_potential p ON p.character_id = c.id WHERE c.character_name IN ('$HeroA', '$HeroB') ORDER BY c.character_name;"
 Write-Host "[POSTGRESQL AFTER SRV #1 SHUTDOWN]:" -ForegroundColor Green
 $SqlCheck1 | ForEach-Object { Write-Host "  $_" }
 
@@ -191,7 +191,7 @@ if (-not $SkipDuplicateLoginPhase) {
     Select-String -Path $Srv3Log -Pattern "PreLogin REJECTED|Restored Character|Lease REVOKED" | ForEach-Object { Write-Host "  $($_.Line)" }
 }
 
-$SqlCheckFinal = & $PsqlExe -h 127.0.0.1 -p $PGPort -U iu_admin -d infinite_universe -t -A -c "SELECT c.character_name, c.level, c.current_exp, ROUND(c.pos_x::numeric,1), ROUND(c.pos_y::numeric,1), c.fencing_epoch, a.max_hp, (SELECT COUNT(*) FROM character_save_snapshots s WHERE s.character_id = c.id) FROM characters c JOIN character_attributes a ON a.character_id = c.id WHERE c.character_name IN ('$HeroA', '$HeroB') ORDER BY c.character_name;"
+$SqlCheckFinal = & $PsqlExe -h 127.0.0.1 -p $PGPort -U iu_admin -d infinite_universe -t -A -c "SELECT c.character_name, c.level, c.current_exp, p.potential_exp, ROUND(c.pos_x::numeric,1), ROUND(c.pos_y::numeric,1), c.fencing_epoch, a.max_hp, a.max_energy, a.phys_atk, (SELECT COUNT(*) FROM character_save_snapshots s WHERE s.character_id = c.id) FROM characters c JOIN character_attributes a ON a.character_id = c.id JOIN character_potential p ON p.character_id = c.id WHERE c.character_name IN ('$HeroA', '$HeroB') ORDER BY c.character_name;"
 Write-Host "`n[FINAL POSTGRESQL AUTHORITATIVE ROWS]:" -ForegroundColor Cyan
 $SqlCheckFinal | ForEach-Object { Write-Host "  $_" }
 Write-Host "`n=== STEP 3 FULL-STACK E2E VERIFICATION COMPLETED ===" -ForegroundColor Green

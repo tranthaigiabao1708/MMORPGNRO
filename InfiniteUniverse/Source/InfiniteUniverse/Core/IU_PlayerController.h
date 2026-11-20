@@ -5,12 +5,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
+#include "Data/IU_GameplayTypes.h"
 #include "IU_PlayerController.generated.h"
 
 class UInputMappingContext;
 class UInputAction;
 class AIU_PlayerCharacter;
 class UIU_LoginCharacterWidget;
+class UIU_PotentialUpgradeWidget;
 
 /**
  * Enhanced Input PlayerController decoupling hardware key bindings from character movement execution.
@@ -123,6 +125,17 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Multiplayer")
 	void Server_ToggleGlobalPvPSparring();
 
+	/** Server-authoritative RPC: spends accumulated Potential Points to upgrade MaxHP (+100), MaxKi (+100), or AttackPower (+10). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Potential")
+	void Server_RequestAllocatePotential(EIU_PotentialStatType StatType);
+
+	/** Shows or hides the NRO Potential & Stat Allocation UMG modal (Key P). */
+	UFUNCTION(BlueprintCallable, Category = "IU|UI")
+	void SetPotentialUpgradePanelVisible(bool bVisible, bool bUpdateMouseInputMode = true);
+
+	UFUNCTION(BlueprintPure, Category = "IU|UI")
+	bool IsPotentialUpgradePanelVisible() const;
+
 private:
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;
 
@@ -147,7 +160,14 @@ private:
 	void HandleToggleDebugHUD();
 	void HandleToggleGlobalPvP();
 	void HandleToggleAuthPanel();
+	void HandleTogglePotentialPanel();
+	void HandleQuickUpgradeHP();
+	void HandleQuickUpgradeKi();
+	void HandleQuickUpgradeAtk();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_LoginCharacterWidget> ActiveAuthWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_PotentialUpgradeWidget> ActivePotentialWidget;
 };

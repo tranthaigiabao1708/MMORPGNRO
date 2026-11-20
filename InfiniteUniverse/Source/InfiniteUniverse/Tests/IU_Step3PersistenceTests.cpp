@@ -21,6 +21,7 @@
 #include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_LoginCharacterWidget.h"
+#include "UI/IU_PotentialUpgradeWidget.h"
 #include "UI/IU_PlayerHUDWidget.h"
 
 namespace IU_S3TestHelpers
@@ -143,6 +144,7 @@ bool FIU_S3_BackendJsonSerializationRoundTripTest::RunTest(const FString& Parame
 		"\"level\":3,"
 		"\"current_exp\":225,"
 		"\"next_level_exp\":400,"
+		"\"potential_points\":850,"
 		"\"zone_id\":\"zone.p01_west_hub\","
 		"\"pos_x\":-3412.5,"
 		"\"pos_y\":188.25,"
@@ -150,18 +152,27 @@ bool FIU_S3_BackendJsonSerializationRoundTripTest::RunTest(const FString& Parame
 		"\"rot_yaw\":-90.0,"
 		"\"has_saved_pos\":true,"
 		"\"is_alive\":true,"
-		"\"hp\":142.0,"
-		"\"max_hp\":150.0,"
-		"\"energy\":125.0,"
-		"\"max_energy\":130.0,"
-		"\"attack_power_multiplier\":1.32,"
+		"\"hp\":380.0,"
+		"\"max_hp\":400.0,"
+		"\"energy\":290.0,"
+		"\"max_energy\":300.0,"
+		"\"attack_power\":120.0,"
+		"\"attack_power_multiplier\":1.20,"
+		"\"hp_upgrades\":2,"
+		"\"ki_upgrades\":1,"
+		"\"atk_upgrades\":2,"
+		"\"next_hp_cost\":400,"
+		"\"next_ki_cost\":300,"
+		"\"next_atk_cost\":550,"
 		"\"enemy_kills\":10,"
 		"\"pvp_kills\":2,"
 		"\"deaths\":1,"
 		"\"fencing_epoch\":4,"
 		"\"leveled_up\":true,"
 		"\"old_level\":2,"
-		"\"exp_granted\":55"
+		"\"exp_granted\":55,"
+		"\"potential_granted\":350,"
+		"\"potential_spent\":400"
 		"}");
 
 	FIU_BackendCharacterSummary Parsed;
@@ -171,11 +182,21 @@ bool FIU_S3_BackendJsonSerializationRoundTripTest::RunTest(const FString& Parame
 	TestEqual(TEXT("Level parsed"), Parsed.Level, 3);
 	TestEqual(TEXT("CurrentExp parsed"), Parsed.CurrentExp, static_cast<int64>(225));
 	TestEqual(TEXT("NextLevelExp parsed"), Parsed.NextLevelExp, static_cast<int64>(400));
+	TestEqual(TEXT("PotentialPoints parsed"), Parsed.PotentialPoints, static_cast<int64>(850));
+	TestEqual(TEXT("HPUpgrades parsed"), Parsed.HPUpgrades, 2);
+	TestEqual(TEXT("KiUpgrades parsed"), Parsed.KiUpgrades, 1);
+	TestEqual(TEXT("AtkUpgrades parsed"), Parsed.AtkUpgrades, 2);
+	TestEqual(TEXT("NextHPCost parsed"), Parsed.NextHPCost, static_cast<int64>(400));
+	TestEqual(TEXT("NextKiCost parsed"), Parsed.NextKiCost, static_cast<int64>(300));
+	TestEqual(TEXT("NextAtkCost parsed"), Parsed.NextAtkCost, static_cast<int64>(550));
+	TestEqual(TEXT("PotentialGranted parsed"), Parsed.PotentialGranted, static_cast<int64>(350));
+	TestEqual(TEXT("PotentialSpent parsed"), Parsed.PotentialSpent, static_cast<int64>(400));
 	TestEqual(TEXT("FencingEpoch parsed"), Parsed.FencingEpoch, static_cast<int64>(4));
 	TestTrue(TEXT("bHasSavedPosition parsed true"), Parsed.bHasSavedPosition);
 	TestTrue(TEXT("bLeveledUp parsed true"), Parsed.bLeveledUp);
 	TestTrue(TEXT("PosX parsed accurately"), FMath::IsNearlyEqual(Parsed.SavedPosition.X, -3412.5, 0.01));
-	TestTrue(TEXT("AttackPowerMultiplier parsed accurately"), FMath::IsNearlyEqual(Parsed.AttackPowerMultiplier, 1.32f, 0.001f));
+	TestTrue(TEXT("AttackPower parsed accurately"), FMath::IsNearlyEqual(Parsed.AttackPower, 120.0f, 0.01f));
+	TestTrue(TEXT("AttackPowerMultiplier parsed accurately"), FMath::IsNearlyEqual(Parsed.AttackPowerMultiplier, 1.20f, 0.001f));
 
 	FIU_CharacterSavePayload SaveIn;
 	SaveIn.CharacterID = Parsed.CharacterID;
@@ -210,7 +231,12 @@ bool FIU_S3_ProgressionPlayerStateAndVitalsTest::RunTest(const FString& Paramete
 	TestTrue(TEXT("CharacterLevel replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("CharacterLevel")));
 	TestTrue(TEXT("CurrentEXP replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("CurrentEXP")));
 	TestTrue(TEXT("NextLevelEXP replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("NextLevelEXP")));
+	TestTrue(TEXT("PotentialPoints replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("PotentialPoints")));
+	TestTrue(TEXT("NextHPCost replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("NextHPCost")));
+	TestTrue(TEXT("NextKiCost replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("NextKiCost")));
+	TestTrue(TEXT("NextAtkCost replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("NextAtkCost")));
 	TestTrue(TEXT("ActiveFencingEpoch replicated"), IU_S3TestHelpers::HasNetProp(AIU_PlayerState::StaticClass(), TEXT("ActiveFencingEpoch")));
+	TestTrue(TEXT("AttackPower replicated on AttributeComponent"), IU_S3TestHelpers::HasNetProp(UIU_AttributeComponent::StaticClass(), TEXT("AttackPower")));
 
 	IU_S3TestHelpers::FScopedStep3World ScopeWorld;
 	UWorld* World = ScopeWorld.World;
@@ -227,32 +253,59 @@ bool FIU_S3_ProgressionPlayerStateAndVitalsTest::RunTest(const FString& Paramete
 	Loaded.Level = 1;
 	Loaded.CurrentExp = 55;
 	Loaded.NextLevelExp = 100;
+	Loaded.PotentialPoints = 0;
 	Loaded.FencingEpoch = 7;
-	Loaded.MaxHP = 100.0f;
-	Loaded.HP = 88.0f;
-	Loaded.MaxEnergy = 100.0f;
-	Loaded.Energy = 90.0f;
+	Loaded.MaxHP = 200.0f;
+	Loaded.HP = 200.0f;
+	Loaded.MaxEnergy = 200.0f;
+	Loaded.Energy = 200.0f;
+	Loaded.AttackPower = 100.0f;
 	Loaded.AttackPowerMultiplier = 1.0f;
 	Loaded.SavedPosition = FVector(-3400.0, 150.0, 114.0);
 	Loaded.SavedYaw = 180.0f;
 	Loaded.bHasSavedPosition = true;
 
+	UIU_AttributeComponent* Attr = PChar->GetAttributeComponent();
+	Attr->ApplyPersistedVitals(Loaded.MaxHP, Loaded.HP, Loaded.MaxEnergy, Loaded.Energy, Loaded.AttackPowerMultiplier, Loaded.AttackPower);
+
 	PS->ApplyLoadedBackendSummary(Loaded);
 	TestTrue(TEXT("PlayerState holds valid backend lease after ApplyLoadedBackendSummary"), PS->HasValidBackendLease());
 	TestEqual(TEXT("ActiveFencingEpoch == 7"), PS->GetActiveFencingEpoch(), static_cast<int64>(7));
 	TestTrue(TEXT("EXPPercent == 0.55"), FMath::IsNearlyEqual(PS->GetEXPPercent(), 0.55f, 0.001f));
+	TestTrue(TEXT("Initial MaxHP == 200.0"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 200.0f, 0.01f));
+	TestTrue(TEXT("Initial MaxKi == 200.0"), FMath::IsNearlyEqual(Attr->GetMaxKi(), 200.0f, 0.01f));
+	TestTrue(TEXT("Initial AttackPower == 100.0"), FMath::IsNearlyEqual(Attr->GetAttackPower(), 100.0f, 0.01f));
 
-	PS->ApplyAuthoritativeEXPUpdate(2, 10, 225, 2, true);
+	// NRO Rule 1: Level-Up via LV EXP updates Level ONLY — does NOT auto-increase MaxHP, MaxKi, or AttackPower!
+	PS->ApplyAuthoritativeEXPUpdate(2, 10, 225, 700, 2, true);
 	TestEqual(TEXT("CharacterLevel updated to 2"), PS->GetCharacterLevel(), 2);
 	TestEqual(TEXT("CurrentEXP updated to 10"), PS->GetCurrentEXP(), static_cast<int64>(10));
 	TestEqual(TEXT("NextLevelEXP updated to 225"), PS->GetNextLevelEXP(), static_cast<int64>(225));
+	TestEqual(TEXT("PotentialPoints updated to 700"), PS->GetPotentialPoints(), static_cast<int64>(700));
 	TestEqual(TEXT("EnemyKills updated to 2"), PS->GetEnemyKills(), 2);
+	TestTrue(TEXT("MaxHP remained 200.0 on Level-Up (no auto stat gain)"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 200.0f, 0.01f));
+	TestTrue(TEXT("AttackPower remained 100.0 on Level-Up (no auto stat gain)"), FMath::IsNearlyEqual(Attr->GetAttackPower(), 100.0f, 0.01f));
 
-	UIU_AttributeComponent* Attr = PChar->GetAttributeComponent();
-	Attr->ApplyPersistedVitals(125.0f, 125.0f, 120.0f, 120.0f, 1.16f);
-	TestTrue(TEXT("MaxHP scaled to 125.0"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 125.0f, 0.01f));
-	TestTrue(TEXT("MaxKi scaled to 120.0"), FMath::IsNearlyEqual(Attr->GetMaxKi(), 120.0f, 0.01f));
-	TestTrue(TEXT("AttackPowerMultiplier scaled to 1.16"), FMath::IsNearlyEqual(Attr->GetAttackPowerMultiplier(), 1.16f, 0.001f));
+	// NRO Rule 2: Spending Potential Points upgrades chosen stats with independent escalating costs per stat track!
+	TestTrue(TEXT("1st HP upgrade succeeds (cost 200 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
+	TestEqual(TEXT("Remaining Potential == 500 after 1st HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(500));
+	TestEqual(TEXT("NextHPCost escalated to 300"), PS->GetNextHPCost(), static_cast<int64>(300));
+	TestEqual(TEXT("NextKiCost stayed 200 (independent track)"), PS->GetNextKiCost(), static_cast<int64>(200));
+	TestTrue(TEXT("MaxHP increased +100 -> 300"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 300.0f, 0.01f));
+
+	TestTrue(TEXT("2nd HP upgrade succeeds (escalated cost 300 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
+	TestEqual(TEXT("Remaining Potential == 200 after 2nd HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(200));
+	TestEqual(TEXT("NextHPCost escalated to 400"), PS->GetNextHPCost(), static_cast<int64>(400));
+	TestTrue(TEXT("MaxHP increased +100 -> 400"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 400.0f, 0.01f));
+
+	// Insufficient Potential for AttackPower (needs 250, only 200 left)
+	TestFalse(TEXT("AttackPower upgrade rejected when Potential (200) < Cost (250)"),
+		PS->TryOfflineAllocatePotential(EIU_PotentialStatType::AttackPower, PChar));
+
+	// Ki 1st upgrade costs 200 TN -> succeeds with exact 200 left!
+	TestTrue(TEXT("1st Ki upgrade succeeds (cost 200 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxKi, PChar));
+	TestEqual(TEXT("Remaining Potential == 0"), PS->GetPotentialPoints(), static_cast<int64>(0));
+	TestTrue(TEXT("MaxKi increased +100 -> 300"), FMath::IsNearlyEqual(Attr->GetMaxKi(), 300.0f, 0.01f));
 
 	PChar->TeleportToPersistedTransform(Loaded.SavedPosition, FRotator(0.0f, Loaded.SavedYaw, 0.0f));
 	TestTrue(TEXT("Player teleported to persisted West Arena X=-3400"),
@@ -296,6 +349,11 @@ bool FIU_S3_PreLoginTicketGateAndAuthWidgetTest::RunTest(const FString& Paramete
 	TestNotNull(TEXT("UIU_LoginCharacterWidget instantiated cleanly"), AuthWidget);
 	TSharedRef<SWidget> SlateTree = AuthWidget->TakeWidget();
 	TestTrue(TEXT("UIU_LoginCharacterWidget built programmatic Slate hierarchy"), SlateTree->GetType() != FName(TEXT("SNullWidget")));
+
+	UIU_PotentialUpgradeWidget* PotentialWidget = CreateWidget<UIU_PotentialUpgradeWidget>(ScopeWorld.TempGI, UIU_PotentialUpgradeWidget::StaticClass());
+	TestNotNull(TEXT("UIU_PotentialUpgradeWidget instantiated cleanly"), PotentialWidget);
+	TSharedRef<SWidget> PotentialSlate = PotentialWidget->TakeWidget();
+	TestTrue(TEXT("UIU_PotentialUpgradeWidget built programmatic Slate hierarchy"), PotentialSlate->GetType() != FName(TEXT("SNullWidget")));
 
 	return true;
 }
@@ -384,23 +442,42 @@ bool FIU_S3_BackendSubsystemLoopbackRoundTripTest::RunTest(const FString& Parame
 	Backend->ClaimCharacterLease(IssuedTicket,
 		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; Claimed = S; bDone = true; });
 	PumpHttpUntil(bDone, 5.0);
-	TestTrue(TEXT("Live HMAC ClaimCharacterLease succeeded with fencing_epoch=1"), bOk && Claimed.FencingEpoch == 1);
+	TestTrue(TEXT("Live HMAC ClaimCharacterLease succeeded with fencing_epoch=1 & baseline 200 HP / 200 Ki / 100 Atk"),
+		bOk && Claimed.FencingEpoch == 1 && FMath::IsNearlyEqual(Claimed.MaxHP, 200.0f, 0.1f) && FMath::IsNearlyEqual(Claimed.AttackPower, 100.0f, 0.1f));
 
-	// Grant 110 EXP -> Level 1 -> Level 2!
+	// Grant 110 LV EXP + 700 Potential -> Level 1 -> Level 2 WITHOUT changing stats!
 	bDone = false; bOk = false;
 	FIU_BackendCharacterSummary ExpAfter;
-	Backend->GrantCharacterEXP(Claimed.CharacterID, Claimed.FencingEpoch, 110, TEXT("ue5_test_kill_") + UniqueSuffix,
+	Backend->GrantCharacterEXP(Claimed.CharacterID, Claimed.FencingEpoch, 110, 700, TEXT("ue5_test_kill_") + UniqueSuffix,
 		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; ExpAfter = S; bDone = true; });
 	PumpHttpUntil(bDone, 5.0);
-	TestTrue(TEXT("Live HMAC GrantCharacterEXP leveled character to Lv.2 (MaxHP=125)"),
-		bOk && ExpAfter.Level == 2 && ExpAfter.bLeveledUp && FMath::IsNearlyEqual(ExpAfter.MaxHP, 125.0f, 0.1f));
+	TestTrue(TEXT("Live HMAC GrantCharacterEXP leveled character to Lv.2 + 700 TN while keeping MaxHP=200 & Atk=100"),
+		bOk && ExpAfter.Level == 2 && ExpAfter.bLeveledUp && ExpAfter.PotentialPoints == 700 &&
+		FMath::IsNearlyEqual(ExpAfter.MaxHP, 200.0f, 0.1f) && FMath::IsNearlyEqual(ExpAfter.AttackPower, 100.0f, 0.1f));
+
+	// Spend Potential on HP (+100 HP, cost 200 -> 500 left, NextHPCost=300) and Attack (+10 Atk, cost 250 -> 250 left, NextAtkCost=400)
+	bDone = false; bOk = false;
+	FIU_BackendCharacterSummary AfterHP;
+	Backend->AllocateCharacterPotential(Claimed.CharacterID, Claimed.FencingEpoch, TEXT("hp"),
+		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; AfterHP = S; bDone = true; });
+	PumpHttpUntil(bDone, 5.0);
+	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('hp') -> MaxHP=300, NextHPCost=300, RemainingTN=500"),
+		bOk && FMath::IsNearlyEqual(AfterHP.MaxHP, 300.0f, 0.1f) && AfterHP.NextHPCost == 300 && AfterHP.PotentialPoints == 500);
+
+	bDone = false; bOk = false;
+	FIU_BackendCharacterSummary AfterAtk;
+	Backend->AllocateCharacterPotential(Claimed.CharacterID, Claimed.FencingEpoch, TEXT("atk"),
+		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; AfterAtk = S; bDone = true; });
+	PumpHttpUntil(bDone, 5.0);
+	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('atk') -> AttackPower=110, NextAtkCost=400, RemainingTN=250"),
+		bOk && FMath::IsNearlyEqual(AfterAtk.AttackPower, 110.0f, 0.1f) && AfterAtk.NextAtkCost == 400 && AfterAtk.PotentialPoints == 250);
 
 	FIU_CharacterSavePayload FinalSave;
 	FinalSave.CharacterID = Claimed.CharacterID;
 	FinalSave.FencingEpoch = Claimed.FencingEpoch;
 	FinalSave.Position = FVector(-3400.0, 200.0, 112.0);
-	FinalSave.HP = 125.0f;
-	FinalSave.Energy = 115.0f;
+	FinalSave.HP = 300.0f;
+	FinalSave.Energy = 200.0f;
 	FinalSave.EnemyKills = 2;
 	Backend->ReleaseCharacterLease(Claimed.CharacterID, Claimed.FencingEpoch, &FinalSave);
 	FHttpModule::Get().GetHttpManager().Flush(EHttpFlushReason::Default);

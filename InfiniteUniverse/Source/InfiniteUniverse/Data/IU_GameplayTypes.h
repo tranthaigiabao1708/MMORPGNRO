@@ -100,3 +100,18 @@ struct INFINITEUNIVERSE_API FIU_DamageSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Combat")
 	float HitStunDuration = 0.22f;
 };
+
+/**
+ * Selectable stat tracks upgraded by spending Potential Points (Điểm Tiềm năng):
+ * - MaxHP:       Base 200, +100 HP per upgrade (escalating HP potential cost)
+ * - MaxKi:       Base 200, +100 Ki per upgrade (escalating Ki potential cost)
+ * - AttackPower: Base 100, +10 Attack Power per upgrade (escalating Attack potential cost)
+ */
+UENUM(BlueprintType)
+enum class EIU_PotentialStatType : uint8
+{
+	MaxHP       UMETA(DisplayName = "+100 HP"),
+	MaxKi       UMETA(DisplayName = "+100 Ki"),
+	AttackPower UMETA(DisplayName = "+10 Attack Power")
+};
+

@@ -81,11 +81,15 @@ private:
 	UFUNCTION()
 	void HandleLocalCharacterLevelUp(int32 OldLevel, int32 NewLevel);
 
+	UFUNCTION()
+	void HandleLocalPotentialChanged(int64 PotentialPoints, int64 NextHPCost, int64 NextKiCost, int64 NextAtkCost);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_PlayerHUDWidget> ActiveHUDWidget;
 
 	TWeakObjectPtr<APawn> BoundHUDWidgetPawn;
 	TWeakObjectPtr<AIU_PlayerState> ObservedLocalPlayerState;
+	int64 LastObservedPotentialPoints = -1;
 	TSet<TWeakObjectPtr<UIU_DamageComponent>> ObservedDamageComponents;
 	TSet<TWeakObjectPtr<UIU_AttributeComponent>> ObservedAttributeComponents;
 	TWeakObjectPtr<UIU_CombatComponent> ObservedPlayerCombat;

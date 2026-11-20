@@ -56,6 +56,9 @@ protected:
 	TObjectPtr<UTextBlock> LevelEXPValueText;
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "IU|UI")
+	TObjectPtr<UTextBlock> PotentialValueText;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional), Category = "IU|UI")
 	TObjectPtr<UTextBlock> StatusReadoutText;
 
 private:
@@ -66,7 +69,13 @@ private:
 	void HandleKiChanged(float CurrentKi, float MaxKi, float Delta);
 
 	UFUNCTION()
+	void HandleAttackPowerChanged(float NewAttackPower);
+
+	UFUNCTION()
 	void HandleCharacterEXPChanged(int64 CurrentEXP, int64 NextLevelEXP, int32 CurrentLevel);
+
+	UFUNCTION()
+	void HandleCharacterPotentialChanged(int64 PotentialPoints, int64 NextHPCost, int64 NextKiCost, int64 NextAtkCost);
 
 	UFUNCTION()
 	void HandleCombatStateChanged(EIU_CombatState OldState, EIU_CombatState NewState);
@@ -82,6 +91,7 @@ private:
 
 	void UnbindCurrentComponents();
 	void RefreshStatusText();
+	void RefreshPotentialReadout();
 
 	TWeakObjectPtr<UIU_AttributeComponent> BoundAttributeComp;
 	TWeakObjectPtr<UIU_CombatComponent> BoundCombatComp;

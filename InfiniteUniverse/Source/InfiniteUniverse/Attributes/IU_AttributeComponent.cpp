@@ -20,6 +20,7 @@ void UIU_AttributeComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(UIU_AttributeComponent, MaxHP);
 	DOREPLIFETIME(UIU_AttributeComponent, MaxKi);
 	DOREPLIFETIME(UIU_AttributeComponent, AttackPowerMultiplier);
+	DOREPLIFETIME(UIU_AttributeComponent, AttackPower);
 	DOREPLIFETIME(UIU_AttributeComponent, CurrentHP);
 	DOREPLIFETIME(UIU_AttributeComponent, CurrentKi);
 	DOREPLIFETIME(UIU_AttributeComponent, bIsDead);
@@ -151,7 +152,8 @@ void UIU_AttributeComponent::ApplyPersistedVitals(
 	float InCurrentHP,
 	float InMaxKi,
 	float InCurrentKi,
-	float InAttackMultiplier)
+	float InAttackMultiplier,
+	float InAttackPower)
 {
 	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
@@ -163,16 +165,27 @@ void UIU_AttributeComponent::ApplyPersistedVitals(
 		return;
 	}
 
-	MaxHP = FMath::Clamp(InMaxHP, 1.0f, 100000.0f);
-	MaxKi = FMath::Clamp(InMaxKi, 0.0f, 10000.0f);
+	MaxHP = FMath::Clamp(InMaxHP, 1.0f, 1000000.0f);
+	MaxKi = FMath::Clamp(InMaxKi, 0.0f, 1000000.0f);
 	CurrentHP = FMath::Clamp(InCurrentHP, 1.0f, MaxHP);
 	CurrentKi = FMath::Clamp(InCurrentKi, 0.0f, MaxKi);
-	AttackPowerMultiplier = FMath::Clamp(InAttackMultiplier, 0.1f, 100.0f);
+
+	if (InAttackPower > 0.0f && FMath::IsFinite(InAttackPower))
+	{
+		AttackPower = FMath::Clamp(InAttackPower, 10.0f, 1000000.0f);
+		AttackPowerMultiplier = FMath::Clamp(AttackPower / 100.0f, 0.1f, 10000.0f);
+	}
+	else
+	{
+		AttackPowerMultiplier = FMath::Clamp(InAttackMultiplier, 0.1f, 10000.0f);
+		AttackPower = AttackPowerMultiplier * 100.0f;
+	}
 	bIsDead = false;
 
 	UpdateKiRegenTimerState();
 	OnHPChanged.Broadcast(CurrentHP, MaxHP, 0.0f);
 	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
+	OnAttackPowerChanged.Broadcast(AttackPower);
 }
 
 void UIU_AttributeComponent::UpdateKiRegenTimerState()
@@ -235,6 +248,11 @@ void UIU_AttributeComponent::OnRep_MaxHP(float OldMaxHP)
 void UIU_AttributeComponent::OnRep_MaxKi(float OldMaxKi)
 {
 	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
+}
+
+void UIU_AttributeComponent::OnRep_AttackPower(float OldAttackPower)
+{
+	OnAttackPowerChanged.Broadcast(AttackPower);
 }
 
 void UIU_AttributeComponent::OnRep_CurrentHP(float OldHP)

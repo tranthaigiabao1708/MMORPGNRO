@@ -59,6 +59,8 @@ private:
 	bool bTookCounterHitInCycle = false;
 	bool bTriggeredMirageEvadeInCycle = false;
 	bool bTestedCoopFriendlyFireShot = false;
+	bool bDispatchedStep3PotentialAllocations = false;
+	double Step3PotentialAllocTime = 0.0;
 	double NextActionCooldownTime = 0.0;
 
 	double StartPhysicalMemMB = 0.0;

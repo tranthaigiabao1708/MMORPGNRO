@@ -523,9 +523,18 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 	})
 	epoch := int64(claim["fencing_epoch"].(float64))
 
+	// Verify exact starting NRO-style base stats: 200 HP, 200 Ki, 100 Attack Power, 0 Potential Points!
+	if math.Abs(claim["max_hp"].(float64)-200.0) > 0.01 ||
+		math.Abs(claim["max_energy"].(float64)-200.0) > 0.01 ||
+		math.Abs(claim["attack_power"].(float64)-100.0) > 0.01 ||
+		int64(claim["potential_points"].(float64)) != 0 {
+		t.Fatalf("expected initial 200 HP, 200 Ki, 100 Atk, 0 Potential, got %+v", claim)
+	}
+
 	// Launch 50 concurrent goroutines:
-	// - 30 goroutines grant 10 unique mob kills (3 goroutines per idempotency_key to verify deduplication!) -> 10 * 55 = 550 total EXP!
-	//   Level 1->2 needs 100 EXP (rem 450); Level 2->3 needs 225 EXP (rem 225); Level 3->4 needs 400 EXP -> exact result: Level 3, CurrentEXP = 225, EnemyKills = 10!
+	// - 30 goroutines grant 10 unique mob kills (3x duplicate idempotency_key each):
+	//   * LV EXP: 10 * 55 = 550 -> Level 3, CurrentEXP = 225 (MUST NOT increase MaxHP/MaxKi/AttackPower!)
+	//   * Potential Points: 10 * 350 = 3500 TN!
 	// - 20 goroutines fire concurrent periodic saves & lease renewals!
 	var wg sync.WaitGroup
 	errCh := make(chan error, 60)
@@ -534,12 +543,13 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			killSlot := idx % 10 // 3x duplicate submissions per killSlot!
+			killSlot := idx % 10
 			c, resp := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/exp", "", env.authMgr, map[string]any{
 				"character_id":    charID,
 				"fencing_epoch":   epoch,
 				"server_id":       "ue5-ded-7777",
 				"exp_gain":        55,
+				"potential_gain":  350,
 				"idempotency_key": fmt.Sprintf("mob-kill-slot-%d", killSlot),
 			})
 			if c != http.StatusOK {
@@ -572,8 +582,8 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 					"pos_z":           114.0,
 					"rot_yaw":         135.0,
 					"is_alive":        true,
-					"hp":              120.0,
-					"energy":          110.0,
+					"hp":              185.0,
+					"energy":          170.0,
 					"enemy_kills":     10,
 				})
 				if c != http.StatusOK {
@@ -589,6 +599,53 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		t.Fatal(e)
 	}
 
+	// Verify Level 3 reached WITHOUT changing stats (still 200 HP, 200 Ki, 100 Atk) and Potential = 3500!
+	_, preUpgradeList := doJSON(t, "GET", env.srv.URL+"/v1/characters", tok, nil, nil)
+	preChar := preUpgradeList["characters"].([]any)[0].(map[string]any)
+	if int(preChar["level"].(float64)) != 3 || int64(preChar["potential_points"].(float64)) != 3500 {
+		t.Fatalf("expected Level=3 & PotentialPoints=3500 before spending potential, got %+v", preChar)
+	}
+	if math.Abs(preChar["max_hp"].(float64)-200.0) > 0.01 ||
+		math.Abs(preChar["max_energy"].(float64)-200.0) > 0.01 ||
+		math.Abs(preChar["attack_power"].(float64)-100.0) > 0.01 {
+		t.Fatalf("Level-Up MUST NOT auto-increase stats! Expected 200 HP / 200 Ki / 100 Atk, got %+v", preChar)
+	}
+
+	// Spend Potential Points across independent escalating tracks:
+	// - HP x2: costs 200 + 300 = 500 -> MaxHP = 400 (next_hp_cost = 400)
+	// - Ki x1: costs 200            -> MaxEnergy = 300 (next_ki_cost = 300)
+	// - Atk x2: costs 250 + 400 = 650 -> AttackPower = 120 (1.20x multiplier, next_atk_cost = 550)
+	// Total spent = 1350 -> Remaining Potential = 3500 - 1350 = 2150!
+	for _, stType := range []string{"hp", "hp", "ki", "atk", "atk"} {
+		c, allocResp := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/potential", "", env.authMgr, map[string]any{
+			"character_id":  charID,
+			"fencing_epoch": epoch,
+			"server_id":     "ue5-ded-7777",
+			"stat_type":     stType,
+		})
+		if c != http.StatusOK {
+			t.Fatalf("allocate potential %q failed (%d): %+v", stType, c, allocResp)
+		}
+	}
+
+	// Verify overspending beyond remaining potential returns 422 ERR_INSUFFICIENT_POTENTIAL
+	saw422 := false
+	for i := 0; i < 10; i++ {
+		c, _ := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/potential", "", env.authMgr, map[string]any{
+			"character_id":  charID,
+			"fencing_epoch": epoch,
+			"server_id":     "ue5-ded-7777",
+			"stat_type":     "atk",
+		})
+		if c == http.StatusUnprocessableEntity {
+			saw422 = true
+			break
+		}
+	}
+	if !saw422 {
+		t.Fatal("expected 422 ERR_INSUFFICIENT_POTENTIAL once potential points are exhausted")
+	}
+
 	// Clean Logout & Final Save before simulated Dedicated Server restart
 	code, _ := doJSON(t, "POST", env.srv.URL+"/internal/v1/lease/release", "", env.authMgr, map[string]any{
 		"final_save": map[string]any{
@@ -601,8 +658,8 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 			"pos_z":         112.0,
 			"rot_yaw":       -90.0,
 			"is_alive":      true,
-			"hp":            142.0,
-			"energy":        125.0,
+			"hp":            380.0,
+			"energy":        290.0,
 			"enemy_kills":   10,
 			"pvp_kills":     2,
 			"deaths":        1,
@@ -624,11 +681,14 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 	}
 
 	if int(reloaded["level"].(float64)) != 3 || int64(reloaded["current_exp"].(float64)) != 225 {
-		t.Fatalf("expected deterministic Level=3, CurrentEXP=225 after 10 unique 55-EXP kills, got level=%v exp=%v",
+		t.Fatalf("expected deterministic Level=3, CurrentEXP=225, got level=%v exp=%v",
 			reloaded["level"], reloaded["current_exp"])
 	}
-	if math.Abs(reloaded["max_hp"].(float64)-150.0) > 0.01 || math.Abs(reloaded["hp"].(float64)-142.0) > 0.01 {
-		t.Fatalf("expected Level 3 MaxHP=150, restored HP=142, got max_hp=%v hp=%v", reloaded["max_hp"], reloaded["hp"])
+	if math.Abs(reloaded["max_hp"].(float64)-400.0) > 0.01 ||
+		math.Abs(reloaded["hp"].(float64)-380.0) > 0.01 ||
+		math.Abs(reloaded["max_energy"].(float64)-300.0) > 0.01 ||
+		math.Abs(reloaded["attack_power"].(float64)-150.0) > 0.01 {
+		t.Fatalf("expected restored MaxHP=400 (HP=380), MaxKi=300, AttackPower=150, got %+v", reloaded)
 	}
 	if math.Abs(reloaded["pos_x"].(float64)-(-3412.5)) > 0.01 || reloaded["has_saved_pos"] != true {
 		t.Fatalf("expected exact restored PosX=-3412.5 & has_saved_pos=true, got %+v", reloaded)

@@ -12,6 +12,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Fonts/SlateFontInfo.h"
 
 TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 {
@@ -25,46 +26,68 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		if (UCanvasPanelSlot* BoxSlot = RootCanvas->AddChildToCanvas(VitalsBox))
 		{
 			BoxSlot->SetAnchors(FAnchors(0.0f, 0.0f));
-			BoxSlot->SetPosition(FVector2D(36.0f, 28.0f));
-			BoxSlot->SetSize(FVector2D(370.0f, 190.0f));
+			BoxSlot->SetPosition(FVector2D(36.0f, 18.0f));
+			BoxSlot->SetSize(FVector2D(430.0f, 198.0f));
 		}
 
+		auto StyleHUDText = [](UTextBlock* TB, const FLinearColor& Col, int32 FontPt = 13)
+		{
+			if (!TB)
+			{
+				return;
+			}
+			FSlateFontInfo F = TB->GetFont();
+			F.Size = FontPt;
+			TB->SetFont(F);
+			TB->SetColorAndOpacity(FSlateColor(Col));
+			TB->SetShadowOffset(FVector2D(1.5f, 1.5f));
+			TB->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.92f));
+		};
+
 		LevelEXPValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LevelEXPValueText"));
-		LevelEXPValueText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.88f, 0.35f)));
-		LevelEXPValueText->SetText(FText::FromString(TEXT("LV. 1  |  EXP: 0 / 100")));
+		StyleHUDText(LevelEXPValueText, FLinearColor(1.0f, 0.88f, 0.32f), 13);
+		LevelEXPValueText->SetText(FText::FromString(TEXT("LV. 1  |  DIEM LV: 0 / 100")));
 		VitalsBox->AddChildToVerticalBox(LevelEXPValueText);
 
 		EXPProgressBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("EXPProgressBar"));
 		EXPProgressBar->SetFillColorAndOpacity(FLinearColor(0.95f, 0.75f, 0.15f, 1.0f));
 		if (UVerticalBoxSlot* EXPSlot = VitalsBox->AddChildToVerticalBox(EXPProgressBar))
 		{
-			EXPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
+			EXPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 5.0f));
 		}
 
 		HealthValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HealthValueText"));
-		HealthValueText->SetColorAndOpacity(FSlateColor(FLinearColor(0.95f, 1.0f, 0.95f)));
+		StyleHUDText(HealthValueText, FLinearColor(0.95f, 1.0f, 0.95f), 13);
 		VitalsBox->AddChildToVerticalBox(HealthValueText);
 
 		HealthProgressBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HealthProgressBar"));
 		HealthProgressBar->SetFillColorAndOpacity(FLinearColor(0.18f, 0.85f, 0.32f, 1.0f));
 		if (UVerticalBoxSlot* HPSlot = VitalsBox->AddChildToVerticalBox(HealthProgressBar))
 		{
-			HPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
+			HPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 5.0f));
 		}
 
 		KiValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("KiValueText"));
-		KiValueText->SetColorAndOpacity(FSlateColor(FLinearColor(0.75f, 0.95f, 1.0f)));
+		StyleHUDText(KiValueText, FLinearColor(0.75f, 0.95f, 1.0f), 13);
 		VitalsBox->AddChildToVerticalBox(KiValueText);
 
 		KiProgressBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("KiProgressBar"));
 		KiProgressBar->SetFillColorAndOpacity(FLinearColor(0.10f, 0.68f, 1.0f, 1.0f));
 		if (UVerticalBoxSlot* KiSlot = VitalsBox->AddChildToVerticalBox(KiProgressBar))
 		{
-			KiSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
+			KiSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 5.0f));
+		}
+
+		PotentialValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PotentialValueText"));
+		StyleHUDText(PotentialValueText, FLinearColor(0.35f, 1.0f, 0.72f), 13);
+		PotentialValueText->SetText(FText::FromString(TEXT("TIEM NANG: 0  |  SUC DANH: 100  [P / 1,2,3]")));
+		if (UVerticalBoxSlot* PotSlot = VitalsBox->AddChildToVerticalBox(PotentialValueText))
+		{
+			PotSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 3.0f));
 		}
 
 		StatusReadoutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatusReadoutText"));
-		StatusReadoutText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.88f, 0.35f)));
+		StyleHUDText(StatusReadoutText, FLinearColor(1.0f, 0.88f, 0.35f), 12);
 		VitalsBox->AddChildToVerticalBox(StatusReadoutText);
 	}
 
@@ -96,6 +119,7 @@ void UIU_PlayerHUDWidget::BindToPlayerPawn(APawn* NewPawn)
 		BoundAttributeComp = Attr;
 		Attr->OnHPChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleHPChanged);
 		Attr->OnKiChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleKiChanged);
+		Attr->OnAttackPowerChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleAttackPowerChanged);
 
 		HandleHPChanged(Attr->GetHP(), Attr->GetMaxHP(), 0.0f);
 		HandleKiChanged(Attr->GetKi(), Attr->GetMaxKi(), 0.0f);
@@ -120,6 +144,7 @@ void UIU_PlayerHUDWidget::BindToPlayerPawn(APawn* NewPawn)
 	}
 
 	EnsurePlayerStateBound(NewPawn);
+	RefreshPotentialReadout();
 	RefreshStatusText();
 }
 
@@ -138,11 +163,14 @@ void UIU_PlayerHUDWidget::EnsurePlayerStateBound(APawn* CurrentPawn)
 	if (AIU_PlayerState* OldPS = BoundPlayerState.Get())
 	{
 		OldPS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+		OldPS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 	}
 
 	BoundPlayerState = IUPS;
 	IUPS->OnCharacterEXPChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+	IUPS->OnCharacterPotentialChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 	HandleCharacterEXPChanged(IUPS->GetCurrentEXP(), IUPS->GetNextLevelEXP(), IUPS->GetCharacterLevel());
+	RefreshPotentialReadout();
 }
 
 void UIU_PlayerHUDWidget::UnbindCurrentComponents()
@@ -151,6 +179,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 	{
 		Attr->OnHPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleHPChanged);
 		Attr->OnKiChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleKiChanged);
+		Attr->OnAttackPowerChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleAttackPowerChanged);
 	}
 	if (UIU_CombatComponent* Combat = BoundCombatComp.Get())
 	{
@@ -165,6 +194,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 	if (AIU_PlayerState* PS = BoundPlayerState.Get())
 	{
 		PS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+		PS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
 	}
 
 	BoundAttributeComp.Reset();
@@ -215,8 +245,30 @@ void UIU_PlayerHUDWidget::HandleCharacterEXPChanged(int64 CurrentEXP, int64 Next
 			}
 		}
 		LevelEXPValueText->SetText(FText::FromString(
-			FString::Printf(TEXT("%sLV. %d  |  EXP: %lld / %lld"), *NamePrefix, CurrentLevel, CurrentEXP, NextLevelEXP)));
+			FString::Printf(TEXT("%sLV. %d  |  DIEM LV: %lld / %lld"), *NamePrefix, CurrentLevel, CurrentEXP, NextLevelEXP)));
 	}
+}
+
+void UIU_PlayerHUDWidget::HandleAttackPowerChanged(float NewAttackPower)
+{
+	RefreshPotentialReadout();
+}
+
+void UIU_PlayerHUDWidget::HandleCharacterPotentialChanged(int64 PotentialPoints, int64 NextHPCost, int64 NextKiCost, int64 NextAtkCost)
+{
+	RefreshPotentialReadout();
+}
+
+void UIU_PlayerHUDWidget::RefreshPotentialReadout()
+{
+	if (!PotentialValueText)
+	{
+		return;
+	}
+	const int64 PoolTN = BoundPlayerState.IsValid() ? BoundPlayerState->GetPotentialPoints() : 0;
+	const float Atk = BoundAttributeComp.IsValid() ? BoundAttributeComp->GetAttackPower() : 100.0f;
+	PotentialValueText->SetText(FText::FromString(
+		FString::Printf(TEXT("TIEM NANG: %lld  |  SUC DANH: %.0f  [P / 1,2,3]"), PoolTN, Atk)));
 }
 
 void UIU_PlayerHUDWidget::HandleCombatStateChanged(EIU_CombatState OldState, EIU_CombatState NewState)

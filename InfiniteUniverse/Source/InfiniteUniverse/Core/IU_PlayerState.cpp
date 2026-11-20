@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "Core/IU_PlayerState.h"
+#include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -22,6 +23,13 @@ void AIU_PlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AIU_PlayerState, CharacterLevel);
 	DOREPLIFETIME(AIU_PlayerState, CurrentEXP);
 	DOREPLIFETIME(AIU_PlayerState, NextLevelEXP);
+	DOREPLIFETIME(AIU_PlayerState, PotentialPoints);
+	DOREPLIFETIME(AIU_PlayerState, HPUpgradeCount);
+	DOREPLIFETIME(AIU_PlayerState, KiUpgradeCount);
+	DOREPLIFETIME(AIU_PlayerState, AtkUpgradeCount);
+	DOREPLIFETIME(AIU_PlayerState, NextHPCost);
+	DOREPLIFETIME(AIU_PlayerState, NextKiCost);
+	DOREPLIFETIME(AIU_PlayerState, NextAtkCost);
 	DOREPLIFETIME_CONDITION(AIU_PlayerState, ActiveFencingEpoch, COND_OwnerOnly);
 }
 
@@ -62,6 +70,13 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	CharacterLevel = FMath::Max(1, Summary.Level);
 	CurrentEXP = FMath::Max<int64>(0, Summary.CurrentExp);
 	NextLevelEXP = FMath::Max<int64>(1, Summary.NextLevelExp);
+	PotentialPoints = FMath::Max<int64>(0, Summary.PotentialPoints);
+	HPUpgradeCount = FMath::Max(0, Summary.HPUpgrades);
+	KiUpgradeCount = FMath::Max(0, Summary.KiUpgrades);
+	AtkUpgradeCount = FMath::Max(0, Summary.AtkUpgrades);
+	NextHPCost = FMath::Max<int64>(200, Summary.NextHPCost);
+	NextKiCost = FMath::Max<int64>(200, Summary.NextKiCost);
+	NextAtkCost = FMath::Max<int64>(250, Summary.NextAtkCost);
 	EnemyKills = FMath::Max(0, Summary.EnemyKills);
 	PvPKills = FMath::Max(0, Summary.PvPKills);
 	Deaths = FMath::Max(0, Summary.Deaths);
@@ -75,6 +90,7 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	}
 
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	ForceNetUpdate();
 }
 
@@ -82,6 +98,7 @@ void AIU_PlayerState::ApplyAuthoritativeEXPUpdate(
 	int32 NewLevel,
 	int64 NewCurrentEXP,
 	int64 NewNextLevelEXP,
+	int64 NewPotentialPoints,
 	int32 NewEnemyKills,
 	bool bLeveledUp)
 {
@@ -94,14 +111,136 @@ void AIU_PlayerState::ApplyAuthoritativeEXPUpdate(
 	CharacterLevel = FMath::Max(1, NewLevel);
 	CurrentEXP = FMath::Max<int64>(0, NewCurrentEXP);
 	NextLevelEXP = FMath::Max<int64>(1, NewNextLevelEXP);
+	PotentialPoints = FMath::Max<int64>(0, NewPotentialPoints);
 	EnemyKills = FMath::Max(EnemyKills, NewEnemyKills);
 
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	if (bLeveledUp && CharacterLevel > OldLevel)
 	{
 		OnCharacterLevelUp.Broadcast(OldLevel, CharacterLevel);
 	}
 	ForceNetUpdate();
+}
+
+void AIU_PlayerState::ApplyAuthoritativePotentialUpgrade(const FIU_BackendCharacterSummary& Summary)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	PotentialPoints = FMath::Max<int64>(0, Summary.PotentialPoints);
+	HPUpgradeCount = FMath::Max(0, Summary.HPUpgrades);
+	KiUpgradeCount = FMath::Max(0, Summary.KiUpgrades);
+	AtkUpgradeCount = FMath::Max(0, Summary.AtkUpgrades);
+	NextHPCost = FMath::Max<int64>(200, Summary.NextHPCost);
+	NextKiCost = FMath::Max<int64>(200, Summary.NextKiCost);
+	NextAtkCost = FMath::Max<int64>(250, Summary.NextAtkCost);
+
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
+	ForceNetUpdate();
+}
+
+void AIU_PlayerState::AwardOfflineKillProgress(int64 ExpGain, int64 PotentialGain)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const int32 OldLv = CharacterLevel;
+	CurrentEXP += FMath::Max<int64>(0, ExpGain);
+	bool bLeveled = false;
+	while (CharacterLevel < 200)
+	{
+		const int64 L = static_cast<int64>(CharacterLevel);
+		const int64 Req = 100 * L + 25 * (L - 1) * (L - 1);
+		if (CurrentEXP < Req)
+		{
+			NextLevelEXP = Req;
+			break;
+		}
+		CurrentEXP -= Req;
+		++CharacterLevel;
+		bLeveled = true;
+		const int64 NL = static_cast<int64>(CharacterLevel);
+		NextLevelEXP = (CharacterLevel < 200) ? (100 * NL + 25 * (NL - 1) * (NL - 1)) : 0;
+	}
+
+	PotentialPoints += FMath::Max<int64>(0, PotentialGain);
+	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
+	if (bLeveled)
+	{
+		OnCharacterLevelUp.Broadcast(OldLv, CharacterLevel);
+	}
+	ForceNetUpdate();
+}
+
+bool AIU_PlayerState::TryOfflineAllocatePotential(EIU_PotentialStatType StatType, APawn* TargetPawn)
+{
+	if (!HasAuthority() || !TargetPawn)
+	{
+		return false;
+	}
+	UIU_AttributeComponent* Attr = TargetPawn->FindComponentByClass<UIU_AttributeComponent>();
+	if (!Attr)
+	{
+		return false;
+	}
+
+	int64 Cost = 0;
+	switch (StatType)
+	{
+	case EIU_PotentialStatType::MaxHP:
+		Cost = 200 + 100 * static_cast<int64>(HPUpgradeCount);
+		break;
+	case EIU_PotentialStatType::MaxKi:
+		Cost = 200 + 100 * static_cast<int64>(KiUpgradeCount);
+		break;
+	case EIU_PotentialStatType::AttackPower:
+		Cost = 250 + 150 * static_cast<int64>(AtkUpgradeCount);
+		break;
+	default:
+		return false;
+	}
+
+	if (PotentialPoints < Cost)
+	{
+		return false;
+	}
+
+	PotentialPoints -= Cost;
+	float CurHP = Attr->GetHP();
+	float CurKi = Attr->GetKi();
+	switch (StatType)
+	{
+	case EIU_PotentialStatType::MaxHP:
+		++HPUpgradeCount;
+		CurHP += 100.0f;
+		break;
+	case EIU_PotentialStatType::MaxKi:
+		++KiUpgradeCount;
+		CurKi += 100.0f;
+		break;
+	case EIU_PotentialStatType::AttackPower:
+		++AtkUpgradeCount;
+		break;
+	}
+
+	NextHPCost = 200 + 100 * static_cast<int64>(HPUpgradeCount);
+	NextKiCost = 200 + 100 * static_cast<int64>(KiUpgradeCount);
+	NextAtkCost = 250 + 150 * static_cast<int64>(AtkUpgradeCount);
+
+	const float NewMaxHP = 200.0f + 100.0f * static_cast<float>(HPUpgradeCount);
+	const float NewMaxKi = 200.0f + 100.0f * static_cast<float>(KiUpgradeCount);
+	const float NewAtk = 100.0f + 10.0f * static_cast<float>(AtkUpgradeCount);
+	Attr->ApplyPersistedVitals(NewMaxHP, CurHP, NewMaxKi, CurKi, NewAtk / 100.0f, NewAtk);
+
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
+	ForceNetUpdate();
+	return true;
 }
 
 void AIU_PlayerState::MarkLeaseRevoked()
@@ -154,4 +293,9 @@ void AIU_PlayerState::OnRep_CurrentEXP()
 void AIU_PlayerState::OnRep_PersistedCharacterName()
 {
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
+}
+
+void AIU_PlayerState::OnRep_PotentialState()
+{
+	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 }

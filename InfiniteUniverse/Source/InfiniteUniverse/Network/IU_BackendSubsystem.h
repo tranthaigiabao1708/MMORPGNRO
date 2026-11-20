@@ -36,6 +36,9 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	int64 NextLevelExp = 100;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 PotentialPoints = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	FString ZoneID = TEXT("zone.p01_west_hub");
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
@@ -51,19 +54,40 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	bool bIsAlive = true;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	float HP = 100.0f;
+	float HP = 200.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	float MaxHP = 100.0f;
+	float MaxHP = 200.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	float Energy = 100.0f;
+	float Energy = 200.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	float MaxEnergy = 100.0f;
+	float MaxEnergy = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	float AttackPower = 100.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	float AttackPowerMultiplier = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int32 HPUpgrades = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int32 KiUpgrades = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int32 AtkUpgrades = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 NextHPCost = 200;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 NextKiCost = 200;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 NextAtkCost = 250;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int32 EnemyKills = 0;
@@ -77,7 +101,7 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int64 FencingEpoch = 0;
 
-	// Populated on /internal/v1/character/exp responses
+	// Populated on /internal/v1/character/exp & /internal/v1/character/potential responses
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	bool bLeveledUp = false;
 
@@ -86,6 +110,12 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int64 ExpGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 PotentialGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 PotentialSpent = 0;
 };
 
 /**
@@ -235,7 +265,14 @@ public:
 		const FString& CharacterID,
 		int64 FencingEpoch,
 		int64 ExpGain,
+		int64 PotentialGain,
 		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback);
+
+	void AllocateCharacterPotential(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& StatTypeCode,
 		TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback);
 
 	void ReleaseCharacterLease(
