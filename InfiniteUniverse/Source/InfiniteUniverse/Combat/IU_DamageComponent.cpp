@@ -13,7 +13,13 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "CoreGlobals.h"
+#include "Templates/Atomic.h"
 #include "InfiniteUniverse.h"
+
+namespace
+{
+	static TAtomic<uint64> GServerHitRewardSeq{ 0 };
+}
 
 UIU_DamageComponent::UIU_DamageComponent()
 {
@@ -87,10 +93,95 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 
 	OnDamageReceived.Broadcast(Spec, AttributeComp->GetHP());
 
+	const bool bTargetKilledByThisHit = AttributeComp->IsDead();
+
+	// Step 3 Authentic NRO Per-Hit Progression:
+	// Every valid hit against a monster immediately awards BOTH Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng
+	// equal to 1.5x the outgoing damage (Spec.Amount) — NOT waiting for the finishing blow!
+	if (Owner->IsA<AIU_EnemyCharacter>())
+	{
+		if (APawn* AttackerPawn = Cast<APawn>(Spec.InstigatorActor.Get()))
+		{
+			if (AIU_PlayerState* AttackerPS = AttackerPawn->GetPlayerState<AIU_PlayerState>())
+			{
+				if (bTargetKilledByThisHit)
+				{
+					AttackerPS->AddEnemyKill();
+				}
+
+				if (AttackerPS->HasValidBackendLease())
+				{
+					if (UWorld* World = GetWorld())
+					{
+						if (UGameInstance* GI = World->GetGameInstance())
+						{
+							if (UIU_BackendSubsystem* Backend = GI->GetSubsystem<UIU_BackendSubsystem>())
+							{
+								const uint64 HitSeq = ++GServerHitRewardSeq;
+								const FString IdemKey = FString::Printf(
+									TEXT("hit_%s_ep%lld_seq%llu"),
+									*Owner->GetName(),
+									AttackerPS->GetActiveFencingEpoch(),
+									HitSeq);
+
+								const float OutgoingDmg = Spec.Amount;
+								TWeakObjectPtr<AIU_PlayerState> WeakAttackerPS(AttackerPS);
+
+								Backend->GrantCharacterEXP(
+									AttackerPS->GetPersistedCharacterUUID(),
+									AttackerPS->GetActiveFencingEpoch(),
+									OutgoingDmg,
+									bTargetKilledByThisHit,
+									IdemKey,
+									[WeakAttackerPS, OutgoingDmg, bTargetKilledByThisHit](bool bSuccess, const FIU_BackendCharacterSummary& Updated, const FString& ErrMsg)
+									{
+										if (!bSuccess)
+										{
+											UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Progression] Per-hit GrantCharacterEXP failed: %s"), *ErrMsg);
+											return;
+										}
+
+										if (AIU_PlayerState* APS = WeakAttackerPS.Get())
+										{
+											APS->ApplyAuthoritativeEXPUpdate(
+												Updated.Level,
+												Updated.CurrentExp,
+												Updated.NextLevelExp,
+												Updated.PotentialPoints,
+												Updated.EnemyKills,
+												Updated.bLeveledUp);
+										}
+
+										UE_LOG(LogInfiniteUniverse, Log,
+											TEXT("[Progression] Hit Dmg=%.1f (Kill=%d) -> '%s' +%lld SucManh & +%lld TiemNang (1.5x Dame) | Lv.%d (%lld/%lld), TN=%lld, MaxHP=%.0f, Atk=%.0f"),
+											OutgoingDmg,
+											bTargetKilledByThisHit ? 1 : 0,
+											*Updated.CharacterName,
+											Updated.ExpGranted,
+											Updated.PotentialGranted,
+											Updated.Level,
+											Updated.CurrentExp,
+											Updated.NextLevelExp,
+											Updated.PotentialPoints,
+											Updated.MaxHP,
+											Updated.AttackPower);
+									});
+							}
+						}
+					}
+				}
+				else if (!GIsAutomationTesting)
+				{
+					AttackerPS->AwardOfflineHitProgress(Spec.Amount);
+				}
+			}
+		}
+	}
+
 	bool bTriggeredStun = false;
 
 	// Trigger Hit Reaction & subtle knockback only if target survived the hit
-	if (!AttributeComp->IsDead())
+	if (!bTargetKilledByThisHit)
 	{
 		if (ACharacter* OwnerChar = Cast<ACharacter>(Owner))
 		{
@@ -130,7 +221,7 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 			World->GetTimerManager().ClearTimer(HitReactionTimerHandle);
 		}
 
-		// Record replicated PlayerState kills & deaths on Server Authority
+		// Record replicated PlayerState PvP kills & deaths on Server Authority
 		if (APawn* VictimPawn = Cast<APawn>(Owner))
 		{
 			if (AIU_PlayerState* VictimPS = VictimPawn->GetPlayerState<AIU_PlayerState>())
@@ -138,81 +229,13 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 				VictimPS->AddDeath();
 			}
 		}
-		if (APawn* KillerPawn = Cast<APawn>(Spec.InstigatorActor.Get()))
+		if (Owner->IsA<AIU_PlayerCharacter>())
 		{
-			if (AIU_PlayerState* KillerPS = KillerPawn->GetPlayerState<AIU_PlayerState>())
+			if (APawn* KillerPawn = Cast<APawn>(Spec.InstigatorActor.Get()))
 			{
-				if (Owner->IsA<AIU_PlayerCharacter>())
+				if (AIU_PlayerState* KillerPS = KillerPawn->GetPlayerState<AIU_PlayerState>())
 				{
 					KillerPS->AddPvPKill();
-				}
-				else if (Owner->IsA<AIU_EnemyCharacter>())
-				{
-					KillerPS->AddEnemyKill();
-
-					// Step 3 Authoritative Progression:
-					// Monster kills grant +55 LV EXP (determines Level ONLY — no auto stat boost!) + 350 Potential Points (manual stat upgrades).
-					if (KillerPS->HasValidBackendLease())
-					{
-						if (UWorld* World = GetWorld())
-						{
-							if (UGameInstance* GI = World->GetGameInstance())
-							{
-								if (UIU_BackendSubsystem* Backend = GI->GetSubsystem<UIU_BackendSubsystem>())
-								{
-									const FString IdemKey = FString::Printf(
-										TEXT("kill_%s_ep%lld_t%.3f"),
-										*Owner->GetName(),
-										KillerPS->GetActiveFencingEpoch(),
-										World->GetTimeSeconds());
-
-									TWeakObjectPtr<AIU_PlayerState> WeakKillerPS(KillerPS);
-
-									Backend->GrantCharacterEXP(
-										KillerPS->GetPersistedCharacterUUID(),
-										KillerPS->GetActiveFencingEpoch(),
-										55,
-										350,
-										IdemKey,
-										[WeakKillerPS](bool bSuccess, const FIU_BackendCharacterSummary& Updated, const FString& ErrMsg)
-										{
-											if (!bSuccess)
-											{
-												UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Progression] GrantCharacterEXP failed: %s"), *ErrMsg);
-												return;
-											}
-
-											if (AIU_PlayerState* KPS = WeakKillerPS.Get())
-											{
-												KPS->ApplyAuthoritativeEXPUpdate(
-													Updated.Level,
-													Updated.CurrentExp,
-													Updated.NextLevelExp,
-													Updated.PotentialPoints,
-													Updated.EnemyKills,
-													Updated.bLeveledUp);
-											}
-
-											UE_LOG(LogInfiniteUniverse, Log,
-												TEXT("[Progression] Character '%s' gained +%lld LV EXP & +%lld Potential -> Lv.%d (%lld/%lld EXP, Potential=%lld, MaxHP=%.0f, Atk=%.0f)"),
-												*Updated.CharacterName,
-												Updated.ExpGranted,
-												Updated.PotentialGranted,
-												Updated.Level,
-												Updated.CurrentExp,
-												Updated.NextLevelExp,
-												Updated.PotentialPoints,
-												Updated.MaxHP,
-												Updated.AttackPower);
-										});
-								}
-							}
-						}
-					}
-					else if (!GIsAutomationTesting)
-					{
-						KillerPS->AwardOfflineKillProgress(55, 350);
-					}
 				}
 			}
 		}

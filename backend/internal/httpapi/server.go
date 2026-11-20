@@ -418,12 +418,14 @@ func (h *Handler) handleInternalSaveCharacter(w http.ResponseWriter, r *http.Req
 
 func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req struct {
-		CharacterID    string `json:"character_id"`
-		FencingEpoch   int64  `json:"fencing_epoch"`
-		ServerID       string `json:"server_id"`
-		ExpGain        int64  `json:"exp_gain"`
-		PotentialGain  int64  `json:"potential_gain"`
-		IdempotencyKey string `json:"idempotency_key"`
+		CharacterID    string  `json:"character_id"`
+		FencingEpoch   int64   `json:"fencing_epoch"`
+		ServerID       string  `json:"server_id"`
+		OutgoingDamage float64 `json:"outgoing_damage"`
+		ExpGain        int64   `json:"exp_gain"`
+		PotentialGain  int64   `json:"potential_gain"`
+		KilledTarget   bool    `json:"killed_target"`
+		IdempotencyKey string  `json:"idempotency_key"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
@@ -440,7 +442,17 @@ func (h *Handler) handleInternalGrantEXP(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	res, err := h.characters.GrantEXPFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.ExpGain, req.PotentialGain, req.IdempotencyKey)
+	res, err := h.characters.GrantEXPFenced(
+		r.Context(),
+		charUUID,
+		req.FencingEpoch,
+		req.ServerID,
+		req.OutgoingDamage,
+		req.ExpGain,
+		req.PotentialGain,
+		req.KilledTarget,
+		req.IdempotencyKey,
+	)
 	if err != nil {
 		if errors.Is(err, character.ErrStaleFencingEpoch) {
 			writeErr(w, http.StatusConflict, "ERR_STALE_FENCING_EPOCH", err.Error())

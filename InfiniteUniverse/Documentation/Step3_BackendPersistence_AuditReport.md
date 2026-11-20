@@ -16,8 +16,8 @@
 | **3.2** | **Authentication & Session Security (`Argon2id` + `Ed25519 JWT`)** | `8` | **`8`** | **PASS** | `TestStep3AuthSecurityAndRateLimit` (`-race`): Argon2id PHC (`m=64MB, t=2, p=2`), Ed25519 JWT tamper `401`, Refresh rotation, Single-Active-Session `ERR_SESSION_SUPERSEDED`, SQLi immunity, Per-IP `429` Rate Limit. |
 | **3.3** | **Character Management & One-Time World Connect Tickets** | `8` | **`8`** | **PASS** | `TestStep3CharactersAndOneTimeWorldTickets` + Live Server #3: `CITEXT` uniqueness (`409`), 4-slot cap (`422`), cross-account `403`, Ticket replay `401`, and `PreLogin` `ERR_MISSING_WORLD_TICKET` rejection. |
 | **3.4** | **Anti-Dupe & Duplicate-Login Eviction (`Lease Fencing`)** | `12` | **`12`** | **PASS** | `TestStep3SplitBrainLeaseFencing` (`-race`) + Live Phase 3 Duplicate Login: stale Server A writes rejected `409 Conflict` (`WHERE fencing_epoch = $2`), and Server #3 evicted superseded Session #1 (`Epoch #3 -> #4`) *without* saving. |
-| **3.5** | **Persistence Across Complete Dedicated Server Restart** | `10` | **`10`** | **PASS** | `LaunchStep3FullStackTest.ps1`: Killed Dedicated Server #1 (`PID 20148`) -> Booted fresh Server #2 (`PID 27180`) -> Restored `ZenithA_141714` at exact `Pos=(-402.8, -171.8, 112.2)`, `Lv.2 (10/225)`, `HP=300/300`, `Ki=300/300`, `Atk=110`, `Potential=50` with identical `SHA-256` (`3ef6479c98fb4405`). |
-| **3.6** | **NRO Dual-Track Level (`LV EXP`) & Potential Stat Allocation** | `8` | **`8`** | **PASS** | Base stats `200 HP / 200 Ki / 100 Sức đánh`; Raider defeats grant `+55 LV EXP` (determines `Level` **ONLY** — `0` auto stats!) + `+350 Potential Points`; manual upgrades (`P` panel / `1,2,3` RPC) apply `+100 HP`, `+100 Ki`, `+10 Sức đánh` with independent escalating costs (`200->300->400...`, `250->400->550...`). |
+| **3.5** | **Persistence Across Complete Dedicated Server Restart** | `10` | **`10`** | **PASS** | `LaunchStep3FullStackTest.ps1`: Killed Dedicated Server #1 (`PID 3848`) -> Booted fresh Server #2 (`PID 3800`) -> Restored `ZenithA_145327` at exact `Pos=(-367.5, -177.9, 112.2)`, `Lv.3 (52/400)`, `HP=210/300`, `Ki=300/300`, `Atk=110`, `Potential=27`. |
+| **3.6** | **NRO Per-Hit (`1.5x Dame`) Power & Potential Stat Allocation** | `8` | **`8`** | **PASS** | Base stats `200 HP / 200 Ki / 100 Sức đánh`; **every monster hit** (`Kill=0` or `Kill=1`) grants `Round(1.5 * OutgoingDamage)` to both **Điểm Sức mạnh** (`Level` **ONLY**, `0` auto stats) & **Điểm Tiềm năng**; manual upgrades (`P` / `1,2,3`) apply `+100 HP`, `+100 Ki`, `+10 Sức đánh` with escalating costs (`100,200,300...` & `150,300,450...`). |
 | **3.7** | **Concurrency (`50 Goroutines -race`) & Async Bridge Fault Isolation** | `8` | **`8`** | **PASS** | `TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines` (`CGO_ENABLED=1 go test -race`, `0` races, `inFlightKill` idempotency + `SELECT ... FOR UPDATE` Potential upgrades); UE5 `FHttpModule` async callbacks kept Server tick at `34.1 Hz`. |
 | **3.8** | **End-to-End Performance & Complete Deliverable Package** | `8` | **`8`** | **PASS** | Bridge `p50 = 0.33–1.83 ms`, **`p95 = 0.87–2.87 ms`** (`< 10 ms` budget); Gameplay Client `124.1 Avg FPS` (`64.4` 1% low); Server `34.1 Hz`; Video `Step3_Persistence_Demo.mp4` (`18.07 MB`). |
 | **TOTAL** | **All Step 3 Acceptance Criteria** | **`70`** | **`70`** | **`PASS`** | **Ready to freeze `Step3_Stable` & advance to Step 4** |
@@ -69,16 +69,15 @@
  LOGOUT          |             2 | -402.8 | -171.8 | 3ef6479c98fb4405 | ue5-ded-srv2
 ```
 
-### 3.2 Dedicated Server Dual-Track Progression, Potential Allocation & Security Logs
+### 3.2 Dedicated Server Per-Hit (`1.5x Outgoing Damage`) Progression, Potential Allocation & Security Logs
 ```text
-[Progression] Character 'ZenithA_141714' gained +55 LV EXP & +350 Potential -> Lv.1 (55/100 EXP, Potential=350, MaxHP=200, Atk=100)
-[Progression] Character 'ZenithA_141714' gained +55 LV EXP & +350 Potential -> Lv.2 (10/225 EXP, Potential=700, MaxHP=200, Atk=100)
-[Potential] Character 'ZenithA_141714' spent 200 TN on 'ki' -> HP 200/200, Ki 300/300, SucDanh 100 (x1.00), RemainingTN=500
-[Potential] Character 'ZenithA_141714' spent 200 TN on 'hp' -> HP 300/300, Ki 300/300, SucDanh 100 (x1.00), RemainingTN=300
-[Potential] Character 'ZenithA_141714' spent 250 TN on 'atk' -> HP 300/300, Ki 300/300, SucDanh 110 (x1.10), RemainingTN=50
+[Progression] Hit Dmg=15.0 (Kill=0) -> 'ZenithA_145327' +23 SucManh & +23 TiemNang (1.5x Dame) | Lv.1 (23/100), TN=23, MaxHP=200, Atk=100
+[Progression] Hit Dmg=20.0 (Kill=0) -> 'ZenithA_145327' +30 SucManh & +30 TiemNang (1.5x Dame) | Lv.1 (53/100), TN=53, MaxHP=200, Atk=100
+[Progression] Hit Dmg=30.0 (Kill=0) -> 'ZenithA_145327' +45 SucManh & +45 TiemNang (1.5x Dame) | Lv.1 (98/100), TN=98, MaxHP=200, Atk=100
+[Progression] Hit Dmg=15.0 (Kill=0) -> 'ZenithA_145327' +23 SucManh & +23 TiemNang (1.5x Dame) | Lv.2 (21/225), TN=121, MaxHP=200, Atk=100
 [Security] PreLogin REJECTED connection from '127.0.0.1': missing required one-time ?Ticket= parameter.
-[Persistence] Restored Character 'ZenithA_141714' (ID=8cb1f9a3-ca6a-4940-8e3e-6dbb4e1ce1e4, Epoch=#3, Lv=2, EXP=10/225, HP=300/300, Pos=(-402.8, -171.8, 112.2), HasSavedPos=1)
-[LeaseFence] Lease REVOKED for Character 'ZenithA_141714' (8cb1f9a3-ca6a-4940-8e3e-6dbb4e1ce1e4) — Duplicate login / epoch superseded! Evicting stale session WITHOUT saving.
+[Persistence] Restored Character 'ZenithA_145327' (ID=2cdf27ac-291f-4b69-a23f-1293492e43d2, Epoch=#3, Lv=3, EXP=52/400, HP=210/300, Pos=(-367.5, -177.9, 112.2), HasSavedPos=1)
+[LeaseFence] Lease REVOKED for Character 'ZenithA_145327' (2cdf27ac-291f-4b69-a23f-1293492e43d2) — Duplicate login / epoch superseded! Evicting stale session WITHOUT saving.
 ```
 
 ---

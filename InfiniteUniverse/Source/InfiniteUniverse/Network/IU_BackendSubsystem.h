@@ -81,13 +81,13 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	int32 AtkUpgrades = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	int64 NextHPCost = 200;
+	int64 NextHPCost = 100;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	int64 NextKiCost = 200;
+	int64 NextKiCost = 100;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
-	int64 NextAtkCost = 250;
+	int64 NextAtkCost = 150;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int32 EnemyKills = 0;
@@ -264,8 +264,8 @@ public:
 	void GrantCharacterEXP(
 		const FString& CharacterID,
 		int64 FencingEpoch,
-		int64 ExpGain,
-		int64 PotentialGain,
+		float OutgoingDamage,
+		bool bKilledTarget,
 		const FString& IdempotencyKey,
 		TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback);
 

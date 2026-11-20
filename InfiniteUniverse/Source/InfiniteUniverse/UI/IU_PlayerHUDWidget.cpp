@@ -46,7 +46,7 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 
 		LevelEXPValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LevelEXPValueText"));
 		StyleHUDText(LevelEXPValueText, FLinearColor(1.0f, 0.88f, 0.32f), 13);
-		LevelEXPValueText->SetText(FText::FromString(TEXT("LV. 1  |  DIEM LV: 0 / 100")));
+		LevelEXPValueText->SetText(FText::FromString(TEXT("LV. 1  |  SUC MANH: 0 / 100")));
 		VitalsBox->AddChildToVerticalBox(LevelEXPValueText);
 
 		EXPProgressBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("EXPProgressBar"));
@@ -245,7 +245,7 @@ void UIU_PlayerHUDWidget::HandleCharacterEXPChanged(int64 CurrentEXP, int64 Next
 			}
 		}
 		LevelEXPValueText->SetText(FText::FromString(
-			FString::Printf(TEXT("%sLV. %d  |  DIEM LV: %lld / %lld"), *NamePrefix, CurrentLevel, CurrentEXP, NextLevelEXP)));
+			FString::Printf(TEXT("%sLV. %d  |  SUC MANH: %lld / %lld"), *NamePrefix, CurrentLevel, CurrentEXP, NextLevelEXP)));
 	}
 }
 

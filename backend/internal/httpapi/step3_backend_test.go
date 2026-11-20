@@ -532,9 +532,11 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 	}
 
 	// Launch 50 concurrent goroutines:
-	// - 30 goroutines grant 10 unique mob kills (3x duplicate idempotency_key each):
-	//   * LV EXP: 10 * 55 = 550 -> Level 3, CurrentEXP = 225 (MUST NOT increase MaxHP/MaxKi/AttackPower!)
-	//   * Potential Points: 10 * 350 = 3500 TN!
+	// - 30 goroutines fire 10 unique combat hits (3x duplicate idempotency_key each) with OutgoingDamage = 40.0:
+	//   * Per-hit NRO rule: 1.5 * 40.0 = +60 Điểm Sức mạnh (LV EXP) AND +60 Điểm Tiềm năng per hit!
+	//   * Only hits 4 & 9 are lethal (killed_target=true -> EnemyKills = 2, proving non-lethal hits grant TNSM immediately!).
+	//   * Total Điểm Sức mạnh = 10 * 60 = 600 -> Lv.1->2 (-100), Lv.2->3 (-225) => Level 3, CurrentEXP = 275!
+	//   * Total Điểm Tiềm năng = 10 * 60 = 600 TN!
 	// - 20 goroutines fire concurrent periodic saves & lease renewals!
 	var wg sync.WaitGroup
 	errCh := make(chan error, 60)
@@ -543,14 +545,15 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			killSlot := idx % 10
+			hitSlot := idx % 10
+			isKill := (hitSlot == 4 || hitSlot == 9)
 			c, resp := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/exp", "", env.authMgr, map[string]any{
 				"character_id":    charID,
 				"fencing_epoch":   epoch,
 				"server_id":       "ue5-ded-7777",
-				"exp_gain":        55,
-				"potential_gain":  350,
-				"idempotency_key": fmt.Sprintf("mob-kill-slot-%d", killSlot),
+				"outgoing_damage": 40.0,
+				"killed_target":   isKill,
+				"idempotency_key": fmt.Sprintf("combat-hit-slot-%d", hitSlot),
 			})
 			if c != http.StatusOK {
 				errCh <- fmt.Errorf("goroutine %d GrantEXP HTTP %d: %+v", idx, c, resp)
@@ -584,7 +587,7 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 					"is_alive":        true,
 					"hp":              185.0,
 					"energy":          170.0,
-					"enemy_kills":     10,
+					"enemy_kills":     0,
 				})
 				if c != http.StatusOK {
 					errCh <- fmt.Errorf("goroutine %d Save HTTP %d: %+v", idx, c, resp)
@@ -599,11 +602,27 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	// Verify Level 3 reached WITHOUT changing stats (still 200 HP, 200 Ki, 100 Atk) and Potential = 3500!
+	// Also verify fractional 1.5x hit math: OutgoingDamage = 15.0 (non-lethal) -> Round(22.5) = +23 Sức mạnh & +23 Tiềm năng!
+	codeHit, fracResp := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/exp", "", env.authMgr, map[string]any{
+		"character_id":    charID,
+		"fencing_epoch":   epoch,
+		"server_id":       "ue5-ded-7777",
+		"outgoing_damage": 15.0,
+		"killed_target":   false,
+		"idempotency_key": "combat-hit-frac-15",
+	})
+	if codeHit != http.StatusOK || int64(fracResp["exp_granted"].(float64)) != 23 || int64(fracResp["potential_granted"].(float64)) != 23 {
+		t.Fatalf("expected 1.5 * 15.0 = 23 Sức mạnh & 23 Tiềm năng on non-lethal hit, got %d %+v", codeHit, fracResp)
+	}
+
+	// Verify Level 3 (298 EXP), Potential = 623, EnemyKills = 2 (NOT 11!), and stats STILL 200 HP / 200 Ki / 100 Atk!
 	_, preUpgradeList := doJSON(t, "GET", env.srv.URL+"/v1/characters", tok, nil, nil)
 	preChar := preUpgradeList["characters"].([]any)[0].(map[string]any)
-	if int(preChar["level"].(float64)) != 3 || int64(preChar["potential_points"].(float64)) != 3500 {
-		t.Fatalf("expected Level=3 & PotentialPoints=3500 before spending potential, got %+v", preChar)
+	if int(preChar["level"].(float64)) != 3 ||
+		int64(preChar["current_exp"].(float64)) != 298 ||
+		int64(preChar["potential_points"].(float64)) != 623 ||
+		int(preChar["enemy_kills"].(float64)) != 2 {
+		t.Fatalf("expected Level=3, CurrentEXP=298, PotentialPoints=623, EnemyKills=2, got %+v", preChar)
 	}
 	if math.Abs(preChar["max_hp"].(float64)-200.0) > 0.01 ||
 		math.Abs(preChar["max_energy"].(float64)-200.0) > 0.01 ||
@@ -611,12 +630,12 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		t.Fatalf("Level-Up MUST NOT auto-increase stats! Expected 200 HP / 200 Ki / 100 Atk, got %+v", preChar)
 	}
 
-	// Spend Potential Points across independent escalating tracks:
-	// - HP x2: costs 200 + 300 = 500 -> MaxHP = 400 (next_hp_cost = 400)
-	// - Ki x1: costs 200            -> MaxEnergy = 300 (next_ki_cost = 300)
-	// - Atk x2: costs 250 + 400 = 650 -> AttackPower = 120 (1.20x multiplier, next_atk_cost = 550)
-	// Total spent = 1350 -> Remaining Potential = 3500 - 1350 = 2150!
-	for _, stType := range []string{"hp", "hp", "ki", "atk", "atk"} {
+	// Spend Potential Points across independent escalating tracks (from 623 TN pool):
+	// - HP x2: costs 100 + 200 = 300 TN -> MaxHP = 400 (next_hp_cost = 300)
+	// - Ki x1: costs 100 TN             -> MaxEnergy = 300 (next_ki_cost = 200)
+	// - Atk x1: costs 150 TN            -> AttackPower = 110 (1.10x multiplier, next_atk_cost = 300)
+	// Total spent = 550 TN -> Remaining Potential = 623 - 550 = 73 TN!
+	for _, stType := range []string{"hp", "hp", "ki", "atk"} {
 		c, allocResp := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/potential", "", env.authMgr, map[string]any{
 			"character_id":  charID,
 			"fencing_epoch": epoch,
@@ -628,22 +647,15 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		}
 	}
 
-	// Verify overspending beyond remaining potential returns 422 ERR_INSUFFICIENT_POTENTIAL
-	saw422 := false
-	for i := 0; i < 10; i++ {
-		c, _ := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/potential", "", env.authMgr, map[string]any{
-			"character_id":  charID,
-			"fencing_epoch": epoch,
-			"server_id":     "ue5-ded-7777",
-			"stat_type":     "atk",
-		})
-		if c == http.StatusUnprocessableEntity {
-			saw422 = true
-			break
-		}
-	}
-	if !saw422 {
-		t.Fatal("expected 422 ERR_INSUFFICIENT_POTENTIAL once potential points are exhausted")
+	// Verify overspending beyond remaining 73 TN (next atk costs 300 TN) returns 422 ERR_INSUFFICIENT_POTENTIAL!
+	c422, _ := doJSON(t, "POST", env.srv.URL+"/internal/v1/character/potential", "", env.authMgr, map[string]any{
+		"character_id":  charID,
+		"fencing_epoch": epoch,
+		"server_id":     "ue5-ded-7777",
+		"stat_type":     "atk",
+	})
+	if c422 != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 ERR_INSUFFICIENT_POTENTIAL when 73 TN < 300 TN cost, got %d", c422)
 	}
 
 	// Clean Logout & Final Save before simulated Dedicated Server restart
@@ -660,7 +672,7 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 			"is_alive":      true,
 			"hp":            380.0,
 			"energy":        290.0,
-			"enemy_kills":   10,
+			"enemy_kills":   2,
 			"pvp_kills":     2,
 			"deaths":        1,
 		},
@@ -680,15 +692,14 @@ func TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines(t *testing.T) {
 		t.Fatalf("post-restart ClaimLease failed: %d %+v", code, reloaded)
 	}
 
-	if int(reloaded["level"].(float64)) != 3 || int64(reloaded["current_exp"].(float64)) != 225 {
-		t.Fatalf("expected deterministic Level=3, CurrentEXP=225, got level=%v exp=%v",
-			reloaded["level"], reloaded["current_exp"])
+	if int(reloaded["level"].(float64)) != 3 || int64(reloaded["current_exp"].(float64)) != 298 || int64(reloaded["potential_points"].(float64)) != 73 {
+		t.Fatalf("expected deterministic Level=3, CurrentEXP=298, PotentialPoints=73, got %+v", reloaded)
 	}
 	if math.Abs(reloaded["max_hp"].(float64)-400.0) > 0.01 ||
 		math.Abs(reloaded["hp"].(float64)-380.0) > 0.01 ||
 		math.Abs(reloaded["max_energy"].(float64)-300.0) > 0.01 ||
-		math.Abs(reloaded["attack_power"].(float64)-150.0) > 0.01 {
-		t.Fatalf("expected restored MaxHP=400 (HP=380), MaxKi=300, AttackPower=150, got %+v", reloaded)
+		math.Abs(reloaded["attack_power"].(float64)-110.0) > 0.01 {
+		t.Fatalf("expected restored MaxHP=400 (HP=380), MaxKi=300, AttackPower=110, got %+v", reloaded)
 	}
 	if math.Abs(reloaded["pos_x"].(float64)-(-3412.5)) > 0.01 || reloaded["has_saved_pos"] != true {
 		t.Fatalf("expected exact restored PosX=-3412.5 & has_saved_pos=true, got %+v", reloaded)

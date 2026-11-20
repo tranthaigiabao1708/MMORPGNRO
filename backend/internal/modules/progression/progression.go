@@ -1,15 +1,23 @@
 package progression
 
+import "math"
+
 const (
-	MaxCharacterLevel      = 200
-	DefaultMobKillEXP      = int64(55)
-	DefaultMobKillPotential = int64(350)
+	MaxCharacterLevel = 200
+
+	// NRO Per-Hit Progression Multiplier:
+	// Both Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng (Potential Points) are awarded on EVERY valid hit
+	// (not only on kill!), equal to 1.5x the outgoing damage dealt!
+	HitRewardDamageMultiplier = 1.5
+
+	DefaultHitEXP       = int64(30) // Fallback for 20.0 baseline damage * 1.5
+	DefaultHitPotential = int64(30)
 
 	// Base starting stats per NRO-style Step 3 design: 200 HP, 200 Ki, 100 Attack Power.
-	// Level (LV EXP) determines Character Level ONLY and NEVER grants automatic stat increases!
-	BaseCharacterHP  = 200.0
-	BaseCharacterKi  = 200.0
-	BaseAttackPower  = 100.0
+	// Điểm Sức mạnh (LV EXP) determines Character Level ONLY and NEVER grants automatic stat increases!
+	BaseCharacterHP = 200.0
+	BaseCharacterKi = 200.0
+	BaseAttackPower = 100.0
 
 	// Per-allocation increments when spending Potential Points (Điểm Tiềm năng)
 	StepUpgradeHP  = 100.0
@@ -35,8 +43,21 @@ type ScaledStats struct {
 	NextAtkCost           int64   `json:"next_atk_cost"`
 }
 
-// ExpRequiredForNextLevel returns the LV EXP needed to advance from `level` to `level + 1`.
-// Level 1 -> 2 requires 100 LV EXP; Level 2 -> 3 requires 225 LV EXP; Level 3 -> 4 requires 400 LV EXP.
+// ComputeHitProgressionReward computes Điểm Sức mạnh (powerExpGain) and Điểm Tiềm năng (potentialGain)
+// earned immediately after each valid combat hit: Reward = Round(1.5 * outgoingDamage).
+func ComputeHitProgressionReward(outgoingDamage float64) (powerExpGain int64, potentialGain int64) {
+	if outgoingDamage <= 0 || math.IsNaN(outgoingDamage) || math.IsInf(outgoingDamage, 0) {
+		return 0, 0
+	}
+	reward := int64(math.Round(outgoingDamage * HitRewardDamageMultiplier))
+	if reward < 1 {
+		reward = 1
+	}
+	return reward, reward
+}
+
+// ExpRequiredForNextLevel returns the Điểm Sức mạnh (LV EXP) needed to advance from `level` to `level + 1`.
+// Level 1 -> 2 requires 100; Level 2 -> 3 requires 225; Level 3 -> 4 requires 400.
 func ExpRequiredForNextLevel(level int) int64 {
 	if level < 1 {
 		level = 1
@@ -48,7 +69,7 @@ func ExpRequiredForNextLevel(level int) int64 {
 	return 100*l + 25*(l-1)*(l-1)
 }
 
-// ApplyExpGain adds LV expGain to (level, currentExp) and resolves single or multi-level ups.
+// ApplyExpGain adds Điểm Sức mạnh (expGain) to (level, currentExp) and resolves single or multi-level ups.
 // Level ups do NOT modify HP, Ki, or Attack Power.
 func ApplyExpGain(level int, currentExp int64, expGain int64) (newLevel int, newExp int64, leveledUp bool) {
 	if level < 1 {
@@ -80,9 +101,9 @@ func ApplyExpGain(level int, currentExp int64, expGain int64) (newLevel int, new
 
 // PotentialUpgradeCost returns the Potential Points required for the next upgrade of a specific stat track.
 // Each stat track escalates independently based on how many upgrades have been invested into THAT stat:
-// - HP  (+100 HP):  200, 300, 400, 500, ... (200 + 100 * hpUpgrades)
-// - Ki  (+100 Ki):  200, 300, 400, 500, ... (200 + 100 * kiUpgrades)
-// - Atk (+10 Atk):  250, 400, 550, 700, ... (250 + 150 * atkUpgrades)
+// - HP  (+100 HP):  100, 200, 300, 400, ... (100 * (hpUpgrades + 1))
+// - Ki  (+100 Ki):  100, 200, 300, 400, ... (100 * (kiUpgrades + 1))
+// - Atk (+10 Atk):  150, 300, 450, 600, ... (150 * (atkUpgrades + 1))
 func PotentialUpgradeCost(statType string, currentUpgrades int32) int64 {
 	if currentUpgrades < 0 {
 		currentUpgrades = 0
@@ -90,11 +111,11 @@ func PotentialUpgradeCost(statType string, currentUpgrades int32) int64 {
 	u := int64(currentUpgrades)
 	switch statType {
 	case StatTypeHP:
-		return 200 + 100*u
+		return 100 * (u + 1)
 	case StatTypeKi:
-		return 200 + 100*u
+		return 100 * (u + 1)
 	case StatTypeAtk:
-		return 250 + 150*u
+		return 150 * (u + 1)
 	default:
 		return 0
 	}

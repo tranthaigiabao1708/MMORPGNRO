@@ -103,8 +103,8 @@ public:
 	/** Server-only: updates PotentialPoints, upgrade counts, and next costs after AllocateCharacterPotential succeeds. */
 	void ApplyAuthoritativePotentialUpgrade(const FIU_BackendCharacterSummary& Summary);
 
-	/** Standalone/PIE Offline helper: awards LV EXP + Potential locally when running without Go Backend. */
-	void AwardOfflineKillProgress(int64 ExpGain, int64 PotentialGain);
+	/** Standalone/PIE Offline helper: awards 1.5x OutgoingDamage to BOTH Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng on every valid hit. */
+	void AwardOfflineHitProgress(float OutgoingDamage);
 
 	/** Standalone/PIE Offline helper: spends local Potential Points to upgrade HP/Ki/AttackPower on OwningPawn. */
 	bool TryOfflineAllocatePotential(EIU_PotentialStatType StatType, APawn* TargetPawn);
@@ -175,13 +175,13 @@ protected:
 	int32 AtkUpgradeCount = 0;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_PotentialState, Category = "IU|Potential")
-	int64 NextHPCost = 200;
+	int64 NextHPCost = 100;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_PotentialState, Category = "IU|Potential")
-	int64 NextKiCost = 200;
+	int64 NextKiCost = 100;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_PotentialState, Category = "IU|Potential")
-	int64 NextAtkCost = 250;
+	int64 NextAtkCost = 150;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Backend")
 	int64 ActiveFencingEpoch = 0;

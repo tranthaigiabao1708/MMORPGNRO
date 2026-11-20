@@ -292,12 +292,16 @@ void AIU_HUDManager::HandleLocalPotentialChanged(int64 PotentialPoints, int64 Ne
 	if (DeltaTN > 0 && OwningPawn)
 	{
 		FIU_FloatingCombatText PotPopup;
-		PotPopup.WorldLocation = OwningPawn->GetActorLocation() + FVector(0.0f, 0.0f, 96.0f);
-		PotPopup.Label = FString::Printf(TEXT("+%lld TIEM NANG!"), DeltaTN);
+		PotPopup.WorldLocation = OwningPawn->GetActorLocation() + FVector(FMath::FRandRange(-28.0f, 28.0f), FMath::FRandRange(-28.0f, 28.0f), 98.0f);
+		PotPopup.Label = FString::Printf(TEXT("+%lld SM & TN"), DeltaTN);
 		PotPopup.Color = FLinearColor(0.32f, 1.0f, 0.78f, 1.0f);
 		PotPopup.SpawnWorldTime = Now;
-		PotPopup.Duration = 1.35f;
-		PotPopup.Scale = 1.35f;
+		PotPopup.Duration = 1.05f;
+		PotPopup.Scale = 1.25f;
+		if (FloatingTexts.Num() > 28)
+		{
+			FloatingTexts.RemoveAt(0);
+		}
 		FloatingTexts.Add(PotPopup);
 	}
 	else if (DeltaTN < 0 && OwningPawn)

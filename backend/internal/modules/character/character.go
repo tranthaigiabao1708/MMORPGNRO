@@ -488,24 +488,31 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 	return st, nil
 }
 
-// GrantEXPFenced awards BOTH LV EXP (for Level ONLY — zero automatic stat increase!) AND Potential Points (for manual stat upgrades!).
+// GrantEXPFenced awards Điểm Sức mạnh (LV EXP, for Level ONLY — zero automatic stat increase!) AND Điểm Tiềm năng (Potential Points)
+// on EVERY valid combat hit (1.5x outgoingDamage when outgoingDamage > 0), incrementing EnemyKills only when killedTarget is true.
 func (s *Service) GrantEXPFenced(
 	ctx context.Context,
 	characterID uuid.UUID,
 	fencingEpoch int64,
 	serverID string,
+	outgoingDamage float64,
 	expGain int64,
 	potentialGain int64,
+	killedTarget bool,
 	idempotencyKey string,
 ) (GrantEXPResult, error) {
 	if fencingEpoch < 1 {
 		return GrantEXPResult{}, ErrStaleFencingEpoch
 	}
-	if expGain <= 0 {
-		expGain = progression.DefaultMobKillEXP
-	}
-	if potentialGain <= 0 {
-		potentialGain = progression.DefaultMobKillPotential
+	if outgoingDamage > 0 {
+		expGain, potentialGain = progression.ComputeHitProgressionReward(outgoingDamage)
+	} else {
+		if expGain <= 0 {
+			expGain = progression.DefaultHitEXP
+		}
+		if potentialGain <= 0 {
+			potentialGain = expGain
+		}
 	}
 
 	idemKey := strings.TrimSpace(idempotencyKey)
@@ -569,7 +576,9 @@ func (s *Service) GrantEXPFenced(
 
 	var meta PersistedMeta
 	_ = json.Unmarshal(metaRaw, &meta)
-	meta.EnemyKills++
+	if killedTarget {
+		meta.EnemyKills++
+	}
 	updatedMeta, _ := json.Marshal(meta)
 
 	tag, err := tx.Exec(ctx, `
@@ -637,6 +646,9 @@ func (s *Service) GrantEXPFenced(
 	}
 	if idemKey != "" {
 		s.idemMu.Lock()
+		if len(s.seenKill) > 8192 {
+			clear(s.seenKill)
+		}
 		s.seenKill[idemKey] = res
 		s.idemMu.Unlock()
 	}

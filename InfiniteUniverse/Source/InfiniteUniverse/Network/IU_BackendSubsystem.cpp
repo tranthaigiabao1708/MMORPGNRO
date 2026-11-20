@@ -870,17 +870,20 @@ void UIU_BackendSubsystem::SaveCharacterCheckpoint(
 void UIU_BackendSubsystem::GrantCharacterEXP(
 	const FString& CharacterID,
 	int64 FencingEpoch,
-	int64 ExpGain,
-	int64 PotentialGain,
+	float OutgoingDamage,
+	bool bKilledTarget,
 	const FString& IdempotencyKey,
 	TFunction<void(bool bSuccess, const FIU_BackendCharacterSummary& UpdatedState, const FString& ErrorMessage)> Callback)
 {
+	const int64 ComputedReward = FMath::Max<int64>(1, FMath::RoundToInt64(static_cast<double>(OutgoingDamage) * 1.5));
 	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
 	Obj->SetStringField(TEXT("character_id"), CharacterID);
 	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
 	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
-	Obj->SetNumberField(TEXT("exp_gain"), static_cast<double>(ExpGain));
-	Obj->SetNumberField(TEXT("potential_gain"), static_cast<double>(PotentialGain));
+	Obj->SetNumberField(TEXT("outgoing_damage"), static_cast<double>(OutgoingDamage));
+	Obj->SetNumberField(TEXT("exp_gain"), static_cast<double>(ComputedReward));
+	Obj->SetNumberField(TEXT("potential_gain"), static_cast<double>(ComputedReward));
+	Obj->SetBoolField(TEXT("killed_target"), bKilledTarget);
 	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
 
 	FString Body;

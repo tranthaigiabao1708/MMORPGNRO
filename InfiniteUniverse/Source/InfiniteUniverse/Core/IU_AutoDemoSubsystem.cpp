@@ -962,7 +962,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			}
 		}
 	}
-	else if (T < 16.8 && !bDispatchedStep3PotentialAllocations && (CurLv < 2 || PoolTN < 650))
+	else if (T < 16.8 && !bDispatchedStep3PotentialAllocations && (CurLv < 2 || PoolTN < 350))
 	{
 		if (LastTriggeredStage != 203)
 		{
@@ -973,7 +973,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			{
 				Player->ToggleFlightInput();
 			}
-			SetBanner(TEXT("STEP 3 [3/4]: Raid Monsters -> +55 LV EXP (Lv Only) & +350 Tiem Nang!"));
+			SetBanner(TEXT("STEP 3 [3/4]: Hit Monsters -> +1.5x Dame Suc Manh & Tiem Nang Per Hit!"));
 		}
 
 		AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
@@ -1023,7 +1023,7 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 			}
 		}
 
-		if (!bDispatchedStep3PotentialAllocations && IUPC && PoolTN >= 650)
+		if (!bDispatchedStep3PotentialAllocations && IUPC && PoolTN >= 350)
 		{
 			bDispatchedStep3PotentialAllocations = true;
 			Step3PotentialAllocTime = ConnectedPlaySeconds;

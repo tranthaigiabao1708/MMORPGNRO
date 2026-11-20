@@ -74,9 +74,9 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	HPUpgradeCount = FMath::Max(0, Summary.HPUpgrades);
 	KiUpgradeCount = FMath::Max(0, Summary.KiUpgrades);
 	AtkUpgradeCount = FMath::Max(0, Summary.AtkUpgrades);
-	NextHPCost = FMath::Max<int64>(200, Summary.NextHPCost);
-	NextKiCost = FMath::Max<int64>(200, Summary.NextKiCost);
-	NextAtkCost = FMath::Max<int64>(250, Summary.NextAtkCost);
+	NextHPCost = FMath::Max<int64>(100, Summary.NextHPCost);
+	NextKiCost = FMath::Max<int64>(100, Summary.NextKiCost);
+	NextAtkCost = FMath::Max<int64>(150, Summary.NextAtkCost);
 	EnemyKills = FMath::Max(0, Summary.EnemyKills);
 	PvPKills = FMath::Max(0, Summary.PvPKills);
 	Deaths = FMath::Max(0, Summary.Deaths);
@@ -134,23 +134,24 @@ void AIU_PlayerState::ApplyAuthoritativePotentialUpgrade(const FIU_BackendCharac
 	HPUpgradeCount = FMath::Max(0, Summary.HPUpgrades);
 	KiUpgradeCount = FMath::Max(0, Summary.KiUpgrades);
 	AtkUpgradeCount = FMath::Max(0, Summary.AtkUpgrades);
-	NextHPCost = FMath::Max<int64>(200, Summary.NextHPCost);
-	NextKiCost = FMath::Max<int64>(200, Summary.NextKiCost);
-	NextAtkCost = FMath::Max<int64>(250, Summary.NextAtkCost);
+	NextHPCost = FMath::Max<int64>(100, Summary.NextHPCost);
+	NextKiCost = FMath::Max<int64>(100, Summary.NextKiCost);
+	NextAtkCost = FMath::Max<int64>(150, Summary.NextAtkCost);
 
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	ForceNetUpdate();
 }
 
-void AIU_PlayerState::AwardOfflineKillProgress(int64 ExpGain, int64 PotentialGain)
+void AIU_PlayerState::AwardOfflineHitProgress(float OutgoingDamage)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || OutgoingDamage <= 0.0f)
 	{
 		return;
 	}
 
+	const int64 Reward = FMath::Max<int64>(1, FMath::RoundToInt64(static_cast<double>(OutgoingDamage) * 1.5));
 	const int32 OldLv = CharacterLevel;
-	CurrentEXP += FMath::Max<int64>(0, ExpGain);
+	CurrentEXP += Reward;
 	bool bLeveled = false;
 	while (CharacterLevel < 200)
 	{
@@ -168,7 +169,7 @@ void AIU_PlayerState::AwardOfflineKillProgress(int64 ExpGain, int64 PotentialGai
 		NextLevelEXP = (CharacterLevel < 200) ? (100 * NL + 25 * (NL - 1) * (NL - 1)) : 0;
 	}
 
-	PotentialPoints += FMath::Max<int64>(0, PotentialGain);
+	PotentialPoints += Reward;
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	if (bLeveled)
@@ -194,13 +195,13 @@ bool AIU_PlayerState::TryOfflineAllocatePotential(EIU_PotentialStatType StatType
 	switch (StatType)
 	{
 	case EIU_PotentialStatType::MaxHP:
-		Cost = 200 + 100 * static_cast<int64>(HPUpgradeCount);
+		Cost = 100 * (static_cast<int64>(HPUpgradeCount) + 1);
 		break;
 	case EIU_PotentialStatType::MaxKi:
-		Cost = 200 + 100 * static_cast<int64>(KiUpgradeCount);
+		Cost = 100 * (static_cast<int64>(KiUpgradeCount) + 1);
 		break;
 	case EIU_PotentialStatType::AttackPower:
-		Cost = 250 + 150 * static_cast<int64>(AtkUpgradeCount);
+		Cost = 150 * (static_cast<int64>(AtkUpgradeCount) + 1);
 		break;
 	default:
 		return false;
@@ -229,9 +230,9 @@ bool AIU_PlayerState::TryOfflineAllocatePotential(EIU_PotentialStatType StatType
 		break;
 	}
 
-	NextHPCost = 200 + 100 * static_cast<int64>(HPUpgradeCount);
-	NextKiCost = 200 + 100 * static_cast<int64>(KiUpgradeCount);
-	NextAtkCost = 250 + 150 * static_cast<int64>(AtkUpgradeCount);
+	NextHPCost = 100 * (static_cast<int64>(HPUpgradeCount) + 1);
+	NextKiCost = 100 * (static_cast<int64>(KiUpgradeCount) + 1);
+	NextAtkCost = 150 * (static_cast<int64>(AtkUpgradeCount) + 1);
 
 	const float NewMaxHP = 200.0f + 100.0f * static_cast<float>(HPUpgradeCount);
 	const float NewMaxKi = 200.0f + 100.0f * static_cast<float>(KiUpgradeCount);

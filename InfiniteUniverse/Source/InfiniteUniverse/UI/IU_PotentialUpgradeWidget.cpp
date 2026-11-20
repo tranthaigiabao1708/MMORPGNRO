@@ -62,7 +62,7 @@ TSharedRef<SWidget> UIU_PotentialUpgradeWidget::RebuildWidget()
 		}
 
 		UTextBlock* SubRule = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PotentialRule"));
-		SubRule->SetText(FText::FromString(TEXT("Diem LV chi quyet dinh Cap Do (khong tang chi so). Dung Diem Tiem Nang de cong:")));
+		SubRule->SetText(FText::FromString(TEXT("Moi don danh nhan 1.5x Dame -> Suc Manh (chi tang Lv) & Tiem Nang (cong chi so):")));
 		SubRule->SetColorAndOpacity(FSlateColor(FLinearColor(0.75f, 0.88f, 0.98f)));
 		ApplyFontSize(SubRule, 11);
 		if (UVerticalBoxSlot* S = VBox->AddChildToVerticalBox(SubRule))
@@ -340,9 +340,9 @@ void UIU_PotentialUpgradeWidget::UpdateAllLabels()
 	const int32 HPUpg = PS ? PS->GetHPUpgrades() : 0;
 	const int32 KiUpg = PS ? PS->GetKiUpgrades() : 0;
 	const int32 AtkUpg = PS ? PS->GetAtkUpgrades() : 0;
-	const int64 HPCost = PS ? PS->GetNextHPCost() : 200;
-	const int64 KiCost = PS ? PS->GetNextKiCost() : 200;
-	const int64 AtkCost = PS ? PS->GetNextAtkCost() : 250;
+	const int64 HPCost = PS ? PS->GetNextHPCost() : 100;
+	const int64 KiCost = PS ? PS->GetNextKiCost() : 100;
+	const int64 AtkCost = PS ? PS->GetNextAtkCost() : 150;
 
 	const float CurHP = Attr ? Attr->GetHP() : 200.0f;
 	const float MaxHP = Attr ? Attr->GetMaxHP() : 200.0f;
@@ -354,7 +354,7 @@ void UIU_PotentialUpgradeWidget::UpdateAllLabels()
 	if (LevelSummaryText)
 	{
 		LevelSummaryText->SetText(FText::FromString(
-			FString::Printf(TEXT("Cap Do (LV): Lv. %d  |  Diem LV: %lld / %lld  (Khong tang chi so)"), Lv, CurEXP, NextEXP)));
+			FString::Printf(TEXT("Cap Do: Lv. %d  |  Diem Suc Manh: %lld / %lld  (Khong tang chi so)"), Lv, CurEXP, NextEXP)));
 	}
 	if (PotentialPoolText)
 	{

@@ -276,34 +276,41 @@ bool FIU_S3_ProgressionPlayerStateAndVitalsTest::RunTest(const FString& Paramete
 	TestTrue(TEXT("Initial MaxKi == 200.0"), FMath::IsNearlyEqual(Attr->GetMaxKi(), 200.0f, 0.01f));
 	TestTrue(TEXT("Initial AttackPower == 100.0"), FMath::IsNearlyEqual(Attr->GetAttackPower(), 100.0f, 0.01f));
 
-	// NRO Rule 1: Level-Up via LV EXP updates Level ONLY — does NOT auto-increase MaxHP, MaxKi, or AttackPower!
-	PS->ApplyAuthoritativeEXPUpdate(2, 10, 225, 700, 2, true);
-	TestEqual(TEXT("CharacterLevel updated to 2"), PS->GetCharacterLevel(), 2);
-	TestEqual(TEXT("CurrentEXP updated to 10"), PS->GetCurrentEXP(), static_cast<int64>(10));
+	// NRO Rule 1: Per-hit 1.5x OutgoingDamage grants BOTH Điểm Sức mạnh (LV EXP, Level only!) & Điểm Tiềm năng immediately!
+	PS->AwardOfflineHitProgress(20.0f); // 1.5 * 20 = +30 Sức mạnh & +30 Tiềm năng (non-lethal hit!)
+	TestEqual(TEXT("Non-lethal 20 dmg hit granted +30 Sức mạnh (55 -> 85)"), PS->GetCurrentEXP(), static_cast<int64>(85));
+	TestEqual(TEXT("Non-lethal 20 dmg hit granted +30 Tiềm năng (0 -> 30)"), PS->GetPotentialPoints(), static_cast<int64>(30));
+	TestEqual(TEXT("EnemyKills stayed 0 on non-lethal hit"), PS->GetEnemyKills(), 0);
+
+	PS->AwardOfflineHitProgress(15.0f); // 1.5 * 15 = 22.5 -> Round = +23 -> Total EXP = 108 -> Level 2 (8/225), TN = 53!
+	TestEqual(TEXT("CharacterLevel updated to 2 right on mid-combat hit"), PS->GetCharacterLevel(), 2);
+	TestEqual(TEXT("CurrentEXP updated to 8"), PS->GetCurrentEXP(), static_cast<int64>(8));
 	TestEqual(TEXT("NextLevelEXP updated to 225"), PS->GetNextLevelEXP(), static_cast<int64>(225));
-	TestEqual(TEXT("PotentialPoints updated to 700"), PS->GetPotentialPoints(), static_cast<int64>(700));
-	TestEqual(TEXT("EnemyKills updated to 2"), PS->GetEnemyKills(), 2);
+	TestEqual(TEXT("PotentialPoints updated to 53"), PS->GetPotentialPoints(), static_cast<int64>(53));
 	TestTrue(TEXT("MaxHP remained 200.0 on Level-Up (no auto stat gain)"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 200.0f, 0.01f));
 	TestTrue(TEXT("AttackPower remained 100.0 on Level-Up (no auto stat gain)"), FMath::IsNearlyEqual(Attr->GetAttackPower(), 100.0f, 0.01f));
 
+	// Grant additional per-hit points up to 400 TN to test escalating Potential allocation
+	PS->ApplyAuthoritativeEXPUpdate(2, 8, 225, 400, 1, false);
+
 	// NRO Rule 2: Spending Potential Points upgrades chosen stats with independent escalating costs per stat track!
-	TestTrue(TEXT("1st HP upgrade succeeds (cost 200 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
-	TestEqual(TEXT("Remaining Potential == 500 after 1st HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(500));
-	TestEqual(TEXT("NextHPCost escalated to 300"), PS->GetNextHPCost(), static_cast<int64>(300));
-	TestEqual(TEXT("NextKiCost stayed 200 (independent track)"), PS->GetNextKiCost(), static_cast<int64>(200));
+	TestTrue(TEXT("1st HP upgrade succeeds (cost 100 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
+	TestEqual(TEXT("Remaining Potential == 300 after 1st HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(300));
+	TestEqual(TEXT("NextHPCost escalated to 200"), PS->GetNextHPCost(), static_cast<int64>(200));
+	TestEqual(TEXT("NextKiCost stayed 100 (independent track)"), PS->GetNextKiCost(), static_cast<int64>(100));
 	TestTrue(TEXT("MaxHP increased +100 -> 300"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 300.0f, 0.01f));
 
-	TestTrue(TEXT("2nd HP upgrade succeeds (escalated cost 300 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
-	TestEqual(TEXT("Remaining Potential == 200 after 2nd HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(200));
-	TestEqual(TEXT("NextHPCost escalated to 400"), PS->GetNextHPCost(), static_cast<int64>(400));
+	TestTrue(TEXT("2nd HP upgrade succeeds (escalated cost 200 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxHP, PChar));
+	TestEqual(TEXT("Remaining Potential == 100 after 2nd HP upgrade"), PS->GetPotentialPoints(), static_cast<int64>(100));
+	TestEqual(TEXT("NextHPCost escalated to 300"), PS->GetNextHPCost(), static_cast<int64>(300));
 	TestTrue(TEXT("MaxHP increased +100 -> 400"), FMath::IsNearlyEqual(Attr->GetMaxHP(), 400.0f, 0.01f));
 
-	// Insufficient Potential for AttackPower (needs 250, only 200 left)
-	TestFalse(TEXT("AttackPower upgrade rejected when Potential (200) < Cost (250)"),
+	// Insufficient Potential for AttackPower (needs 150, only 100 left)
+	TestFalse(TEXT("AttackPower upgrade rejected when Potential (100) < Cost (150)"),
 		PS->TryOfflineAllocatePotential(EIU_PotentialStatType::AttackPower, PChar));
 
-	// Ki 1st upgrade costs 200 TN -> succeeds with exact 200 left!
-	TestTrue(TEXT("1st Ki upgrade succeeds (cost 200 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxKi, PChar));
+	// Ki 1st upgrade costs 100 TN -> succeeds with exact 100 left!
+	TestTrue(TEXT("1st Ki upgrade succeeds (cost 100 TN)"), PS->TryOfflineAllocatePotential(EIU_PotentialStatType::MaxKi, PChar));
 	TestEqual(TEXT("Remaining Potential == 0"), PS->GetPotentialPoints(), static_cast<int64>(0));
 	TestTrue(TEXT("MaxKi increased +100 -> 300"), FMath::IsNearlyEqual(Attr->GetMaxKi(), 300.0f, 0.01f));
 
@@ -445,32 +452,41 @@ bool FIU_S3_BackendSubsystemLoopbackRoundTripTest::RunTest(const FString& Parame
 	TestTrue(TEXT("Live HMAC ClaimCharacterLease succeeded with fencing_epoch=1 & baseline 200 HP / 200 Ki / 100 Atk"),
 		bOk && Claimed.FencingEpoch == 1 && FMath::IsNearlyEqual(Claimed.MaxHP, 200.0f, 0.1f) && FMath::IsNearlyEqual(Claimed.AttackPower, 100.0f, 0.1f));
 
-	// Grant 110 LV EXP + 700 Potential -> Level 1 -> Level 2 WITHOUT changing stats!
+	// Hit #1 (non-lethal, OutgoingDamage = 40.0): 1.5 * 40 = +60 Sức mạnh & +60 Tiềm năng, EnemyKills MUST remain 0!
+	bDone = false; bOk = false;
+	FIU_BackendCharacterSummary Hit1After;
+	Backend->GrantCharacterEXP(Claimed.CharacterID, Claimed.FencingEpoch, 40.0f, false, TEXT("ue5_test_hit1_") + UniqueSuffix,
+		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; Hit1After = S; bDone = true; });
+	PumpHttpUntil(bDone, 5.0);
+	TestTrue(TEXT("Non-lethal 40 dmg hit granted +60 Sức mạnh & +60 Tiềm năng (EnemyKills=0)"),
+		bOk && Hit1After.CurrentExp == 60 && Hit1After.PotentialPoints == 60 && Hit1After.EnemyKills == 0);
+
+	// Hit #2 (lethal, OutgoingDamage = 140.0): 1.5 * 140 = +210 Sức mạnh & +210 Tiềm năng -> Total 270 -> Lv.2 (170/225), TN=270, Kills=1, stats STILL 200/100!
 	bDone = false; bOk = false;
 	FIU_BackendCharacterSummary ExpAfter;
-	Backend->GrantCharacterEXP(Claimed.CharacterID, Claimed.FencingEpoch, 110, 700, TEXT("ue5_test_kill_") + UniqueSuffix,
+	Backend->GrantCharacterEXP(Claimed.CharacterID, Claimed.FencingEpoch, 140.0f, true, TEXT("ue5_test_hit2_") + UniqueSuffix,
 		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; ExpAfter = S; bDone = true; });
 	PumpHttpUntil(bDone, 5.0);
-	TestTrue(TEXT("Live HMAC GrantCharacterEXP leveled character to Lv.2 + 700 TN while keeping MaxHP=200 & Atk=100"),
-		bOk && ExpAfter.Level == 2 && ExpAfter.bLeveledUp && ExpAfter.PotentialPoints == 700 &&
+	TestTrue(TEXT("Lethal 140 dmg hit leveled character to Lv.2 + 270 TN (EnemyKills=1) while keeping MaxHP=200 & Atk=100"),
+		bOk && ExpAfter.Level == 2 && ExpAfter.bLeveledUp && ExpAfter.PotentialPoints == 270 && ExpAfter.EnemyKills == 1 &&
 		FMath::IsNearlyEqual(ExpAfter.MaxHP, 200.0f, 0.1f) && FMath::IsNearlyEqual(ExpAfter.AttackPower, 100.0f, 0.1f));
 
-	// Spend Potential on HP (+100 HP, cost 200 -> 500 left, NextHPCost=300) and Attack (+10 Atk, cost 250 -> 250 left, NextAtkCost=400)
+	// Spend Potential on HP (+100 HP, cost 100 -> 170 left, NextHPCost=200) and Attack (+10 Atk, cost 150 -> 20 left, NextAtkCost=300)
 	bDone = false; bOk = false;
 	FIU_BackendCharacterSummary AfterHP;
 	Backend->AllocateCharacterPotential(Claimed.CharacterID, Claimed.FencingEpoch, TEXT("hp"),
 		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; AfterHP = S; bDone = true; });
 	PumpHttpUntil(bDone, 5.0);
-	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('hp') -> MaxHP=300, NextHPCost=300, RemainingTN=500"),
-		bOk && FMath::IsNearlyEqual(AfterHP.MaxHP, 300.0f, 0.1f) && AfterHP.NextHPCost == 300 && AfterHP.PotentialPoints == 500);
+	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('hp') -> MaxHP=300, NextHPCost=200, RemainingTN=170"),
+		bOk && FMath::IsNearlyEqual(AfterHP.MaxHP, 300.0f, 0.1f) && AfterHP.NextHPCost == 200 && AfterHP.PotentialPoints == 170);
 
 	bDone = false; bOk = false;
 	FIU_BackendCharacterSummary AfterAtk;
 	Backend->AllocateCharacterPotential(Claimed.CharacterID, Claimed.FencingEpoch, TEXT("atk"),
 		[&](bool bS, const FIU_BackendCharacterSummary& S, const FString&) { bOk = bS; AfterAtk = S; bDone = true; });
 	PumpHttpUntil(bDone, 5.0);
-	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('atk') -> AttackPower=110, NextAtkCost=400, RemainingTN=250"),
-		bOk && FMath::IsNearlyEqual(AfterAtk.AttackPower, 110.0f, 0.1f) && AfterAtk.NextAtkCost == 400 && AfterAtk.PotentialPoints == 250);
+	TestTrue(TEXT("Live HMAC AllocateCharacterPotential('atk') -> AttackPower=110, NextAtkCost=300, RemainingTN=20"),
+		bOk && FMath::IsNearlyEqual(AfterAtk.AttackPower, 110.0f, 0.1f) && AfterAtk.NextAtkCost == 300 && AfterAtk.PotentialPoints == 20);
 
 	FIU_CharacterSavePayload FinalSave;
 	FinalSave.CharacterID = Claimed.CharacterID;

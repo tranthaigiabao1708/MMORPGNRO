@@ -122,9 +122,9 @@ def main():
         writer,
         p1_c1,
         p1_c2,
-        "CLIENT 1: Raid (+LV EXP & +TN) -> +HP/+Ki/+Atk -> Logout",
+        "CLIENT 1: Hit (+1.5x Dame SM & TN) -> +HP/+Ki/+Atk -> Logout",
         "DEDICATED SERVER #1 + POSTGRESQL 18 (Epoch #1)",
-        "CLIENT 2: Co-op Raid & Potential Upgrade (Epoch #1)",
+        "CLIENT 2: Per-Hit 1.5x Dame & Potential Upgrade (Epoch #1)",
     )
     total += render_restart_interstitial(writer, 24)
     total += render_split_frames(
