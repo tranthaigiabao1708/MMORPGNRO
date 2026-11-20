@@ -6,6 +6,7 @@
 #include "Characters/Enemy/IU_EnemyCharacter.h"
 #include "Core/IU_GameState.h"
 #include "Core/IU_PlayerState.h"
+#include "Core/IU_PlayerController.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/Character.h"
@@ -85,19 +86,22 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 		return false;
 	}
 
-	const float AppliedDelta = AttributeComp->ModifyHP(-Spec.Amount);
+	const float MitigatedAmount = UIU_AttributeComponent::ComputeMitigatedDamage(Spec.Amount, AttributeComp->GetDefense());
+	const float AppliedDelta = AttributeComp->ModifyHP(-MitigatedAmount);
 	if (FMath::IsNearlyZero(AppliedDelta))
 	{
 		return false;
 	}
 
-	OnDamageReceived.Broadcast(Spec, AttributeComp->GetHP());
+	FIU_DamageSpec EffectiveSpec = Spec;
+	EffectiveSpec.Amount = MitigatedAmount;
+	OnDamageReceived.Broadcast(EffectiveSpec, AttributeComp->GetHP());
 
 	const bool bTargetKilledByThisHit = AttributeComp->IsDead();
 
-	// Step 3 Authentic NRO Per-Hit Progression:
+	// Step 3 Authentic NRO Per-Hit Progression + Step 4 CSPRNG Personal Loot & Vang on Kill:
 	// Every valid hit against a monster immediately awards BOTH Điểm Sức mạnh (LV EXP) and Điểm Tiềm năng
-	// equal to 1.5x the outgoing damage (Spec.Amount) — NOT waiting for the finishing blow!
+	// equal to 1.5x the outgoing damage (EffectiveSpec.Amount) — NOT waiting for the finishing blow!
 	if (Owner->IsA<AIU_EnemyCharacter>())
 	{
 		if (APawn* AttackerPawn = Cast<APawn>(Spec.InstigatorActor.Get()))
@@ -124,8 +128,9 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 									AttackerPS->GetActiveFencingEpoch(),
 									HitSeq);
 
-								const float OutgoingDmg = Spec.Amount;
+								const float OutgoingDmg = EffectiveSpec.Amount;
 								TWeakObjectPtr<AIU_PlayerState> WeakAttackerPS(AttackerPS);
+								TWeakObjectPtr<AIU_PlayerController> WeakAttackerPC(Cast<AIU_PlayerController>(AttackerPawn->GetController()));
 
 								Backend->GrantCharacterEXP(
 									AttackerPS->GetPersistedCharacterUUID(),
@@ -166,13 +171,63 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 											Updated.MaxHP,
 											Updated.AttackPower);
 									});
+
+								if (bTargetKilledByThisHit)
+								{
+									const FString LootIdemKey = FString::Printf(
+										TEXT("loot_%s_ep%lld_seq%llu"),
+										*Owner->GetName(),
+										AttackerPS->GetActiveFencingEpoch(),
+										HitSeq);
+
+									Backend->RollMonsterLoot(
+										AttackerPS->GetPersistedCharacterUUID(),
+										AttackerPS->GetActiveFencingEpoch(),
+										TEXT("mob.prototype_raider"),
+										LootIdemKey,
+										[WeakAttackerPS, WeakAttackerPC](bool bLootOK, const FIU_MobLootDropSummary& LootRes, const FIU_InventorySnapshot& Snap, const FString& LootErr)
+										{
+											if (!bLootOK)
+											{
+												UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Loot] RollMonsterLoot failed: %s"), *LootErr);
+												return;
+											}
+
+											if (AIU_PlayerState* APS = WeakAttackerPS.Get())
+											{
+												APS->ApplyAuthoritativeEconomySummary(
+													Snap.StandardCoin,
+													Snap.ElixirCount,
+													Snap.CrimsonOreCount,
+													Snap.EquippedItems.Num());
+											}
+
+											if (AIU_PlayerController* APC = WeakAttackerPC.Get())
+											{
+												APC->Client_ReceiveInventorySnapshot(Snap);
+												APC->Client_NotifyLootDropped(LootRes.CoinsGranted, LootRes.DroppedItemLabels, LootRes.bBagFullSkipped);
+											}
+
+											UE_LOG(LogInfiniteUniverse, Log,
+												TEXT("[Loot] Raider defeated -> +%lld Vang (Total=%lld), DroppedItems=%d, UsedBag=%d/%d"),
+												LootRes.CoinsGranted,
+												LootRes.NewCoinBalance,
+												LootRes.DroppedItemLabels.Num(),
+												Snap.UsedBagSlots,
+												Snap.MaxBagSlots);
+										});
+								}
 							}
 						}
 					}
 				}
 				else if (!GIsAutomationTesting)
 				{
-					AttackerPS->AwardOfflineHitProgress(Spec.Amount);
+					AttackerPS->AwardOfflineHitProgress(EffectiveSpec.Amount);
+					if (bTargetKilledByThisHit)
+					{
+						AttackerPS->AwardOfflineMobLoot(45);
+					}
 				}
 			}
 		}
@@ -243,7 +298,7 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 
 	if (Owner->GetNetMode() != NM_Standalone)
 	{
-		Multicast_NotifyDamageApplied(Spec, AttributeComp->GetHP(), bTriggeredStun);
+		Multicast_NotifyDamageApplied(EffectiveSpec, AttributeComp->GetHP(), bTriggeredStun);
 	}
 
 	return true;

@@ -9,6 +9,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FIU_OnAttributeChangedSignature, float, CurrentValue, float, MaxValue, float, Delta);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnHealthDepletedSignature, AActor*, OwningActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnAttackPowerChangedSignature, float, NewAttackPower);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FIU_OnDefenseChangedSignature, float, NewDefense);
 
 /**
  * Event-driven HP and Ki attribute manager (Zero-Tick: uses timer only while regenerating Ki).
@@ -44,9 +45,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.1", ClampMax = "1000.0"))
 	float AttackPowerMultiplier = 1.0f;
 
-	/** Authoritative flat Attack Power ("Sức đánh": starts at 100, +10 per Potential upgrade). */
+	/** Authoritative flat Attack Power ("Sức đánh": starts at 100, +10 per Potential upgrade + Equipment bonuses). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_AttackPower, Category = "IU|Attributes", meta = (ClampMin = "10.0", ClampMax = "100000.0"))
 	float AttackPower = 100.0f;
+
+	/** Authoritative flat Defense ("Giáp": 0 on synthetic test dummies, 20 base + Equipment bonuses on real players). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_Defense, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "100000.0"))
+	float Defense = 0.0f;
 
 	/** Timer interval for smooth Ki regeneration (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IU|Attributes", meta = (ClampMin = "0.05", ClampMax = "1.0"))
@@ -72,9 +77,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
 	void ResetAttributesToFull();
 
-	/** Server-only: applies authoritative persisted MaxHP/HP, MaxKi/Ki, and AttackPower/Multiplier from Go Backend or Potential upgrade. */
+	/** Server-only: applies authoritative persisted MaxHP/HP, MaxKi/Ki, AttackPower/Multiplier, and Defense from Go Backend. */
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
-	void ApplyPersistedVitals(float InMaxHP, float InCurrentHP, float InMaxKi, float InCurrentKi, float InAttackMultiplier, float InAttackPower = -1.0f);
+	void ApplyPersistedVitals(
+		float InMaxHP,
+		float InCurrentHP,
+		float InMaxKi,
+		float InCurrentKi,
+		float InAttackMultiplier,
+		float InAttackPower = -1.0f,
+		float InDefense = -1.0f);
+
+	/** Pure armor mitigation formula: FinalDmg = Max(1.0, RawDmg * (100 / (100 + Defense))). Returns RawDmg when Defense <= 0. */
+	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
+	static float ComputeMitigatedDamage(float RawDamage, float TargetDefense);
 
 	// ========================================================================
 	// Pure Getters
@@ -107,6 +123,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
 	float GetAttackPower() const { return AttackPower; }
 
+	UFUNCTION(BlueprintPure, Category = "IU|Attributes")
+	float GetDefense() const { return FMath::Max(0.0f, Defense); }
+
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
 	void SetAttackPowerMultiplier(float NewMultiplier);
 
@@ -126,6 +145,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "IU|Attributes|Events")
 	FIU_OnAttackPowerChangedSignature OnAttackPowerChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "IU|Attributes|Events")
+	FIU_OnDefenseChangedSignature OnDefenseChanged;
+
 private:
 	void UpdateKiRegenTimerState();
 	void OnKiRegenTimerTick();
@@ -138,6 +160,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_AttackPower(float OldAttackPower);
+
+	UFUNCTION()
+	void OnRep_Defense(float OldDefense);
 
 	UFUNCTION()
 	void OnRep_CurrentHP(float OldHP);

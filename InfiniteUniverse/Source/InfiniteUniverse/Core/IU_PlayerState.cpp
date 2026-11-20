@@ -30,6 +30,10 @@ void AIU_PlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AIU_PlayerState, NextHPCost);
 	DOREPLIFETIME(AIU_PlayerState, NextKiCost);
 	DOREPLIFETIME(AIU_PlayerState, NextAtkCost);
+	DOREPLIFETIME(AIU_PlayerState, StandardCoin);
+	DOREPLIFETIME(AIU_PlayerState, ElixirCount);
+	DOREPLIFETIME(AIU_PlayerState, CrimsonOreCount);
+	DOREPLIFETIME(AIU_PlayerState, EquippedItemCount);
 	DOREPLIFETIME_CONDITION(AIU_PlayerState, ActiveFencingEpoch, COND_OwnerOnly);
 }
 
@@ -77,6 +81,7 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	NextHPCost = FMath::Max<int64>(100, Summary.NextHPCost);
 	NextKiCost = FMath::Max<int64>(100, Summary.NextKiCost);
 	NextAtkCost = FMath::Max<int64>(150, Summary.NextAtkCost);
+	StandardCoin = FMath::Max<int64>(0, Summary.StandardCoin);
 	EnemyKills = FMath::Max(0, Summary.EnemyKills);
 	PvPKills = FMath::Max(0, Summary.PvPKills);
 	Deaths = FMath::Max(0, Summary.Deaths);
@@ -91,6 +96,7 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 
 	OnCharacterEXPChanged.Broadcast(CurrentEXP, NextLevelEXP, CharacterLevel);
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
 	ForceNetUpdate();
 }
 
@@ -237,11 +243,59 @@ bool AIU_PlayerState::TryOfflineAllocatePotential(EIU_PotentialStatType StatType
 	const float NewMaxHP = 200.0f + 100.0f * static_cast<float>(HPUpgradeCount);
 	const float NewMaxKi = 200.0f + 100.0f * static_cast<float>(KiUpgradeCount);
 	const float NewAtk = 100.0f + 10.0f * static_cast<float>(AtkUpgradeCount);
-	Attr->ApplyPersistedVitals(NewMaxHP, CurHP, NewMaxKi, CurKi, NewAtk / 100.0f, NewAtk);
+	Attr->ApplyPersistedVitals(NewMaxHP, CurHP, NewMaxKi, CurKi, NewAtk / 100.0f, NewAtk, Attr->GetDefense());
 
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
 	ForceNetUpdate();
 	return true;
+}
+
+void AIU_PlayerState::ApplyAuthoritativeEconomySummary(
+	int64 InStandardCoin,
+	int32 InElixirCount,
+	int32 InCrimsonOreCount,
+	int32 InEquippedCount)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	StandardCoin = FMath::Max<int64>(0, InStandardCoin);
+	ElixirCount = FMath::Max(0, InElixirCount);
+	CrimsonOreCount = FMath::Max(0, InCrimsonOreCount);
+	EquippedItemCount = FMath::Max(0, InEquippedCount);
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+	ForceNetUpdate();
+}
+
+bool AIU_PlayerState::TryOfflineUseElixir(APawn* TargetPawn)
+{
+	if (!HasAuthority() || !TargetPawn || ElixirCount <= 0)
+	{
+		return false;
+	}
+	UIU_AttributeComponent* Attr = TargetPawn->FindComponentByClass<UIU_AttributeComponent>();
+	if (!Attr || Attr->IsDead())
+	{
+		return false;
+	}
+	--ElixirCount;
+	Attr->ModifyHP(150.0f);
+	Attr->RestoreKi(150.0f);
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+	ForceNetUpdate();
+	return true;
+}
+
+void AIU_PlayerState::AwardOfflineMobLoot(int64 OfflineCoinGain)
+{
+	if (!HasAuthority() || OfflineCoinGain <= 0)
+	{
+		return;
+	}
+	StandardCoin += OfflineCoinGain;
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+	ForceNetUpdate();
 }
 
 void AIU_PlayerState::MarkLeaseRevoked()
@@ -299,4 +353,9 @@ void AIU_PlayerState::OnRep_PersistedCharacterName()
 void AIU_PlayerState::OnRep_PotentialState()
 {
 	OnCharacterPotentialChanged.Broadcast(PotentialPoints, NextHPCost, NextKiCost, NextAtkCost);
+}
+
+void AIU_PlayerState::OnRep_EconomyState()
+{
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
 }

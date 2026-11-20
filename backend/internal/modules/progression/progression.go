@@ -13,11 +13,12 @@ const (
 	DefaultHitEXP       = int64(30) // Fallback for 20.0 baseline damage * 1.5
 	DefaultHitPotential = int64(30)
 
-	// Base starting stats per NRO-style Step 3 design: 200 HP, 200 Ki, 100 Attack Power.
+	// Base starting stats per NRO-style Step 3 design: 200 HP, 200 Ki, 100 Attack Power, 20 Defense.
 	// Điểm Sức mạnh (LV EXP) determines Character Level ONLY and NEVER grants automatic stat increases!
 	BaseCharacterHP = 200.0
 	BaseCharacterKi = 200.0
 	BaseAttackPower = 100.0
+	BaseDefense     = 20.0
 
 	// Per-allocation increments when spending Potential Points (Điểm Tiềm năng)
 	StepUpgradeHP  = 100.0
@@ -29,7 +30,17 @@ const (
 	StatTypeAtk = "atk"
 )
 
-// ScaledStats represents the authoritative combat stats compiled strictly from allocated Potential upgrades.
+// EquipmentBonuses aggregates flat and percentage modifiers from all 8 equipped slots (including Enhancement, Affixes & Set Bonuses).
+type EquipmentBonuses struct {
+	FlatHP  float64 `json:"flat_hp"`
+	FlatKi  float64 `json:"flat_ki"`
+	PctKi   float64 `json:"pct_ki"`
+	FlatAtk float64 `json:"flat_atk"`
+	PctDmg  float64 `json:"pct_dmg"`
+	FlatDef float64 `json:"flat_def"`
+}
+
+// ScaledStats represents the authoritative combat stats compiled from Potential upgrades + 8-slot Equipment bonuses.
 type ScaledStats struct {
 	MaxHP                 float64 `json:"max_hp"`
 	MaxEnergy             float64 `json:"max_energy"`
@@ -57,7 +68,6 @@ func ComputeHitProgressionReward(outgoingDamage float64) (powerExpGain int64, po
 }
 
 // ExpRequiredForNextLevel returns the Điểm Sức mạnh (LV EXP) needed to advance from `level` to `level + 1`.
-// Level 1 -> 2 requires 100; Level 2 -> 3 requires 225; Level 3 -> 4 requires 400.
 func ExpRequiredForNextLevel(level int) int64 {
 	if level < 1 {
 		level = 1
@@ -99,8 +109,7 @@ func ApplyExpGain(level int, currentExp int64, expGain int64) (newLevel int, new
 	return newLevel, newExp, leveledUp
 }
 
-// PotentialUpgradeCost returns the Potential Points required for the next upgrade of a specific stat track.
-// Each stat track escalates independently based on how many upgrades have been invested into THAT stat:
+// PotentialUpgradeCost returns the Potential Points required for the next upgrade of a specific stat track:
 // - HP  (+100 HP):  100, 200, 300, 400, ... (100 * (hpUpgrades + 1))
 // - Ki  (+100 Ki):  100, 200, 300, 400, ... (100 * (kiUpgrades + 1))
 // - Atk (+10 Atk):  150, 300, 450, 600, ... (150 * (atkUpgrades + 1))
@@ -121,9 +130,13 @@ func PotentialUpgradeCost(statType string, currentUpgrades int32) int64 {
 	}
 }
 
-// CompileCharacterStats computes authoritative combat stats strictly from allocated Potential upgrades.
-// Starting baseline (0 upgrades): 200 HP, 200 Ki, 100 AttackPower (1.00x AttackPowerMultiplier).
+// CompileCharacterStats computes baseline + Potential stats with zero equipment.
 func CompileCharacterStats(hpUpgrades, kiUpgrades, atkUpgrades int32) ScaledStats {
+	return CompileTotalCharacterStats(hpUpgrades, kiUpgrades, atkUpgrades, EquipmentBonuses{})
+}
+
+// CompileTotalCharacterStats computes authoritative combat stats combining Potential upgrades and 8-slot Equipment bonuses.
+func CompileTotalCharacterStats(hpUpgrades, kiUpgrades, atkUpgrades int32, eq EquipmentBonuses) ScaledStats {
 	if hpUpgrades < 0 {
 		hpUpgrades = 0
 	}
@@ -134,10 +147,14 @@ func CompileCharacterStats(hpUpgrades, kiUpgrades, atkUpgrades int32) ScaledStat
 		atkUpgrades = 0
 	}
 
-	maxHP := BaseCharacterHP + float64(hpUpgrades)*StepUpgradeHP
-	maxKi := BaseCharacterKi + float64(kiUpgrades)*StepUpgradeKi
-	atkPower := BaseAttackPower + float64(atkUpgrades)*StepUpgradeAtk
+	maxHP := BaseCharacterHP + float64(hpUpgrades)*StepUpgradeHP + eq.FlatHP
+	baseKiPlusFlat := BaseCharacterKi + float64(kiUpgrades)*StepUpgradeKi + eq.FlatKi
+	maxKi := math.Round(baseKiPlusFlat * (1.0 + math.Max(0.0, eq.PctKi)))
+
+	rawAtk := BaseAttackPower + float64(atkUpgrades)*StepUpgradeAtk + eq.FlatAtk
+	atkPower := math.Round(rawAtk * (1.0 + math.Max(0.0, eq.PctDmg)))
 	atkMul := atkPower / BaseAttackPower
+	def := BaseDefense + math.Max(0.0, eq.FlatDef)
 
 	return ScaledStats{
 		MaxHP:                 maxHP,
@@ -145,7 +162,7 @@ func CompileCharacterStats(hpUpgrades, kiUpgrades, atkUpgrades int32) ScaledStat
 		AttackPower:           atkPower,
 		PhysAtk:               atkPower,
 		KiAtk:                 atkPower,
-		Defense:               20.0,
+		Defense:               def,
 		AttackPowerMultiplier: atkMul,
 		NextHPCost:            PotentialUpgradeCost(StatTypeHP, hpUpgrades),
 		NextKiCost:            PotentialUpgradeCost(StatTypeKi, kiUpgrades),

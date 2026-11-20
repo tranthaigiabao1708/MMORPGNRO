@@ -232,7 +232,8 @@ void AIU_GameMode::PostLogin(APlayerController* NewPlayer)
 						LoadedState.MaxEnergy,
 						LoadedState.Energy,
 						LoadedState.AttackPowerMultiplier,
-						LoadedState.AttackPower);
+						LoadedState.AttackPower,
+						LoadedState.Defense);
 				}
 
 				if (LoadedState.bHasSavedPosition)
@@ -256,6 +257,11 @@ void AIU_GameMode::PostLogin(APlayerController* NewPlayer)
 						}
 					}
 				}
+			}
+
+			if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(PC))
+			{
+				IUPC->Server_RequestRefreshInventory();
 			}
 
 			UE_LOG(LogInfiniteUniverse, Log,
@@ -540,12 +546,19 @@ void AIU_GameMode::RestartPlayer(AController* NewPlayer)
 	{
 		PChar->UpdateSavedSpawnTransform(BaseTM);
 
-		// In interactive gameplay (non-AutomationTest), initialize NRO starting baseline: 200 HP, 200 Ki, 100 Sức đánh!
+		// In interactive gameplay (non-AutomationTest), initialize NRO starting baseline: 200 HP, 200 Ki, 100 Sức đánh, 20 Giáp!
 		if (!GIsAutomationTesting)
 		{
 			if (UIU_AttributeComponent* Attr = PChar->GetAttributeComponent())
 			{
-				Attr->ApplyPersistedVitals(200.0f, 200.0f, 200.0f, 200.0f, 1.0f, 100.0f);
+				Attr->ApplyPersistedVitals(200.0f, 200.0f, 200.0f, 200.0f, 1.0f, 100.0f, 20.0f);
+			}
+			if (AIU_PlayerState* PS = NewPlayer->GetPlayerState<AIU_PlayerState>())
+			{
+				if (!PS->HasValidBackendLease())
+				{
+					PS->ApplyAuthoritativeEconomySummary(0, 3, 4, 0);
+				}
 			}
 		}
 	}

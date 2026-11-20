@@ -72,10 +72,16 @@ private:
 	void HandleAttackPowerChanged(float NewAttackPower);
 
 	UFUNCTION()
+	void HandleDefenseChanged(float NewDefense);
+
+	UFUNCTION()
 	void HandleCharacterEXPChanged(int64 CurrentEXP, int64 NextLevelEXP, int32 CurrentLevel);
 
 	UFUNCTION()
 	void HandleCharacterPotentialChanged(int64 PotentialPoints, int64 NextHPCost, int64 NextKiCost, int64 NextAtkCost);
+
+	UFUNCTION()
+	void HandleCharacterEconomyChanged(int64 StandardCoin, int32 ElixirCount, int32 CrimsonOreCount, int32 EquippedCount);
 
 	UFUNCTION()
 	void HandleCombatStateChanged(EIU_CombatState OldState, EIU_CombatState NewState);

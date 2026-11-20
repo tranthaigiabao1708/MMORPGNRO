@@ -45,13 +45,15 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	const TCHAR* Cmd = FCommandLine::Get();
 	int32 ParsedNetRole = 0;
 	int32 ParsedStep3Phase = 0;
+	int32 ParsedStep4Phase = 0;
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), ParsedNetRole);
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), ParsedStep3Phase);
+	FParse::Value(Cmd, TEXT("AutoStep4Phase="), ParsedStep4Phase);
 
 	FString AutoAuthUser;
 	FParse::Value(Cmd, TEXT("AutoAuthUser="), AutoAuthUser);
 	// When client boots onto temporary local map while awaiting AutoAuth -> ClientTravel(?Ticket=...), wait for NM_Client world!
-	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0) && World->GetNetMode() != NM_Client)
+	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0 || ParsedStep4Phase > 0) && World->GetNetMode() != NM_Client)
 	{
 		return false;
 	}
@@ -59,7 +61,8 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return FParse::Param(Cmd, TEXT("AutoDemoShowcase")) ||
 		FParse::Param(Cmd, TEXT("AutoServerTelemetry")) ||
 		ParsedNetRole > 0 ||
-		ParsedStep3Phase > 0;
+		ParsedStep3Phase > 0 ||
+		ParsedStep4Phase > 0;
 }
 
 TStatId UIU_AutoDemoSubsystem::GetStatId() const
@@ -76,13 +79,20 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	bServerTelemetryMode = FParse::Param(Cmd, TEXT("AutoServerTelemetry"));
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), NetDemoClientRole);
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), Step3PersistencePhase);
-	if (Step3PersistencePhase > 0 && NetDemoClientRole == 0)
+	FParse::Value(Cmd, TEXT("AutoStep4Phase="), Step4EconomyPhase);
+	if ((Step3PersistencePhase > 0 || Step4EconomyPhase > 0) && NetDemoClientRole == 0)
 	{
 		NetDemoClientRole = 1;
 	}
 
 	bRecordFrames = FParse::Param(Cmd, TEXT("RecordDemoFrames"));
-	if (Step3PersistencePhase > 0)
+	if (Step4EconomyPhase > 0)
+	{
+		TargetDurationSeconds = (Step4EconomyPhase == 1) ? 25.5 : 10.0;
+		DemoFramesSubdir = FString::Printf(TEXT("Step4Frames_Phase%d_Client%d"), Step4EconomyPhase, NetDemoClientRole);
+		CSVOutputFilename = FString::Printf(TEXT("Step4_Phase%d_Client%dProfile.csv"), Step4EconomyPhase, NetDemoClientRole);
+	}
+	else if (Step3PersistencePhase > 0)
 	{
 		TargetDurationSeconds = (Step3PersistencePhase == 1) ? 21.5 : 9.5;
 		DemoFramesSubdir = FString::Printf(TEXT("Step3Frames_Phase%d_Client%d"), Step3PersistencePhase, NetDemoClientRole);
@@ -334,6 +344,11 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 	if (bSinglePlayerMode && Player && RawPC)
 	{
 		TickSinglePlayerShowcase(World, Player, RawPC);
+	}
+	else if (Step4EconomyPhase > 0 && Player && RawPC)
+	{
+		ConnectedPlaySeconds += ClampedDt;
+		TickStep4InventoryShowcase(World, Player, RawPC);
 	}
 	else if (Step3PersistencePhase > 0 && Player && RawPC)
 	{
@@ -1059,6 +1074,338 @@ void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_Play
 		SetBanner(FString::Printf(
 			TEXT("STEP 3 [4/4]: %s Lv.%d | HP %.0f | Ki %.0f | Atk %.0f (TN:%lld) -> LOGOUT!"),
 			*CharName, CurLv, Attr->GetMaxHP(), Attr->GetMaxKi(), Attr->GetAttackPower(), PoolTN));
+	}
+}
+
+void UIU_AutoDemoSubsystem::TickStep4InventoryShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC)
+{
+	AIU_HUDManager* HUD = Cast<AIU_HUDManager>(RawPC->GetHUD());
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(RawPC);
+	auto SetBanner = [HUD](const FString& Text)
+	{
+		if (HUD)
+		{
+			HUD->SetShowcaseStepBanner(Text);
+		}
+	};
+
+	const AIU_PlayerState* IUPS = Player->GetPlayerState<AIU_PlayerState>();
+	const int32 CurLv = IUPS ? IUPS->GetCharacterLevel() : 1;
+	const int64 PoolTN = IUPS ? IUPS->GetPotentialPoints() : 0;
+	const int64 CoinBal = IUPS ? IUPS->GetStandardCoin() : 0;
+	const int32 EqCount = IUPS ? IUPS->GetEquippedItemCount() : 0;
+	const FString CharName = (IUPS && !IUPS->GetPersistedCharacterName().IsEmpty()) ? IUPS->GetPersistedCharacterName() : TEXT("Hero");
+	const int64 CurEpoch = IUPS ? IUPS->GetActiveFencingEpoch() : 0;
+	const UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
+
+	// =========================================================================
+	// PHASE 2: Post-Dedicated-Server-Restart Relogin Verification (Wallet + Bag + 8-Slot Equip + Enhance!)
+	// =========================================================================
+	if (Step4EconomyPhase == 2)
+	{
+		if (LastTriggeredStage != 402)
+		{
+			LastTriggeredStage = 402;
+			Player->StopSprintInput();
+			Player->StopJumpInput();
+			Player->StopDescendInput();
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+			}
+		}
+
+		if (IUPC && NetDemoClientRole == 1)
+		{
+			const bool bShowInvModal = (ConnectedPlaySeconds >= 2.0 && ConnectedPlaySeconds <= 7.8);
+			if (IUPC->IsInventoryPanelVisible() != bShowInvModal)
+			{
+				IUPC->SetInventoryPanelVisible(bShowInvModal, false);
+			}
+		}
+
+		SetBanner(FString::Printf(
+			TEXT("STEP 4 [RESTORED]: %s Lv.%d | Vang:%lld | Equip:%d/8 | HP %.0f | Atk %.0f | Giap %.0f | Ep#%lld"),
+			*CharName,
+			CurLv,
+			CoinBal,
+			EqCount,
+			Attr ? Attr->GetMaxHP() : 200.0f,
+			Attr ? Attr->GetAttackPower() : 100.0f,
+			Attr ? Attr->GetDefense() : 20.0f,
+			CurEpoch));
+
+		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
+		{
+			const FVector ToAlly = Ally->GetActorLocation() - Player->GetActorLocation();
+			if (!ToAlly.IsNearlyZero(10.0f))
+			{
+				RawPC->SetControlRotation(FRotator(-9.0f, ToAlly.Rotation().Yaw, 0.0f));
+			}
+		}
+		else
+		{
+			Player->ApplyLookInput(FVector2D(0.70f, 0.0f));
+		}
+		return;
+	}
+
+	// =========================================================================
+	// PHASE 1: Starter Armor Equip -> Raid Monsters (+CSPRNG Vang & Loot) -> Dau Than [4] -> Equip Loot & Enhance +1/+2 -> Safe Logout
+	// =========================================================================
+	const double T = ConnectedPlaySeconds;
+	const float LaneY = (NetDemoClientRole == 1) ? -220.0f : 320.0f;
+	const FVector RaidAnchor = (NetDemoClientRole == 1)
+		? FVector(-1850.0f, -200.0f, 95.0f)
+		: FVector(-2950.0f, 350.0f, 95.0f);
+
+	if (T < 3.0)
+	{
+		if (LastTriggeredStage != 411)
+		{
+			LastTriggeredStage = 411;
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+			}
+			SetBanner(FString::Printf(TEXT("STEP 4 [1/5]: Login & Equip Starter Armor (+80 HP, +8 Giap | Ep#%lld)"), CurEpoch));
+		}
+
+		if (IUPC && !bStep4EquippedStarterArmor && T >= 0.9 && IUPC->HasCachedInventorySnapshot())
+		{
+			for (const FIU_InventoryItemView& Item : IUPC->GetCachedInventorySnapshot().BagItems)
+			{
+				if (Item.Category == TEXT("EQUIPMENT") && Item.RequiredLevel <= CurLv)
+				{
+					bStep4EquippedStarterArmor = true;
+					IUPC->Server_RequestEquipItem(Item.InstanceID);
+					break;
+				}
+			}
+		}
+
+		if (IUPC && NetDemoClientRole == 1)
+		{
+			const bool bOpenStarterBag = (T >= 1.2 && T <= 2.7);
+			if (IUPC->IsInventoryPanelVisible() != bOpenStarterBag)
+			{
+				IUPC->SetInventoryPanelVisible(bOpenStarterBag, false);
+			}
+		}
+
+		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
+		{
+			SteerPlayerToward(Player, RawPC, Ally->GetActorLocation(), 210.0f, false, false);
+		}
+		else
+		{
+			Player->ApplyLookInput(FVector2D(0.80f, 0.0f));
+		}
+	}
+	else if (T < 7.2)
+	{
+		if (LastTriggeredStage != 412)
+		{
+			LastTriggeredStage = 412;
+			if (IUPC && IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
+			}
+			SetBanner(TEXT("STEP 4 [2/5]: 3D Flight -> West Raid Zone (CSPRNG Loot & Vang Hunt)"));
+			Player->StartJumpInput();
+		}
+
+		const FVector SkyTarget(-1820.0f, LaneY, 410.0f);
+		if (T < 3.25)
+		{
+			Player->StartJumpInput();
+		}
+		else if (T < 3.45)
+		{
+			Player->StopJumpInput();
+		}
+		else if (T < 5.7)
+		{
+			if (!Player->GetFlightComponent()->IsFlying())
+			{
+				Player->StartJumpInput();
+			}
+			else
+			{
+				if (Player->GetActorLocation().Z > 400.0f) { Player->StopJumpInput(); }
+				SteerPlayerToward(Player, RawPC, SkyTarget, 120.0f, true, true);
+			}
+		}
+		else
+		{
+			Player->StopJumpInput();
+			Player->StopSprintInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->StartDescendInput();
+				SteerPlayerToward(Player, RawPC, RaidAnchor, 90.0f, false, false);
+			}
+			else
+			{
+				Player->StopDescendInput();
+			}
+		}
+	}
+	else if (T < 16.5 && (CoinBal < 260 || CurLv < 2))
+	{
+		if (LastTriggeredStage != 413)
+		{
+			LastTriggeredStage = 413;
+			Player->StopDescendInput();
+			Player->StopJumpInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+			SetBanner(TEXT("STEP 4 [3/5]: Defeat Raiders -> CSPRNG Vang + Personal Loot + 1.5x Dame SM/TN!"));
+		}
+
+		AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
+		if (!TargetEnemy)
+		{
+			TargetEnemy = FindClosestLivingEnemy(Player->GetActorLocation());
+		}
+
+		if (TargetEnemy && !TargetEnemy->IsDead())
+		{
+			if (Player->GetTargetingComponent()->GetLockedTarget() != TargetEnemy)
+			{
+				Player->GetTargetingComponent()->SetLockedTarget(TargetEnemy);
+			}
+			SteerPlayerToward(Player, RawPC, TargetEnemy->GetActorLocation(), 140.0f, true, false);
+			if (ElapsedSeconds >= NextActionCooldownTime)
+			{
+				const float DistE = FVector::Dist2D(Player->GetActorLocation(), TargetEnemy->GetActorLocation());
+				if (DistE > 220.0f)
+				{
+					Player->KiBlastInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.50;
+				}
+				else
+				{
+					Player->MeleeAttackInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.21;
+				}
+			}
+		}
+		else
+		{
+			SteerPlayerToward(Player, RawPC, RaidAnchor, 80.0f, true, false);
+		}
+	}
+	else if (T < 20.6)
+	{
+		if (LastTriggeredStage != 414)
+		{
+			LastTriggeredStage = 414;
+			Player->StopDescendInput();
+			Player->StopJumpInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+			SetBanner(TEXT("STEP 4 [4/5]: Use Dau Than [4], Equip Looted Gear & Enhance +1/+2!"));
+		}
+
+		if (IUPC && !bStep4UsedElixirAndEquippedLoot)
+		{
+			bStep4UsedElixirAndEquippedLoot = true;
+			IUPC->Server_RequestUseConsumable(TEXT(""));
+
+			if (PoolTN >= 150)
+			{
+				IUPC->Server_RequestAllocatePotential(EIU_PotentialStatType::AttackPower);
+			}
+
+			if (IUPC->HasCachedInventorySnapshot())
+			{
+				TSet<FString> EquippedSlotsSeen;
+				for (const FIU_InventoryItemView& Eq : IUPC->GetCachedInventorySnapshot().EquippedItems)
+				{
+					EquippedSlotsSeen.Add(Eq.EquippedSlotID);
+				}
+				for (const FIU_InventoryItemView& BagItem : IUPC->GetCachedInventorySnapshot().BagItems)
+				{
+					if (BagItem.Category == TEXT("EQUIPMENT") && BagItem.RequiredLevel <= CurLv && !EquippedSlotsSeen.Contains(BagItem.EquipSlot))
+					{
+						EquippedSlotsSeen.Add(BagItem.EquipSlot);
+						IUPC->Server_RequestEquipItem(BagItem.InstanceID);
+					}
+				}
+			}
+		}
+
+		if (IUPC && !bStep4EnhancedArmorOnce && T >= 18.2 && IUPC->HasCachedInventorySnapshot() && CoinBal >= 100)
+		{
+			for (const FIU_InventoryItemView& Eq : IUPC->GetCachedInventorySnapshot().EquippedItems)
+			{
+				if (Eq.MaxEnhanceLevel > 0 && Eq.EnhanceLevel < Eq.MaxEnhanceLevel)
+				{
+					bStep4EnhancedArmorOnce = true;
+					IUPC->Server_RequestEnhanceItem(Eq.InstanceID);
+					break;
+				}
+			}
+		}
+
+		if (IUPC && bStep4EnhancedArmorOnce && !bStep4EnhancedArmorTwice && T >= 19.4 && IUPC->HasCachedInventorySnapshot() && CoinBal >= 150)
+		{
+			for (const FIU_InventoryItemView& Eq : IUPC->GetCachedInventorySnapshot().EquippedItems)
+			{
+				if (Eq.MaxEnhanceLevel > 0 && Eq.EnhanceLevel < Eq.MaxEnhanceLevel)
+				{
+					bStep4EnhancedArmorTwice = true;
+					IUPC->Server_RequestEnhanceItem(Eq.InstanceID);
+					break;
+				}
+			}
+		}
+
+		const FVector CheckpointSpot(-320.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
+		SteerPlayerToward(Player, RawPC, CheckpointSpot, 80.0f, true, false);
+	}
+	else
+	{
+		if (LastTriggeredStage != 415)
+		{
+			LastTriggeredStage = 415;
+		}
+
+		if (IUPC && NetDemoClientRole == 1)
+		{
+			const bool bShowFinalModal = (T >= 21.0 && T <= 24.8);
+			if (IUPC->IsInventoryPanelVisible() != bShowFinalModal)
+			{
+				IUPC->SetInventoryPanelVisible(bShowFinalModal, false);
+			}
+		}
+
+		const FVector CheckpointSpot(-320.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
+		if (FVector::Dist2D(Player->GetActorLocation(), CheckpointSpot) > 105.0f)
+		{
+			SteerPlayerToward(Player, RawPC, CheckpointSpot, 80.0f, true, false);
+		}
+		else
+		{
+			Player->StopSprintInput();
+			Player->ApplyMovementInput(FVector2D::ZeroVector);
+			Player->ApplyLookInput(FVector2D(0.55f, 0.0f));
+		}
+
+		SetBanner(FString::Printf(
+			TEXT("STEP 4 [5/5]: %s Lv.%d | Vang:%lld | Equip:%d/8 | HP %.0f | Atk %.0f | Giap %.0f -> LOGOUT!"),
+			*CharName,
+			CurLv,
+			CoinBal,
+			EqCount,
+			Attr ? Attr->GetMaxHP() : 200.0f,
+			Attr ? Attr->GetAttackPower() : 100.0f,
+			Attr ? Attr->GetDefense() : 20.0f));
 	}
 }
 

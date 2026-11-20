@@ -21,6 +21,7 @@ void UIU_AttributeComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(UIU_AttributeComponent, MaxKi);
 	DOREPLIFETIME(UIU_AttributeComponent, AttackPowerMultiplier);
 	DOREPLIFETIME(UIU_AttributeComponent, AttackPower);
+	DOREPLIFETIME(UIU_AttributeComponent, Defense);
 	DOREPLIFETIME(UIU_AttributeComponent, CurrentHP);
 	DOREPLIFETIME(UIU_AttributeComponent, CurrentKi);
 	DOREPLIFETIME(UIU_AttributeComponent, bIsDead);
@@ -147,13 +148,27 @@ void UIU_AttributeComponent::ResetAttributesToFull()
 	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
 }
 
+float UIU_AttributeComponent::ComputeMitigatedDamage(float RawDamage, float TargetDefense)
+{
+	if (RawDamage <= 0.0f)
+	{
+		return 0.0f;
+	}
+	if (TargetDefense <= 0.0f || !FMath::IsFinite(TargetDefense))
+	{
+		return RawDamage;
+	}
+	return FMath::Max(1.0f, RawDamage * (100.0f / (100.0f + TargetDefense)));
+}
+
 void UIU_AttributeComponent::ApplyPersistedVitals(
 	float InMaxHP,
 	float InCurrentHP,
 	float InMaxKi,
 	float InCurrentKi,
 	float InAttackMultiplier,
-	float InAttackPower)
+	float InAttackPower,
+	float InDefense)
 {
 	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
@@ -180,6 +195,13 @@ void UIU_AttributeComponent::ApplyPersistedVitals(
 		AttackPowerMultiplier = FMath::Clamp(InAttackMultiplier, 0.1f, 10000.0f);
 		AttackPower = AttackPowerMultiplier * 100.0f;
 	}
+
+	if (InDefense >= 0.0f && FMath::IsFinite(InDefense))
+	{
+		Defense = FMath::Clamp(InDefense, 0.0f, 100000.0f);
+		OnDefenseChanged.Broadcast(Defense);
+	}
+
 	bIsDead = false;
 
 	UpdateKiRegenTimerState();
@@ -253,6 +275,11 @@ void UIU_AttributeComponent::OnRep_MaxKi(float OldMaxKi)
 void UIU_AttributeComponent::OnRep_AttackPower(float OldAttackPower)
 {
 	OnAttackPowerChanged.Broadcast(AttackPower);
+}
+
+void UIU_AttributeComponent::OnRep_Defense(float OldDefense)
+{
+	OnDefenseChanged.Broadcast(Defense);
 }
 
 void UIU_AttributeComponent::OnRep_CurrentHP(float OldHP)

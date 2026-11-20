@@ -9,7 +9,10 @@
 #include "UI/IU_HUDManager.h"
 #include "UI/IU_LoginCharacterWidget.h"
 #include "UI/IU_PotentialUpgradeWidget.h"
+#include "UI/IU_InventoryEquipmentWidget.h"
 #include "CoreGlobals.h"
+#include "HAL/PlatformTime.h"
+#include "Templates/Atomic.h"
 #include "Engine/GameInstance.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/LocalPlayer.h"
@@ -326,9 +329,12 @@ void AIU_PlayerController::SetupInputComponent()
 		InputComponent->BindKey(EKeys::F4, IE_Pressed, this, &AIU_PlayerController::HandleToggleGlobalPvP);
 		InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &AIU_PlayerController::HandleToggleAuthPanel);
 		InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AIU_PlayerController::HandleTogglePotentialPanel);
+		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AIU_PlayerController::HandleToggleInventoryPanel);
+		InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AIU_PlayerController::HandleToggleInventoryPanel);
 		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeHP);
 		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeKi);
 		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeAtk);
+		InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AIU_PlayerController::HandleQuickUseElixir);
 	}
 }
 
@@ -580,6 +586,10 @@ void AIU_PlayerController::SetPotentialUpgradePanelVisible(bool bVisible, bool b
 		return;
 	}
 
+	if (bVisible && IsInventoryPanelVisible())
+	{
+		SetInventoryPanelVisible(false, false);
+	}
 	if (bVisible)
 	{
 		ActivePotentialWidget->RefreshBindings();
@@ -694,9 +704,11 @@ void AIU_PlayerController::Server_RequestAllocatePotential_Implementation(EIU_Po
 								Updated.MaxEnergy,
 								Updated.Energy,
 								Updated.AttackPowerMultiplier,
-								Updated.AttackPower);
+								Updated.AttackPower,
+								Updated.Defense);
 						}
 					}
+					PC->Server_RequestRefreshInventory();
 				}
 
 				UE_LOG(LogInfiniteUniverse, Display,
@@ -717,4 +729,470 @@ void AIU_PlayerController::Server_RequestAllocatePotential_Implementation(EIU_Po
 	{
 		IUPS->TryOfflineAllocatePotential(StatType, ControlledPawn);
 	}
+}
+
+namespace
+{
+	static TAtomic<uint64> GServerEconOpSeq{ 0 };
+}
+
+bool AIU_PlayerController::IsInventoryPanelVisible() const
+{
+	return ActiveInventoryWidget && ActiveInventoryWidget->GetVisibility() == ESlateVisibility::Visible;
+}
+
+void AIU_PlayerController::SetInventoryPanelVisible(bool bVisible, bool bUpdateMouseInputMode)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (bVisible && IsPotentialUpgradePanelVisible())
+	{
+		SetPotentialUpgradePanelVisible(false, false);
+	}
+	if (!ActiveInventoryWidget && bVisible)
+	{
+		ActiveInventoryWidget = CreateWidget<UIU_InventoryEquipmentWidget>(this, UIU_InventoryEquipmentWidget::StaticClass());
+		if (ActiveInventoryWidget)
+		{
+			ActiveInventoryWidget->AddToViewport(8);
+			ActiveInventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	if (!ActiveInventoryWidget)
+	{
+		return;
+	}
+
+	if (bVisible)
+	{
+		ActiveInventoryWidget->RefreshBindingsAndRebuild();
+		Server_RequestRefreshInventory();
+	}
+	ActiveInventoryWidget->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	if (bUpdateMouseInputMode)
+	{
+		bShowMouseCursor = bVisible;
+		if (bVisible)
+		{
+			FInputModeGameAndUI UIInput;
+			UIInput.SetWidgetToFocus(ActiveInventoryWidget->TakeWidget());
+			UIInput.SetHideCursorDuringCapture(false);
+			SetInputMode(UIInput);
+		}
+		else
+		{
+			FInputModeGameOnly GameInput;
+			SetInputMode(GameInput);
+		}
+	}
+}
+
+void AIU_PlayerController::HandleToggleInventoryPanel()
+{
+	SetInventoryPanelVisible(!IsInventoryPanelVisible(), true);
+}
+
+void AIU_PlayerController::HandleQuickUseElixir()
+{
+	Server_RequestUseConsumable(TEXT(""));
+}
+
+bool AIU_PlayerController::CanUseConsumableOnServer(float& OutRemainingSeconds) const
+{
+	const UWorld* W = GetWorld();
+	const double Now = W ? W->GetTimeSeconds() : FPlatformTime::Seconds();
+	const double Elapsed = Now - LastConsumableUseServerTime;
+	if (Elapsed < static_cast<double>(ConsumableCooldownSeconds))
+	{
+		OutRemainingSeconds = static_cast<float>(static_cast<double>(ConsumableCooldownSeconds) - Elapsed);
+		return false;
+	}
+	OutRemainingSeconds = 0.0f;
+	return true;
+}
+
+void AIU_PlayerController::ApplyAuthoritativeInventorySnapshotOnServer(const FIU_InventorySnapshot& Snapshot)
+{
+	if (AIU_PlayerState* PS = GetPlayerState<AIU_PlayerState>())
+	{
+		PS->ApplyAuthoritativeEconomySummary(
+			Snapshot.StandardCoin,
+			Snapshot.ElixirCount,
+			Snapshot.CrimsonOreCount,
+			Snapshot.EquippedItems.Num());
+	}
+
+	if (APawn* P = GetPawn())
+	{
+		if (UIU_AttributeComponent* Attr = P->FindComponentByClass<UIU_AttributeComponent>())
+		{
+			Attr->ApplyPersistedVitals(
+				Snapshot.MaxHP,
+				Snapshot.HP,
+				Snapshot.MaxEnergy,
+				Snapshot.Energy,
+				Snapshot.AttackPowerMultiplier,
+				Snapshot.AttackPower,
+				Snapshot.Defense);
+		}
+	}
+
+	Client_ReceiveInventorySnapshot(Snapshot);
+}
+
+void AIU_PlayerController::Client_ReceiveInventorySnapshot_Implementation(const FIU_InventorySnapshot& Snapshot)
+{
+	CachedInventorySnapshot = Snapshot;
+	bHasCachedInventorySnapshot = true;
+
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->ApplyInventorySnapshot(Snapshot);
+	}
+	if (!Snapshot.ActionResult.IsEmpty())
+	{
+		if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+		{
+			const bool bSuccess = !Snapshot.bHasEnhanceOutcome || Snapshot.bEnhanceSucceeded;
+			IUHUD->NotifyInventoryToast(Snapshot.ActionResult, bSuccess);
+		}
+	}
+}
+
+void AIU_PlayerController::Client_NotifyLootDropped_Implementation(
+	int64 CoinsGranted,
+	const TArray<FString>& DroppedItemLabels,
+	bool bBagFullSkipped)
+{
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		IUHUD->NotifyLootPopup(CoinsGranted, DroppedItemLabels, bBagFullSkipped);
+	}
+}
+
+void AIU_PlayerController::Client_NotifyInventoryFeedback_Implementation(const FString& Message, bool bIsError)
+{
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->SetFeedbackMessage(Message, bIsError);
+	}
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		IUHUD->NotifyInventoryToast(Message, !bIsError);
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshInventory_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->FetchCharacterInventory(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString&)
+		{
+			if (bSuccess)
+			{
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestEquipItem_Implementation(const FString& ItemInstanceID)
+{
+	const FString CleanID = ItemInstanceID.TrimStartAndEnd();
+	if (CleanID.IsEmpty())
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->EquipInventoryItem(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		CleanID,
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestUnequipSlot_Implementation(const FString& SlotID)
+{
+	const FString CleanSlot = SlotID.TrimStartAndEnd();
+	if (CleanSlot.IsEmpty())
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->UnequipEquipmentSlot(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		CleanSlot,
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestUseConsumable_Implementation(const FString& OptionalItemInstanceID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	APawn* ControlledPawn = GetPawn();
+	if (!IUPS || !ControlledPawn)
+	{
+		return;
+	}
+
+	float RemainingCD = 0.0f;
+	if (!CanUseConsumableOnServer(RemainingCD))
+	{
+		Client_NotifyInventoryFeedback(
+			FString::Printf(TEXT("Dau Than dang hoi chieu (con %.1fs)!"), RemainingCD),
+			true);
+		return;
+	}
+
+	const double PrevUseTime = LastConsumableUseServerTime;
+	const UWorld* W = GetWorld();
+	LastConsumableUseServerTime = W ? W->GetTimeSeconds() : FPlatformTime::Seconds();
+
+	if (IUPS->HasValidBackendLease())
+	{
+		UGameInstance* GI = GetGameInstance();
+		UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+		if (!Backend)
+		{
+			return;
+		}
+
+		TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+		Backend->UseInventoryConsumable(
+			IUPS->GetPersistedCharacterUUID(),
+			IUPS->GetActiveFencingEpoch(),
+			OptionalItemInstanceID.TrimStartAndEnd(),
+			[WeakPC, PrevUseTime](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+			{
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					if (bSuccess)
+					{
+						PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+					}
+					else
+					{
+						PC->LastConsumableUseServerTime = PrevUseTime;
+						PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+					}
+				}
+			});
+	}
+	else if (!GIsAutomationTesting)
+	{
+		if (IUPS->TryOfflineUseElixir(ControlledPawn))
+		{
+			Client_NotifyInventoryFeedback(TEXT("Da dung Dau Than (+150 HP & +150 Ki)!"), false);
+		}
+		else
+		{
+			LastConsumableUseServerTime = PrevUseTime;
+			Client_NotifyInventoryFeedback(TEXT("Khong con Dau Than trong tui do!"), true);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestToggleItemLock_Implementation(const FString& ItemInstanceID, bool bLocked)
+{
+	const FString CleanID = ItemInstanceID.TrimStartAndEnd();
+	if (CleanID.IsEmpty())
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->ToggleInventoryItemLock(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		CleanID,
+		bLocked,
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestSellItem_Implementation(const FString& ItemInstanceID, int32 Quantity)
+{
+	const FString CleanID = ItemInstanceID.TrimStartAndEnd();
+	if (CleanID.IsEmpty() || Quantity <= 0)
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	const FString IdemKey = FString::Printf(
+		TEXT("srv_sell_%s_ep%lld_seq%llu"),
+		*IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		++GServerEconOpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->SellInventoryItem(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		CleanID,
+		Quantity,
+		IdemKey,
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestEnhanceItem_Implementation(const FString& ItemInstanceID)
+{
+	const FString CleanID = ItemInstanceID.TrimStartAndEnd();
+	if (CleanID.IsEmpty())
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease())
+	{
+		return;
+	}
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend)
+	{
+		return;
+	}
+
+	const FString IdemKey = FString::Printf(
+		TEXT("srv_enh_%s_ep%lld_seq%llu"),
+		*IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		++GServerEconOpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->EnhanceInventoryEquipment(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		CleanID,
+		IdemKey,
+		[WeakPC](bool bSuccess, const FIU_InventorySnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(Snap);
+				}
+				else
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				}
+			}
+		});
 }

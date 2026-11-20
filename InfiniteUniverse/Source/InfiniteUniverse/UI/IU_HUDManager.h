@@ -57,6 +57,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IU|UI")
 	void SetShowcaseStepBanner(const FString& InBannerText);
 
+	/** Displays floating 3D->2D +Vang & Personal Loot drop notifications on the owning client. */
+	void NotifyLootPopup(int64 CoinsGranted, const TArray<FString>& DroppedItemLabels, bool bBagFullSkipped);
+
+	/** Displays an inventory/equipment/consumable/enhancement action toast at the top center. */
+	void NotifyInventoryToast(const FString& Message, bool bSuccess = true);
+
 	UFUNCTION(BlueprintPure, Category = "IU|UI")
 	UIU_PlayerHUDWidget* GetPlayerHUDWidget() const { return ActiveHUDWidget; }
 

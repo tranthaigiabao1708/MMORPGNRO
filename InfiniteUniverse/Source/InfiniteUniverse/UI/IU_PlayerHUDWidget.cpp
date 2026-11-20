@@ -27,7 +27,7 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		{
 			BoxSlot->SetAnchors(FAnchors(0.0f, 0.0f));
 			BoxSlot->SetPosition(FVector2D(36.0f, 18.0f));
-			BoxSlot->SetSize(FVector2D(430.0f, 198.0f));
+			BoxSlot->SetSize(FVector2D(475.0f, 202.0f));
 		}
 
 		auto StyleHUDText = [](UTextBlock* TB, const FLinearColor& Col, int32 FontPt = 13)
@@ -79,8 +79,8 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		}
 
 		PotentialValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PotentialValueText"));
-		StyleHUDText(PotentialValueText, FLinearColor(0.35f, 1.0f, 0.72f), 13);
-		PotentialValueText->SetText(FText::FromString(TEXT("TIEM NANG: 0  |  SUC DANH: 100  [P / 1,2,3]")));
+		StyleHUDText(PotentialValueText, FLinearColor(0.35f, 1.0f, 0.72f), 12);
+		PotentialValueText->SetText(FText::FromString(TEXT("TN: 0 | ATK: 100 | GIAP: 20 | VANG: 0 | DAU[4]: 0")));
 		if (UVerticalBoxSlot* PotSlot = VitalsBox->AddChildToVerticalBox(PotentialValueText))
 		{
 			PotSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 3.0f));
@@ -120,6 +120,7 @@ void UIU_PlayerHUDWidget::BindToPlayerPawn(APawn* NewPawn)
 		Attr->OnHPChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleHPChanged);
 		Attr->OnKiChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleKiChanged);
 		Attr->OnAttackPowerChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleAttackPowerChanged);
+		Attr->OnDefenseChanged.AddDynamic(this, &UIU_PlayerHUDWidget::HandleDefenseChanged);
 
 		HandleHPChanged(Attr->GetHP(), Attr->GetMaxHP(), 0.0f);
 		HandleKiChanged(Attr->GetKi(), Attr->GetMaxKi(), 0.0f);
@@ -164,11 +165,13 @@ void UIU_PlayerHUDWidget::EnsurePlayerStateBound(APawn* CurrentPawn)
 	{
 		OldPS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 		OldPS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
+		OldPS->OnCharacterEconomyChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
 	}
 
 	BoundPlayerState = IUPS;
 	IUPS->OnCharacterEXPChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 	IUPS->OnCharacterPotentialChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
+	IUPS->OnCharacterEconomyChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
 	HandleCharacterEXPChanged(IUPS->GetCurrentEXP(), IUPS->GetNextLevelEXP(), IUPS->GetCharacterLevel());
 	RefreshPotentialReadout();
 }
@@ -180,6 +183,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 		Attr->OnHPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleHPChanged);
 		Attr->OnKiChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleKiChanged);
 		Attr->OnAttackPowerChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleAttackPowerChanged);
+		Attr->OnDefenseChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleDefenseChanged);
 	}
 	if (UIU_CombatComponent* Combat = BoundCombatComp.Get())
 	{
@@ -195,6 +199,7 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 	{
 		PS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
 		PS->OnCharacterPotentialChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterPotentialChanged);
+		PS->OnCharacterEconomyChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEconomyChanged);
 	}
 
 	BoundAttributeComp.Reset();
@@ -254,7 +259,17 @@ void UIU_PlayerHUDWidget::HandleAttackPowerChanged(float NewAttackPower)
 	RefreshPotentialReadout();
 }
 
+void UIU_PlayerHUDWidget::HandleDefenseChanged(float NewDefense)
+{
+	RefreshPotentialReadout();
+}
+
 void UIU_PlayerHUDWidget::HandleCharacterPotentialChanged(int64 PotentialPoints, int64 NextHPCost, int64 NextKiCost, int64 NextAtkCost)
+{
+	RefreshPotentialReadout();
+}
+
+void UIU_PlayerHUDWidget::HandleCharacterEconomyChanged(int64 StandardCoin, int32 ElixirCount, int32 CrimsonOreCount, int32 EquippedCount)
 {
 	RefreshPotentialReadout();
 }
@@ -266,9 +281,12 @@ void UIU_PlayerHUDWidget::RefreshPotentialReadout()
 		return;
 	}
 	const int64 PoolTN = BoundPlayerState.IsValid() ? BoundPlayerState->GetPotentialPoints() : 0;
+	const int64 Coin = BoundPlayerState.IsValid() ? BoundPlayerState->GetStandardCoin() : 0;
+	const int32 Elixirs = BoundPlayerState.IsValid() ? BoundPlayerState->GetElixirCount() : 0;
 	const float Atk = BoundAttributeComp.IsValid() ? BoundAttributeComp->GetAttackPower() : 100.0f;
+	const float Def = BoundAttributeComp.IsValid() ? BoundAttributeComp->GetDefense() : 20.0f;
 	PotentialValueText->SetText(FText::FromString(
-		FString::Printf(TEXT("TIEM NANG: %lld  |  SUC DANH: %.0f  [P / 1,2,3]"), PoolTN, Atk)));
+		FString::Printf(TEXT("TN: %lld | ATK: %.0f | GIAP: %.0f | VANG: %lld | DAU[4]: %d"), PoolTN, Atk, Def, Coin, Elixirs)));
 }
 
 void UIU_PlayerHUDWidget::HandleCombatStateChanged(EIU_CombatState OldState, EIU_CombatState NewState)

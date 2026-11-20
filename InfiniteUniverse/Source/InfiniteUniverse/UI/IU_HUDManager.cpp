@@ -58,6 +58,70 @@ void AIU_HUDManager::SetShowcaseStepBanner(const FString& InBannerText)
 	ShowcaseStepBannerText = InBannerText;
 }
 
+void AIU_HUDManager::NotifyLootPopup(int64 CoinsGranted, const TArray<FString>& DroppedItemLabels, bool bBagFullSkipped)
+{
+	UWorld* World = GetWorld();
+	APawn* OwningPawn = GetOwningPawn();
+	if (!World)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+
+	if (OwningPawn && CoinsGranted > 0)
+	{
+		FIU_FloatingCombatText CoinPop;
+		CoinPop.WorldLocation = OwningPawn->GetActorLocation() + FVector(FMath::FRandRange(-22.0f, 22.0f), FMath::FRandRange(-22.0f, 22.0f), 108.0f);
+		CoinPop.Label = FString::Printf(TEXT("+%lld VANG!"), CoinsGranted);
+		CoinPop.Color = FLinearColor(1.0f, 0.86f, 0.16f, 1.0f);
+		CoinPop.SpawnWorldTime = Now;
+		CoinPop.Duration = 1.45f;
+		CoinPop.Scale = 1.42f;
+		FloatingTexts.Add(CoinPop);
+	}
+
+	if (OwningPawn && DroppedItemLabels.Num() > 0)
+	{
+		FIU_FloatingCombatText ItemPop;
+		ItemPop.WorldLocation = OwningPawn->GetActorLocation() + FVector(0.0f, 0.0f, 126.0f);
+		ItemPop.Label = FString::Printf(TEXT("LOOT: %s"), *DroppedItemLabels[0]);
+		ItemPop.Color = FLinearColor(0.45f, 1.0f, 0.65f, 1.0f);
+		ItemPop.SpawnWorldTime = Now;
+		ItemPop.Duration = 1.65f;
+		ItemPop.Scale = 1.35f;
+		FloatingTexts.Add(ItemPop);
+	}
+
+	FString Summary = FString::Printf(TEXT("[ LOOT DROP ]  +%lld Vang"), CoinsGranted);
+	if (DroppedItemLabels.Num() > 0)
+	{
+		Summary += FString::Printf(TEXT("  |  %s"), *FString::Join(DroppedItemLabels, TEXT(", ")));
+	}
+	if (bBagFullSkipped)
+	{
+		Summary += TEXT("  [TUI DO DAY 48/48!]");
+	}
+	ActiveCenterToastText = Summary;
+	ActiveCenterToastColor = bBagFullSkipped
+		? FLinearColor(1.0f, 0.52f, 0.22f, 1.0f)
+		: FLinearColor(1.0f, 0.88f, 0.25f, 1.0f);
+	CenterToastExpireTime = Now + 3.2;
+}
+
+void AIU_HUDManager::NotifyInventoryToast(const FString& Message, bool bSuccess)
+{
+	UWorld* World = GetWorld();
+	if (!World || Message.IsEmpty())
+	{
+		return;
+	}
+	ActiveCenterToastText = FString::Printf(TEXT("[ HANH TRANG ]  %s"), *Message);
+	ActiveCenterToastColor = bSuccess
+		? FLinearColor(0.40f, 1.0f, 0.70f, 1.0f)
+		: FLinearColor(1.0f, 0.42f, 0.32f, 1.0f);
+	CenterToastExpireTime = World->GetTimeSeconds() + 3.2;
+}
+
 void AIU_HUDManager::RefreshCombatEventBindings(APawn* OwningPawn)
 {
 	if (ActiveHUDWidget && OwningPawn)
@@ -627,11 +691,11 @@ void AIU_HUDManager::DrawHUD()
 		}
 	}
 
-	// 6. Live Gameplay & Multiplayer Debug Telemetry Overlay (Top-Right, toggle with F3 — Criterion 1.7 & Step 2)
+	// 6. Live Gameplay & Multiplayer Debug Telemetry Overlay (Top-Right, toggle with F3 — Criterion 1.7 & Step 2..4)
 	if (bShowDebugTelemetry && Canvas->ClipX > 640.0f)
 	{
-		const float PanelW = 398.0f;
-		const float PanelH = 152.0f;
+		const float PanelW = 408.0f;
+		const float PanelH = 156.0f;
 		const float PX = Canvas->ClipX - PanelW - 24.0f;
 		const float PY = 24.0f;
 
@@ -642,7 +706,7 @@ void AIU_HUDManager::DrawHUD()
 		const double UsedMemMB = static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0);
 
 		const FVector Vel = OwningPawn->GetVelocity();
-		float WalkCfg = 520.0f, SprintCfg = 880.0f, FlyCfg = 1575.0f, AtkMul = 1.0f, FlatAtk = 100.0f;
+		float WalkCfg = 520.0f, SprintCfg = 880.0f, FlyCfg = 1575.0f, AtkMul = 1.0f, FlatAtk = 100.0f, FlatDef = 20.0f;
 		if (const AIU_PlayerCharacter* PChar = Cast<AIU_PlayerCharacter>(OwningPawn))
 		{
 			if (const UIU_MovementComponent* MC = PChar->GetIUMovementComponent())
@@ -658,6 +722,7 @@ void AIU_HUDManager::DrawHUD()
 			{
 				AtkMul = AC->GetAttackPowerMultiplier();
 				FlatAtk = AC->GetAttackPower();
+				FlatDef = AC->GetDefense();
 			}
 		}
 
@@ -671,8 +736,8 @@ void AIU_HUDManager::DrawHUD()
 		int32 RepEnemyKills = DefeatedEnemyCount;
 		int32 RepPvPKills = 0;
 		int32 RepDeaths = PlayerDefeatedCount;
-		int32 CharLv = 1;
-		int64 CurEXP = 0, NextEXP = 100, PoolTN = 0, EpochNum = 0;
+		int32 CharLv = 1, EqCount = 0;
+		int64 CurEXP = 0, NextEXP = 100, PoolTN = 0, CoinBal = 0, EpochNum = 0;
 		FString CharDisplayName = TEXT("OfflineDev");
 		if (const APlayerState* RawPS = OwningPawn->GetPlayerState())
 		{
@@ -686,6 +751,8 @@ void AIU_HUDManager::DrawHUD()
 				CurEXP = IUPS->GetCurrentEXP();
 				NextEXP = IUPS->GetNextLevelEXP();
 				PoolTN = IUPS->GetPotentialPoints();
+				CoinBal = IUPS->GetStandardCoin();
+				EqCount = IUPS->GetEquippedItemCount();
 				EpochNum = IUPS->GetActiveFencingEpoch();
 				if (!IUPS->GetPersistedCharacterName().IsEmpty())
 				{
@@ -705,9 +772,9 @@ void AIU_HUDManager::DrawHUD()
 		DrawText(FString::Printf(TEXT("[DEBUG TELEMETRY - F3]  %.0f FPS (%.2f ms) | RAM %.0f MB"), FPS, FrameMs, UsedMemMB), HeaderCol, PX + 10.0f, PY + 8.0f, HUDFont, 0.82f);
 		DrawText(FString::Printf(TEXT("Net: %s | Ping: %.0f ms | Online: %d | %s"), NetModeStr, PingMs, OnlineCount, ZoneLabel), NetCol, PX + 10.0f, PY + 31.0f, HUDFont, 0.80f);
 		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 54.0f, HUDFont, 0.80f);
-		DrawText(FString::Printf(TEXT("Cfg: SucDanh %.0f (x%.2f) | Walk %.0f | Sprint %.0f | Fly %.0f"), FlatAtk, AtkMul, WalkCfg, SprintCfg, FlyCfg), LineCol, PX + 10.0f, PY + 77.0f, HUDFont, 0.78f);
+		DrawText(FString::Printf(TEXT("Cfg: Atk %.0f (x%.2f) | Giap %.0f | Equip %d/8 | Fly %.0f"), FlatAtk, AtkMul, FlatDef, EqCount, FlyCfg), LineCol, PX + 10.0f, PY + 77.0f, HUDFont, 0.78f);
 		DrawText(FString::Printf(TEXT("AI: %d/%d Alive | PvE Kills: %d | PvP Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, RepEnemyKills, RepPvPKills, RepDeaths), LineCol, PX + 10.0f, PY + 100.0f, HUDFont, 0.80f);
-		DrawText(FString::Printf(TEXT("DB: %s Lv.%d (%lld/%lld) | TN: %lld | Ep#%lld (P/F5)"), *CharDisplayName, CharLv, CurEXP, NextEXP, PoolTN, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.76f);
+		DrawText(FString::Printf(TEXT("DB: %s Lv.%d | TN:%lld | Vang:%lld | Ep#%lld (I/P/4)"), *CharDisplayName, CharLv, PoolTN, CoinBal, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.76f);
 	}
 
 	// 7. Compact Bottom-Left Controls Quick-Bar
@@ -715,13 +782,13 @@ void AIU_HUDManager::DrawHUD()
 	{
 		const float LegendX = 36.0f;
 		const float LegendY = Canvas->ClipY - 52.0f;
-		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, FMath::Min(1020.0f, Canvas->ClipX - 52.0f), 30.0f);
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, FMath::Min(1080.0f, Canvas->ClipX - 52.0f), 30.0f);
 		DrawText(
-			TEXT("WASD: Move | Space x2: Fly | LMB/Q: Attack | RMB: Evade | P / 1,2,3: +Potential Stats | F3: Debug | F4: PvP | F5: Login"),
+			TEXT("WASD: Move | Space x2: Fly | LMB/Q: Attack | RMB: Evade | I: Bag/Equip | 4: DauThan | P/1,2,3: +Stats | F3: Debug"),
 			FLinearColor(0.86f, 0.93f, 1.0f, 0.90f),
 			LegendX,
 			LegendY,
 			HUDFont,
-			0.80f);
+			0.78f);
 	}
 }

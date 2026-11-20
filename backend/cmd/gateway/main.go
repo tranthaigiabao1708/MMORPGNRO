@@ -18,6 +18,10 @@ import (
 	"github.com/infinite-universe/backend/internal/modules/account"
 	"github.com/infinite-universe/backend/internal/modules/auth"
 	"github.com/infinite-universe/backend/internal/modules/character"
+	"github.com/infinite-universe/backend/internal/modules/economy"
+	"github.com/infinite-universe/backend/internal/modules/gamedata"
+	"github.com/infinite-universe/backend/internal/modules/inventory"
+	"github.com/infinite-universe/backend/internal/modules/loot"
 	"github.com/infinite-universe/backend/internal/modules/world"
 	"github.com/infinite-universe/backend/internal/platform/config"
 	iunats "github.com/infinite-universe/backend/internal/platform/nats"
@@ -171,14 +175,26 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("init auth manager: %w", err)
 		}
+		catalog, err := gamedata.LoadDefaultCatalog()
+		if err != nil {
+			return fmt.Errorf("load gamedata catalog: %w", err)
+		}
+		if err := catalog.SyncItemDefinitions(ctx, pgPool); err != nil {
+			return fmt.Errorf("sync item_definitions: %w", err)
+		}
 		accountSvc := account.NewService(pgPool)
 		characterSvc := character.NewService(pgPool)
+		economySvc := economy.NewService(pgPool)
+		inventorySvc := inventory.NewService(pgPool, catalog)
+		lootSvc := loot.NewService(pgPool, catalog)
 		worldCoord := world.NewCoordinator(rdb, cfg.DefaultJoinZone, cfg.DedicatedServerPublicAddr)
 		apiHandler := httpapi.NewHandler(accountSvc, authMgr, characterSvc, worldCoord, logger)
+		apiHandler.AttachStep4Modules(catalog, economySvc, inventorySvc, lootSvc)
 		apiHandler.RegisterRoutes(edgeMux)
-		logger.Info("step3 edge & internal persistence routes registered",
+		logger.Info("step3-4 edge, persistence, inventory, loot & economy routes registered",
 			slog.String("dedicated_server_addr", cfg.DedicatedServerPublicAddr),
 			slog.String("default_zone", cfg.DefaultJoinZone),
+			slog.Int("catalog_items", len(catalog.Items)),
 		)
 	}
 

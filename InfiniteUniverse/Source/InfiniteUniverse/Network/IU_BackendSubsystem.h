@@ -39,6 +39,9 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	int64 PotentialPoints = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int64 StandardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	FString ZoneID = TEXT("zone.p01_west_hub");
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
@@ -70,6 +73,9 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	float AttackPowerMultiplier = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	float Defense = 20.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	int32 HPUpgrades = 0;
@@ -119,6 +125,168 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 };
 
 /**
+ * Replicated/NetSerializable view of a single inventory or equipped item instance from Go Backend.
+ */
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_InventoryItemView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString InstanceID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString ItemDefID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString Category;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString EquipSlot;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString EquippedSlotID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString Rarity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 RequiredLevel = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 BagSlotIndex = -1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 StackCount = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 MaxStack = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 EnhanceLevel = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 MaxEnhanceLevel = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 EnhancePity = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int64 SellPriceCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	bool bIsBound = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	bool bIsPlayerLocked = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString StatSummaryText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int64 NextEnhanceCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 NextEnhanceMat = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 NextEnhanceBP = 0;
+};
+
+/**
+ * Complete authoritative Step 4 snapshot (Wallet + 48-Slot Bag + 8-Slot Equipment + Compiled Live Stats).
+ */
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_InventorySnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString CharacterID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 Level = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int64 StandardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float HP = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float MaxHP = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float Energy = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float MaxEnergy = 200.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float AttackPower = 100.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float AttackPowerMultiplier = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	float Defense = 20.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 UsedBagSlots = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 MaxBagSlots = 48;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 ElixirCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int32 CrimsonOreCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	FString ActionResult;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	bool bHasEnhanceOutcome = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	bool bEnhanceSucceeded = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	int64 CoinsDelta = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	TArray<FIU_InventoryItemView> BagItems;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Inventory")
+	TArray<FIU_InventoryItemView> EquippedItems;
+};
+
+/**
+ * Authoritative CSPRNG Monster Personal Loot & Vang summary returned by /internal/v1/loot/roll-mob.
+ */
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_MobLootDropSummary
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Loot")
+	int64 CoinsGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Loot")
+	int64 NewCoinBalance = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Loot")
+	bool bBagFullSkipped = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Loot")
+	TArray<FString> DroppedItemLabels;
+};
+
+/**
  * Payload sent from UE5 Dedicated Server to Go Backend for fenced periodic/logout saves.
  */
 struct INFINITEUNIVERSE_API FIU_CharacterSavePayload
@@ -165,7 +333,10 @@ public:
 
 	static void ComputeSHA256(const uint8* Data, SIZE_T Length, uint8 OutDigest[32]);
 	static FString ComputeHMACSHA256Hex(const FString& SecretUtf8, const FString& PayloadUtf8);
+	static FString SanitizeVietnameseForSlateASCII(const FString& InStr);
 	static bool ParseCharacterSummaryFromJson(const FString& JsonString, FIU_BackendCharacterSummary& OutSummary);
+	static bool ParseInventorySnapshotFromJson(const FString& JsonString, FIU_InventorySnapshot& OutSnapshot);
+	static bool ParseMobLootResponseFromJson(const FString& JsonString, FIU_MobLootDropSummary& OutLoot, FIU_InventorySnapshot& OutSnapshot);
 	static FString SerializeSavePayloadToJson(const FIU_CharacterSavePayload& Payload);
 
 	// ========================================================================
@@ -279,6 +450,62 @@ public:
 		const FString& CharacterID,
 		int64 FencingEpoch,
 		const FIU_CharacterSavePayload* OptionalFinalSave);
+
+	// ========================================================================
+	// Step 4 Authoritative Inventory, 8-Slot Equipment, CSPRNG Loot & Economy
+	// ========================================================================
+
+	void FetchCharacterInventory(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void EquipInventoryItem(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& ItemInstanceID,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void UnequipEquipmentSlot(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& SlotID,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void UseInventoryConsumable(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& OptionalItemInstanceID,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void ToggleInventoryItemLock(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& ItemInstanceID,
+		bool bLocked,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void SellInventoryItem(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& ItemInstanceID,
+		int32 Quantity,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void EnhanceInventoryEquipment(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& ItemInstanceID,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void RollMonsterLoot(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& SourceEntityID,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_MobLootDropSummary& LootResult, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback);
 
 private:
 	void SendJsonRequest(

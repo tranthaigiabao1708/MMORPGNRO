@@ -12,6 +12,7 @@ struct FIU_BackendCharacterSummary;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FIU_OnCharacterLevelUpSignature, int32, OldLevel, int32, NewLevel);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FIU_OnCharacterEXPChangedSignature, int64, CurrentEXP, int64, NextLevelEXP, int32, CurrentLevel);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FIU_OnCharacterPotentialChangedSignature, int64, PotentialPoints, int64, NextHPCost, int64, NextKiCost, int64, NextAtkCost);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FIU_OnCharacterEconomyChangedSignature, int64, StandardCoin, int32, ElixirCount, int32, CrimsonOreCount, int32, EquippedCount);
 
 /**
  * Replicated PlayerState for Step 2 Multiplayer session tracking & Step 3 NRO-style Level/EXP + Potential Stat Progression.
@@ -77,6 +78,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Potential")
 	int64 GetNextAtkCost() const { return NextAtkCost; }
 
+	UFUNCTION(BlueprintPure, Category = "IU|Economy")
+	int64 GetStandardCoin() const { return StandardCoin; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Economy")
+	int32 GetElixirCount() const { return ElixirCount; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Economy")
+	int32 GetCrimsonOreCount() const { return CrimsonOreCount; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Economy")
+	int32 GetEquippedItemCount() const { return EquippedItemCount; }
+
 	UFUNCTION(BlueprintPure, Category = "IU|Backend")
 	int64 GetActiveFencingEpoch() const { return ActiveFencingEpoch; }
 
@@ -109,6 +122,13 @@ public:
 	/** Standalone/PIE Offline helper: spends local Potential Points to upgrade HP/Ki/AttackPower on OwningPawn. */
 	bool TryOfflineAllocatePotential(EIU_PotentialStatType StatType, APawn* TargetPawn);
 
+	/** Server-only: updates replicated economy & inventory summary counts after authoritative Go Backend mutations. */
+	void ApplyAuthoritativeEconomySummary(int64 InStandardCoin, int32 InElixirCount, int32 InCrimsonOreCount, int32 InEquippedCount);
+
+	/** Standalone/PIE Offline helper: consumes 1 offline Elixir (+150 HP & +150 Ki) and awards offline Vang on mob kills. */
+	bool TryOfflineUseElixir(APawn* TargetPawn);
+	void AwardOfflineMobLoot(int64 OfflineCoinGain = 45);
+
 	/** Server-only: immediately invalidates local lease ownership so Logout NEVER overwrites a newer server's epoch! */
 	void MarkLeaseRevoked();
 
@@ -125,6 +145,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "IU|Potential|Events")
 	FIU_OnCharacterPotentialChangedSignature OnCharacterPotentialChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "IU|Economy|Events")
+	FIU_OnCharacterEconomyChangedSignature OnCharacterEconomyChanged;
+
 protected:
 	UFUNCTION()
 	void OnRep_CharacterLevel(int32 OldLevel);
@@ -137,6 +160,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_PotentialState();
+
+	UFUNCTION()
+	void OnRep_EconomyState();
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|PlayerState")
 	int32 EnemyKills = 0;
@@ -182,6 +208,18 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_PotentialState, Category = "IU|Potential")
 	int64 NextAtkCost = 150;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Economy")
+	int64 StandardCoin = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Economy")
+	int32 ElixirCount = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Economy")
+	int32 CrimsonOreCount = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Economy")
+	int32 EquippedItemCount = 0;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Backend")
 	int64 ActiveFencingEpoch = 0;

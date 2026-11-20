@@ -280,6 +280,7 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("current_exp"), NumVal)) { OutSummary.CurrentExp = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("next_level_exp"), NumVal)) { OutSummary.NextLevelExp = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("potential_points"), NumVal)) { OutSummary.PotentialPoints = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
+	if (RootObj->TryGetNumberField(TEXT("standard_coin"), NumVal)) { OutSummary.StandardCoin = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 
 	double PosX = 0.0, PosY = 0.0, PosZ = 112.0, Yaw = 0.0;
 	RootObj->TryGetNumberField(TEXT("pos_x"), PosX);
@@ -297,6 +298,7 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("max_energy"), NumVal)) { OutSummary.MaxEnergy = static_cast<float>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("attack_power"), NumVal)) { OutSummary.AttackPower = static_cast<float>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("attack_power_multiplier"), NumVal)) { OutSummary.AttackPowerMultiplier = static_cast<float>(NumVal); }
+	if (RootObj->TryGetNumberField(TEXT("defense"), NumVal)) { OutSummary.Defense = FMath::Max(0.0f, static_cast<float>(NumVal)); }
 
 	if (RootObj->TryGetNumberField(TEXT("hp_upgrades"), NumVal)) { OutSummary.HPUpgrades = static_cast<int32>(NumVal); }
 	if (RootObj->TryGetNumberField(TEXT("ki_upgrades"), NumVal)) { OutSummary.KiUpgrades = static_cast<int32>(NumVal); }
@@ -983,5 +985,550 @@ void UIU_BackendSubsystem::ReleaseCharacterLease(
 				UE_LOG(LogInfiniteUniverse, Warning, TEXT("[BackendSubsystem] ReleaseLease warning for '%s' (HTTP %d): %s"),
 					*CharacterID, Code, *RespBody.Left(120));
 			}
+		});
+}
+
+FString UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(const FString& InStr)
+{
+	if (InStr.IsEmpty())
+	{
+		return InStr;
+	}
+
+	auto MapVietnameseChar = [](TCHAR Ch) -> TCHAR
+	{
+		if (Ch < 128)
+		{
+			return Ch;
+		}
+		switch (Ch)
+		{
+		case 0x00C0: case 0x00C1: case 0x00C2: case 0x00C3: case 0x0102:
+		case 0x1EA0: case 0x1EA2: case 0x1EA4: case 0x1EA6: case 0x1EA8: case 0x1EAA: case 0x1EAC:
+		case 0x1EAE: case 0x1EB0: case 0x1EB2: case 0x1EB4: case 0x1EB6:
+			return TEXT('A');
+		case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E3: case 0x0103:
+		case 0x1EA1: case 0x1EA3: case 0x1EA5: case 0x1EA7: case 0x1EA9: case 0x1EAB: case 0x1EAD:
+		case 0x1EAF: case 0x1EB1: case 0x1EB3: case 0x1EB5: case 0x1EB7:
+			return TEXT('a');
+
+		case 0x0110: return TEXT('D');
+		case 0x0111: return TEXT('d');
+
+		case 0x00C8: case 0x00C9: case 0x00CA:
+		case 0x1EB8: case 0x1EBA: case 0x1EBC: case 0x1EBE: case 0x1EC0: case 0x1EC2: case 0x1EC4: case 0x1EC6:
+			return TEXT('E');
+		case 0x00E8: case 0x00E9: case 0x00EA:
+		case 0x1EB9: case 0x1EBB: case 0x1EBD: case 0x1EBF: case 0x1EC1: case 0x1EC3: case 0x1EC5: case 0x1EC7:
+			return TEXT('e');
+
+		case 0x00CC: case 0x00CD: case 0x0128: case 0x1EC8: case 0x1ECA:
+			return TEXT('I');
+		case 0x00EC: case 0x00ED: case 0x0129: case 0x1EC9: case 0x1ECB:
+			return TEXT('i');
+
+		case 0x00D2: case 0x00D3: case 0x00D4: case 0x00D5: case 0x01A0:
+		case 0x1ECC: case 0x1ECE: case 0x1ED0: case 0x1ED2: case 0x1ED4: case 0x1ED6: case 0x1ED8:
+		case 0x1EDA: case 0x1EDC: case 0x1EDE: case 0x1EE0: case 0x1EE2:
+			return TEXT('O');
+		case 0x00F2: case 0x00F3: case 0x00F4: case 0x00F5: case 0x01A1:
+		case 0x1ECD: case 0x1ECF: case 0x1ED1: case 0x1ED3: case 0x1ED5: case 0x1ED7: case 0x1ED9:
+		case 0x1EDB: case 0x1EDD: case 0x1EDF: case 0x1EE1: case 0x1EE3:
+			return TEXT('o');
+
+		case 0x00D9: case 0x00DA: case 0x0168: case 0x01AF:
+		case 0x1EE4: case 0x1EE6: case 0x1EE8: case 0x1EEA: case 0x1EEC: case 0x1EEE: case 0x1EF0:
+			return TEXT('U');
+		case 0x00F9: case 0x00FA: case 0x0169: case 0x01B0:
+		case 0x1EE5: case 0x1EE7: case 0x1EE9: case 0x1EEB: case 0x1EED: case 0x1EEF: case 0x1EF1:
+			return TEXT('u');
+
+		case 0x00DD: case 0x1EF2: case 0x1EF4: case 0x1EF6: case 0x1EF8:
+			return TEXT('Y');
+		case 0x00FD: case 0x1EF3: case 0x1EF5: case 0x1EF7: case 0x1EF9:
+			return TEXT('y');
+
+		default:
+			return TEXT(' ');
+		}
+	};
+
+	FString Out;
+	Out.Reserve(InStr.Len());
+	for (TCHAR C : InStr)
+	{
+		Out.AppendChar(MapVietnameseChar(C));
+	}
+	return Out;
+}
+
+namespace
+{
+	static FString FormatAttrPairForUI(const FString& AttrID, double Val)
+	{
+		if (AttrID == TEXT("attr.max_hp")) { return FString::Printf(TEXT("+%.0f HP"), Val); }
+		if (AttrID == TEXT("attr.max_energy")) { return FString::Printf(TEXT("+%.0f Ki"), Val); }
+		if (AttrID == TEXT("attr.phys_atk")) { return FString::Printf(TEXT("+%.0f SucDanh"), Val); }
+		if (AttrID == TEXT("attr.ki_atk")) { return FString::Printf(TEXT("+%.0f KiAtk"), Val); }
+		if (AttrID == TEXT("attr.def")) { return FString::Printf(TEXT("+%.0f Giap"), Val); }
+		if (AttrID == TEXT("attr.phys_dmg_pct") || AttrID == TEXT("attr.ki_dmg_pct")) { return FString::Printf(TEXT("+%.1f%% ST"), Val * 100.0); }
+		if (AttrID == TEXT("attr.crit_rate")) { return FString::Printf(TEXT("+%.1f%% Crit"), Val * 100.0); }
+		if (AttrID == TEXT("attr.crit_dmg")) { return FString::Printf(TEXT("+%.0f%% CritST"), Val * 100.0); }
+		if (AttrID == TEXT("attr.move_spd_pct")) { return FString::Printf(TEXT("+%.0f%% TocChay"), Val * 100.0); }
+		return FString::Printf(TEXT("%s +%.1f"), *AttrID, Val);
+	}
+
+	static bool ParseSingleItemViewFromJsonObj(const TSharedPtr<FJsonObject>& Obj, FIU_InventoryItemView& OutView)
+	{
+		if (!Obj.IsValid())
+		{
+			return false;
+		}
+		Obj->TryGetStringField(TEXT("instance_id"), OutView.InstanceID);
+		Obj->TryGetStringField(TEXT("item_def_id"), OutView.ItemDefID);
+
+		FString RawName;
+		Obj->TryGetStringField(TEXT("display_name"), RawName);
+		OutView.DisplayName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawName.IsEmpty() ? OutView.ItemDefID : RawName);
+
+		Obj->TryGetStringField(TEXT("category"), OutView.Category);
+		Obj->TryGetStringField(TEXT("equip_slot"), OutView.EquipSlot);
+		Obj->TryGetStringField(TEXT("equipped_slot_id"), OutView.EquippedSlotID);
+		Obj->TryGetStringField(TEXT("rarity"), OutView.Rarity);
+
+		double Num = 0.0;
+		if (Obj->TryGetNumberField(TEXT("required_level"), Num)) { OutView.RequiredLevel = static_cast<int32>(Num); }
+		if (Obj->TryGetNumberField(TEXT("bag_slot_index"), Num)) { OutView.BagSlotIndex = static_cast<int32>(Num); }
+		if (Obj->TryGetNumberField(TEXT("stack_count"), Num)) { OutView.StackCount = FMath::Max(1, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("max_stack"), Num)) { OutView.MaxStack = FMath::Max(1, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("enhance_level"), Num)) { OutView.EnhanceLevel = FMath::Max(0, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("max_enhance_level"), Num)) { OutView.MaxEnhanceLevel = FMath::Max(0, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("enhance_pity"), Num)) { OutView.EnhancePity = FMath::Max(0, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("sell_price_coin"), Num)) { OutView.SellPriceCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("next_enhance_coin"), Num)) { OutView.NextEnhanceCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("next_enhance_mat"), Num)) { OutView.NextEnhanceMat = FMath::Max(0, static_cast<int32>(Num)); }
+		if (Obj->TryGetNumberField(TEXT("next_enhance_bp"), Num)) { OutView.NextEnhanceBP = FMath::Max(0, static_cast<int32>(Num)); }
+
+		Obj->TryGetBoolField(TEXT("is_bound"), OutView.bIsBound);
+		Obj->TryGetBoolField(TEXT("is_player_locked"), OutView.bIsPlayerLocked);
+
+		TArray<FString> StatParts;
+		const TSharedPtr<FJsonObject>* BaseStatsObj = nullptr;
+		if (Obj->TryGetObjectField(TEXT("base_stats"), BaseStatsObj) && BaseStatsObj && BaseStatsObj->IsValid())
+		{
+			// Stable canonical ordering for display
+			static const TCHAR* OrderedKeys[] = {
+				TEXT("attr.phys_atk"), TEXT("attr.ki_atk"), TEXT("attr.max_hp"), TEXT("attr.max_energy"), TEXT("attr.def")
+			};
+			const bool bHasPhys = (*BaseStatsObj)->HasField(TEXT("attr.phys_atk"));
+			for (const TCHAR* K : OrderedKeys)
+			{
+				double V = 0.0;
+				if ((*BaseStatsObj)->TryGetNumberField(K, V) && !FMath::IsNearlyZero(V))
+				{
+					if (FCString::Strcmp(K, TEXT("attr.ki_atk")) == 0 && bHasPhys)
+					{
+						continue;
+					}
+					StatParts.Add(FormatAttrPairForUI(K, V));
+				}
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* AffixArr = nullptr;
+		if (Obj->TryGetArrayField(TEXT("affixes"), AffixArr) && AffixArr)
+		{
+			for (const TSharedPtr<FJsonValue>& AfVal : *AffixArr)
+			{
+				if (AfVal.IsValid() && AfVal->Type == EJson::Object)
+				{
+					const TSharedPtr<FJsonObject> AfObj = AfVal->AsObject();
+					FString AttrID;
+					double V = 0.0;
+					AfObj->TryGetStringField(TEXT("attr_id"), AttrID);
+					AfObj->TryGetNumberField(TEXT("value"), V);
+					if (!AttrID.IsEmpty())
+					{
+						StatParts.Add(FString::Printf(TEXT("[Af]%s"), *FormatAttrPairForUI(AttrID, V)));
+					}
+				}
+			}
+		}
+
+		if (StatParts.Num() > 0)
+		{
+			OutView.StatSummaryText = FString::Join(StatParts, TEXT(", "));
+		}
+		else if (OutView.ItemDefID == TEXT("item.consumable_verdant_elixir_s"))
+		{
+			OutView.StatSummaryText = TEXT("+150 HP & +150 Ki (CD 3s)");
+		}
+		else if (OutView.ItemDefID == TEXT("item.mat_crimson_ore_t1"))
+		{
+			OutView.StatSummaryText = TEXT("Da Cuong Hoa +1..+10");
+		}
+
+		return !OutView.InstanceID.IsEmpty();
+	}
+
+	static bool ParseInventorySnapshotObject(const TSharedPtr<FJsonObject>& RootObj, FIU_InventorySnapshot& OutSnap)
+	{
+		if (!RootObj.IsValid())
+		{
+			return false;
+		}
+		OutSnap = FIU_InventorySnapshot();
+		RootObj->TryGetStringField(TEXT("character_id"), OutSnap.CharacterID);
+
+		FString RawAction;
+		if (RootObj->TryGetStringField(TEXT("action_result"), RawAction))
+		{
+			OutSnap.ActionResult = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawAction);
+		}
+
+		bool bEnhBool = false;
+		if (RootObj->TryGetBoolField(TEXT("enhance_succeeded"), bEnhBool))
+		{
+			OutSnap.bHasEnhanceOutcome = true;
+			OutSnap.bEnhanceSucceeded = bEnhBool;
+		}
+
+		double Num = 0.0;
+		if (RootObj->TryGetNumberField(TEXT("level"), Num)) { OutSnap.Level = FMath::Max(1, static_cast<int32>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("standard_coin"), Num)) { OutSnap.StandardCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("hp"), Num)) { OutSnap.HP = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("max_hp"), Num)) { OutSnap.MaxHP = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("energy"), Num)) { OutSnap.Energy = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("max_energy"), Num)) { OutSnap.MaxEnergy = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("attack_power"), Num)) { OutSnap.AttackPower = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("attack_power_multiplier"), Num)) { OutSnap.AttackPowerMultiplier = static_cast<float>(Num); }
+		if (RootObj->TryGetNumberField(TEXT("defense"), Num)) { OutSnap.Defense = FMath::Max(0.0f, static_cast<float>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("used_bag_slots"), Num)) { OutSnap.UsedBagSlots = FMath::Max(0, static_cast<int32>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("max_bag_slots"), Num)) { OutSnap.MaxBagSlots = FMath::Max(1, static_cast<int32>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("elixir_count"), Num)) { OutSnap.ElixirCount = FMath::Max(0, static_cast<int32>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("crimson_ore_count"), Num)) { OutSnap.CrimsonOreCount = FMath::Max(0, static_cast<int32>(Num)); }
+		if (RootObj->TryGetNumberField(TEXT("coins_delta"), Num)) { OutSnap.CoinsDelta = static_cast<int64>(Num); }
+
+		const TArray<TSharedPtr<FJsonValue>>* BagArr = nullptr;
+		if (RootObj->TryGetArrayField(TEXT("bag_items"), BagArr) && BagArr)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *BagArr)
+			{
+				if (V.IsValid() && V->Type == EJson::Object)
+				{
+					FIU_InventoryItemView Item;
+					if (ParseSingleItemViewFromJsonObj(V->AsObject(), Item))
+					{
+						OutSnap.BagItems.Add(MoveTemp(Item));
+					}
+				}
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* EqArr = nullptr;
+		if (RootObj->TryGetArrayField(TEXT("equipped_items"), EqArr) && EqArr)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *EqArr)
+			{
+				if (V.IsValid() && V->Type == EJson::Object)
+				{
+					FIU_InventoryItemView Item;
+					if (ParseSingleItemViewFromJsonObj(V->AsObject(), Item))
+					{
+						OutSnap.EquippedItems.Add(MoveTemp(Item));
+					}
+				}
+			}
+		}
+
+		return !OutSnap.CharacterID.IsEmpty();
+	}
+}
+
+bool UIU_BackendSubsystem::ParseInventorySnapshotFromJson(const FString& JsonString, FIU_InventorySnapshot& OutSnapshot)
+{
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	return ParseInventorySnapshotObject(RootObj, OutSnapshot);
+}
+
+bool UIU_BackendSubsystem::ParseMobLootResponseFromJson(
+	const FString& JsonString,
+	FIU_MobLootDropSummary& OutLoot,
+	FIU_InventorySnapshot& OutSnapshot)
+{
+	OutLoot = FIU_MobLootDropSummary();
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* LootObjPtr = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("loot"), LootObjPtr) && LootObjPtr && LootObjPtr->IsValid())
+	{
+		double Num = 0.0;
+		if ((*LootObjPtr)->TryGetNumberField(TEXT("coins_granted"), Num)) { OutLoot.CoinsGranted = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		if ((*LootObjPtr)->TryGetNumberField(TEXT("standard_coin"), Num)) { OutLoot.NewCoinBalance = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+		(*LootObjPtr)->TryGetBoolField(TEXT("bag_full_skipped"), OutLoot.bBagFullSkipped);
+
+		const TArray<TSharedPtr<FJsonValue>>* DroppedArr = nullptr;
+		if ((*LootObjPtr)->TryGetArrayField(TEXT("items_dropped"), DroppedArr) && DroppedArr)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *DroppedArr)
+			{
+				if (V.IsValid() && V->Type == EJson::Object)
+				{
+					const TSharedPtr<FJsonObject> DObj = V->AsObject();
+					FString RawName, Rarity;
+					double QtyNum = 1.0;
+					DObj->TryGetStringField(TEXT("display_name"), RawName);
+					DObj->TryGetStringField(TEXT("rarity"), Rarity);
+					DObj->TryGetNumberField(TEXT("quantity"), QtyNum);
+					const FString CleanName = SanitizeVietnameseForSlateASCII(RawName);
+					const int32 Qty = FMath::Max(1, static_cast<int32>(QtyNum));
+					OutLoot.DroppedItemLabels.Add(
+						Qty > 1
+							? FString::Printf(TEXT("%s x%d"), *CleanName, Qty)
+							: FString::Printf(TEXT("%s [%s]"), *CleanName, *Rarity));
+				}
+			}
+		}
+	}
+
+	const TSharedPtr<FJsonObject>* InvObjPtr = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("inventory"), InvObjPtr) && InvObjPtr && InvObjPtr->IsValid())
+	{
+		return ParseInventorySnapshotObject(*InvObjPtr, OutSnapshot);
+	}
+	return false;
+}
+
+void UIU_BackendSubsystem::FetchCharacterInventory(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::EquipInventoryItem(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& ItemInstanceID,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("item_instance_id"), ItemInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/equip"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::UnequipEquipmentSlot(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& SlotID,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("slot_id"), SlotID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/unequip"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::UseInventoryConsumable(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& OptionalItemInstanceID,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("item_instance_id"), OptionalItemInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/use"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::ToggleInventoryItemLock(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& ItemInstanceID,
+	bool bLocked,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("item_instance_id"), ItemInstanceID);
+	Obj->SetBoolField(TEXT("locked"), bLocked);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/lock"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::SellInventoryItem(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& ItemInstanceID,
+	int32 Quantity,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("item_instance_id"), ItemInstanceID);
+	Obj->SetNumberField(TEXT("quantity"), Quantity);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/inventory/sell"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::EnhanceInventoryEquipment(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& ItemInstanceID,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("item_instance_id"), ItemInstanceID);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/economy/enhance"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseInventorySnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RollMonsterLoot(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& SourceEntityID,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_MobLootDropSummary& LootResult, const FIU_InventorySnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("source_entity_id"), SourceEntityID.IsEmpty() ? TEXT("mob.prototype_raider") : SourceEntityID);
+	Obj->SetStringField(TEXT("zone_id"), ServerZoneID);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/loot/roll-mob"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_MobLootDropSummary LootRes;
+			FIU_InventorySnapshot Snap;
+			if (bConnected && Code == 200 && ParseMobLootResponseFromJson(RespBody, LootRes, Snap))
+			{
+				if (Callback) { Callback(true, LootRes, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, LootRes, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
 		});
 }

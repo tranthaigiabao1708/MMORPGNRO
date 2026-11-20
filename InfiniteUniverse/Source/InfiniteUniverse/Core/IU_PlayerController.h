@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
 #include "Data/IU_GameplayTypes.h"
+#include "Network/IU_BackendSubsystem.h"
 #include "IU_PlayerController.generated.h"
 
 class UInputMappingContext;
@@ -13,6 +14,7 @@ class UInputAction;
 class AIU_PlayerCharacter;
 class UIU_LoginCharacterWidget;
 class UIU_PotentialUpgradeWidget;
+class UIU_InventoryEquipmentWidget;
 
 /**
  * Enhanced Input PlayerController decoupling hardware key bindings from character movement execution.
@@ -136,7 +138,59 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|UI")
 	bool IsPotentialUpgradePanelVisible() const;
 
+	/** Shows or hides the Step 4 Authoritative 48-Slot Bag & 8-Slot Equipment UMG modal (Keys I / B). */
+	UFUNCTION(BlueprintCallable, Category = "IU|UI")
+	void SetInventoryPanelVisible(bool bVisible, bool bUpdateMouseInputMode = true);
+
+	UFUNCTION(BlueprintPure, Category = "IU|UI")
+	bool IsInventoryPanelVisible() const;
+
+	bool HasCachedInventorySnapshot() const { return bHasCachedInventorySnapshot; }
+	const FIU_InventorySnapshot& GetCachedInventorySnapshot() const { return CachedInventorySnapshot; }
+
+	/** Server-enforced cooldown duration for Dau Than / consumables (default 3.0s). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "IU|Inventory", meta = (ClampMin = "0.1", ClampMax = "60.0"))
+	float ConsumableCooldownSeconds = 3.0f;
+
+	/** Checks whether this controller can currently execute a consumable use on Server Authority. */
+	bool CanUseConsumableOnServer(float& OutRemainingSeconds) const;
+
+	// ========================================================================
+	// Step 4 Inventory, Equipment, Consumable & Economy RPCs
+	// ========================================================================
+
+	UFUNCTION(Client, Reliable, Category = "IU|Inventory")
+	void Client_ReceiveInventorySnapshot(const FIU_InventorySnapshot& Snapshot);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Inventory")
+	void Client_NotifyLootDropped(int64 CoinsGranted, const TArray<FString>& DroppedItemLabels, bool bBagFullSkipped);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Inventory")
+	void Client_NotifyInventoryFeedback(const FString& Message, bool bIsError);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestRefreshInventory();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestEquipItem(const FString& ItemInstanceID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestUnequipSlot(const FString& SlotID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestUseConsumable(const FString& OptionalItemInstanceID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestToggleItemLock(const FString& ItemInstanceID, bool bLocked);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestSellItem(const FString& ItemInstanceID, int32 Quantity);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Inventory")
+	void Server_RequestEnhanceItem(const FString& ItemInstanceID);
+
 private:
+	void ApplyAuthoritativeInventorySnapshotOnServer(const FIU_InventorySnapshot& Snapshot);
 	AIU_PlayerCharacter* GetIUPlayerCharacter() const;
 
 	void HandleMove(const FInputActionValue& Value);
@@ -161,13 +215,22 @@ private:
 	void HandleToggleGlobalPvP();
 	void HandleToggleAuthPanel();
 	void HandleTogglePotentialPanel();
+	void HandleToggleInventoryPanel();
 	void HandleQuickUpgradeHP();
 	void HandleQuickUpgradeKi();
 	void HandleQuickUpgradeAtk();
+	void HandleQuickUseElixir();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_LoginCharacterWidget> ActiveAuthWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_PotentialUpgradeWidget> ActivePotentialWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_InventoryEquipmentWidget> ActiveInventoryWidget;
+
+	FIU_InventorySnapshot CachedInventorySnapshot;
+	bool bHasCachedInventorySnapshot = false;
+	double LastConsumableUseServerTime = -100.0;
 };

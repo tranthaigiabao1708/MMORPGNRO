@@ -15,6 +15,10 @@ import (
 	"github.com/infinite-universe/backend/internal/modules/account"
 	"github.com/infinite-universe/backend/internal/modules/auth"
 	"github.com/infinite-universe/backend/internal/modules/character"
+	"github.com/infinite-universe/backend/internal/modules/economy"
+	"github.com/infinite-universe/backend/internal/modules/gamedata"
+	"github.com/infinite-universe/backend/internal/modules/inventory"
+	"github.com/infinite-universe/backend/internal/modules/loot"
 	"github.com/infinite-universe/backend/internal/modules/world"
 )
 
@@ -25,12 +29,15 @@ type ipBucket struct {
 	lastRefill time.Time
 }
 
-// Handler exposes the Step 3 Client REST API (/v1/*) and HMAC-authenticated UE5 Dedicated Server Bridge (/internal/v1/*).
+// Handler exposes the Step 3–4 Client REST API (/v1/*) and HMAC-authenticated UE5 Dedicated Server Bridge (/internal/v1/*).
 type Handler struct {
 	accounts   *account.Service
 	authMgr    *auth.Manager
 	characters *character.Service
 	worldCoord *world.Coordinator
+	economy    *economy.Service
+	inventory  *inventory.Service
+	loot       *loot.Service
 	logger     *slog.Logger
 
 	rateMu    sync.Mutex
@@ -56,6 +63,21 @@ func NewHandler(
 		rateBurst:  40.0,
 		ipBuckets:  make(map[string]ipBucket),
 	}
+}
+
+// AttachStep4Modules wires Step 4 Inventory, CSPRNG Loot, and Economy services onto Handler & CharacterService.
+func (h *Handler) AttachStep4Modules(
+	cat *gamedata.Catalog,
+	eco *economy.Service,
+	inv *inventory.Service,
+	lootSvc *loot.Service,
+) {
+	if h.characters != nil && cat != nil {
+		h.characters.SetCatalog(cat)
+	}
+	h.economy = eco
+	h.inventory = inv
+	h.loot = lootSvc
 }
 
 // SetAuthRateLimit configures the per-IP token bucket for /v1/auth/* endpoints.
@@ -119,6 +141,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/v1/character/exp", h.requireServerHMAC(h.handleInternalGrantEXP))
 	mux.HandleFunc("POST /internal/v1/character/potential", h.requireServerHMAC(h.handleInternalAllocatePotential))
 	mux.HandleFunc("POST /internal/v1/lease/release", h.requireServerHMAC(h.handleInternalReleaseLease))
+
+	// Step 4 Authoritative Inventory, 8-Slot Equipment, CSPRNG Loot & ACID Economy Bridge
+	mux.HandleFunc("POST /internal/v1/inventory/get", h.requireServerHMAC(h.handleInternalGetInventory))
+	mux.HandleFunc("POST /internal/v1/inventory/equip", h.requireServerHMAC(h.handleInternalEquipItem))
+	mux.HandleFunc("POST /internal/v1/inventory/unequip", h.requireServerHMAC(h.handleInternalUnequipSlot))
+	mux.HandleFunc("POST /internal/v1/inventory/use", h.requireServerHMAC(h.handleInternalUseConsumable))
+	mux.HandleFunc("POST /internal/v1/inventory/lock", h.requireServerHMAC(h.handleInternalToggleItemLock))
+	mux.HandleFunc("POST /internal/v1/inventory/sell", h.requireServerHMAC(h.handleInternalSellItem))
+	mux.HandleFunc("POST /internal/v1/economy/enhance", h.requireServerHMAC(h.handleInternalEnhanceEquipment))
+	mux.HandleFunc("POST /internal/v1/loot/roll-mob", h.requireServerHMAC(h.handleInternalRollMobLoot))
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -527,6 +559,284 @@ func (h *Handler) handleInternalReleaseLease(w http.ResponseWriter, r *http.Requ
 
 	h.worldCoord.ReleaseLease(r.Context(), req.CharacterID, req.ServerID, req.FencingEpoch)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "released"})
+}
+
+func (h *Handler) writeInventoryErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, inventory.ErrStaleFencingEpoch), errors.Is(err, loot.ErrStaleFencingEpoch):
+		writeErr(w, http.StatusConflict, "ERR_STALE_FENCING_EPOCH", err.Error())
+	case errors.Is(err, inventory.ErrItemNotFound):
+		writeErr(w, http.StatusNotFound, "ERR_ITEM_NOT_FOUND", err.Error())
+	case errors.Is(err, inventory.ErrLevelTooLow):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_LEVEL_TOO_LOW", err.Error())
+	case errors.Is(err, inventory.ErrRaceNotAllowed):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_RACE_NOT_ALLOWED", err.Error())
+	case errors.Is(err, inventory.ErrBagFull):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_BAG_FULL", err.Error())
+	case errors.Is(err, inventory.ErrCannotSellEquipped):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_CANNOT_SELL_EQUIPPED", err.Error())
+	case errors.Is(err, inventory.ErrItemLocked):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_ITEM_LOCKED", err.Error())
+	case errors.Is(err, inventory.ErrNotEquippable), errors.Is(err, inventory.ErrNotSellable), errors.Is(err, inventory.ErrInvalidSlot):
+		writeErr(w, http.StatusBadRequest, "ERR_INVALID_ITEM_OP", err.Error())
+	case errors.Is(err, inventory.ErrConsumableEmpty):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_CONSUMABLE_EMPTY", err.Error())
+	case errors.Is(err, inventory.ErrMaxEnhanceReached):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_MAX_ENHANCE", err.Error())
+	case errors.Is(err, inventory.ErrInsufficientMat):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_INSUFFICIENT_MAT", err.Error())
+	case errors.Is(err, economy.ErrInsufficientCoins):
+		writeErr(w, http.StatusUnprocessableEntity, "ERR_INSUFFICIENT_COINS", err.Error())
+	default:
+		writeErr(w, http.StatusInternalServerError, "ERR_INVENTORY_ECONOMY", err.Error())
+	}
+}
+
+func (h *Handler) validateFencedCharReq(w http.ResponseWriter, r *http.Request, charIDStr, serverID string, epoch int64) (uuid.UUID, bool) {
+	if h.inventory == nil {
+		writeErr(w, http.StatusServiceUnavailable, "ERR_STEP4_DISABLED", "inventory module not attached")
+		return uuid.Nil, false
+	}
+	charUUID, err := uuid.Parse(strings.TrimSpace(charIDStr))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_CHARACTER_ID", "invalid character_id UUID")
+		return uuid.Nil, false
+	}
+	if err := h.worldCoord.ValidateActiveLease(r.Context(), charUUID.String(), serverID, epoch); err != nil {
+		writeErr(w, http.StatusConflict, "ERR_LEASE_REVOKED", err.Error())
+		return uuid.Nil, false
+	}
+	return charUUID, true
+}
+
+func (h *Handler) handleInternalGetInventory(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID  string `json:"character_id"`
+		FencingEpoch int64  `json:"fencing_epoch"`
+		ServerID     string `json:"server_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	snap, err := h.inventory.GetInventorySnapshot(r.Context(), charUUID)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalEquipItem(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		ItemInstanceID string `json:"item_instance_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	itemUUID, err := uuid.Parse(strings.TrimSpace(req.ItemInstanceID))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_ITEM_ID", "invalid item_instance_id UUID")
+		return
+	}
+	snap, err := h.inventory.EquipItemFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, itemUUID)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalUnequipSlot(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID  string `json:"character_id"`
+		FencingEpoch int64  `json:"fencing_epoch"`
+		ServerID     string `json:"server_id"`
+		SlotID       string `json:"slot_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	snap, err := h.inventory.UnequipSlotFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.SlotID)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalUseConsumable(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		ItemInstanceID string `json:"item_instance_id"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	var instPtr *uuid.UUID
+	if strings.TrimSpace(req.ItemInstanceID) != "" {
+		parsed, err := uuid.Parse(strings.TrimSpace(req.ItemInstanceID))
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "ERR_BAD_ITEM_ID", "invalid item_instance_id UUID")
+			return
+		}
+		instPtr = &parsed
+	}
+	snap, err := h.inventory.UseConsumableFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, instPtr)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalToggleItemLock(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		ItemInstanceID string `json:"item_instance_id"`
+		Locked         bool   `json:"locked"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	itemUUID, err := uuid.Parse(strings.TrimSpace(req.ItemInstanceID))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_ITEM_ID", "invalid item_instance_id UUID")
+		return
+	}
+	snap, err := h.inventory.ToggleItemLockFenced(r.Context(), charUUID, req.FencingEpoch, itemUUID, req.Locked)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalSellItem(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		ItemInstanceID string `json:"item_instance_id"`
+		Quantity       int    `json:"quantity"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	itemUUID, err := uuid.Parse(strings.TrimSpace(req.ItemInstanceID))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_ITEM_ID", "invalid item_instance_id UUID")
+		return
+	}
+	snap, err := h.inventory.SellItemFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, itemUUID, req.Quantity, req.IdempotencyKey)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalEnhanceEquipment(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		ItemInstanceID string `json:"item_instance_id"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	itemUUID, err := uuid.Parse(strings.TrimSpace(req.ItemInstanceID))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_ITEM_ID", "invalid item_instance_id UUID")
+		return
+	}
+	snap, err := h.inventory.EnhanceEquipmentFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, itemUUID, req.IdempotencyKey)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (h *Handler) handleInternalRollMobLoot(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req struct {
+		CharacterID    string `json:"character_id"`
+		FencingEpoch   int64  `json:"fencing_epoch"`
+		ServerID       string `json:"server_id"`
+		SourceEntityID string `json:"source_entity_id"`
+		ZoneID         string `json:"zone_id"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "ERR_BAD_JSON", err.Error())
+		return
+	}
+	if h.loot == nil {
+		writeErr(w, http.StatusServiceUnavailable, "ERR_STEP4_DISABLED", "loot module not attached")
+		return
+	}
+	charUUID, ok := h.validateFencedCharReq(w, r, req.CharacterID, req.ServerID, req.FencingEpoch)
+	if !ok {
+		return
+	}
+	lootRes, err := h.loot.RollMonsterLootFenced(r.Context(), charUUID, req.FencingEpoch, req.ServerID, req.SourceEntityID, req.ZoneID, req.IdempotencyKey)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	snap, err := h.inventory.GetInventorySnapshot(r.Context(), charUUID)
+	if err != nil {
+		h.writeInventoryErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"loot":      lootRes,
+		"inventory": snap,
+	})
 }
 
 func (h *Handler) authenticateBearer(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {

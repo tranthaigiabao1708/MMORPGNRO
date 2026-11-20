@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/infinite-universe/backend/internal/modules/economy"
+	"github.com/infinite-universe/backend/internal/modules/gamedata"
+	"github.com/infinite-universe/backend/internal/modules/inventory"
 	"github.com/infinite-universe/backend/internal/modules/progression"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -59,6 +62,7 @@ type CharacterState struct {
 	CurrentExp            int64     `json:"current_exp"`
 	NextLevelExp          int64     `json:"next_level_exp"`
 	PotentialPoints       int64     `json:"potential_points"`
+	StandardCoin          int64     `json:"standard_coin"`
 	ZoneID                string    `json:"zone_id"`
 	PosX                  float64   `json:"pos_x"`
 	PosY                  float64   `json:"pos_y"`
@@ -72,6 +76,7 @@ type CharacterState struct {
 	MaxEnergy             float64   `json:"max_energy"`
 	AttackPower           float64   `json:"attack_power"`
 	AttackPowerMultiplier float64   `json:"attack_power_multiplier"`
+	Defense               float64   `json:"defense"`
 	HPUpgrades            int32     `json:"hp_upgrades"`
 	KiUpgrades            int32     `json:"ki_upgrades"`
 	AtkUpgrades           int32     `json:"atk_upgrades"`
@@ -123,7 +128,8 @@ type AllocatePotentialResult struct {
 
 // Service owns exclusive write access to characters, character_attributes, character_potential, and character_save_snapshots.
 type Service struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	catalog *gamedata.Catalog
 
 	idemMu       sync.Mutex
 	seenKill     map[string]GrantEXPResult
@@ -138,8 +144,12 @@ func NewService(pool *pgxpool.Pool) *Service {
 	}
 }
 
-func populateStateFromMeta(st *CharacterState, meta PersistedMeta, clampLiveVitals bool) {
-	compiled := progression.CompileCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades)
+func (s *Service) SetCatalog(cat *gamedata.Catalog) {
+	s.catalog = cat
+}
+
+func populateStateFromMetaWithBonus(st *CharacterState, meta PersistedMeta, eqBonus progression.EquipmentBonuses, clampLiveVitals bool) {
+	compiled := progression.CompileTotalCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades, eqBonus)
 	st.EnemyKills = meta.EnemyKills
 	st.PvPKills = meta.PvPKills
 	st.Deaths = meta.Deaths
@@ -151,6 +161,7 @@ func populateStateFromMeta(st *CharacterState, meta PersistedMeta, clampLiveVita
 	st.MaxEnergy = compiled.MaxEnergy
 	st.AttackPower = compiled.AttackPower
 	st.AttackPowerMultiplier = compiled.AttackPowerMultiplier
+	st.Defense = compiled.Defense
 	st.NextHPCost = compiled.NextHPCost
 	st.NextKiCost = compiled.NextKiCost
 	st.NextAtkCost = compiled.NextAtkCost
@@ -166,6 +177,10 @@ func populateStateFromMeta(st *CharacterState, meta PersistedMeta, clampLiveVita
 			st.Energy = clampFloat(st.Energy, 0.0, st.MaxEnergy)
 		}
 	}
+}
+
+func populateStateFromMeta(st *CharacterState, meta PersistedMeta, clampLiveVitals bool) {
+	populateStateFromMetaWithBonus(st, meta, progression.EquipmentBonuses{}, clampLiveVitals)
 }
 
 // CreateCharacter creates a Level 1 character with 200 HP, 200 Ki, 100 Attack Power, and 0 Potential Points.
@@ -243,6 +258,15 @@ func (s *Service) CreateCharacter(ctx context.Context, accountID uuid.UUID, name
 		return CharacterState{}, fmt.Errorf("insert character_potential: %w", err)
 	}
 
+	if err := economy.EnsureWalletTx(ctx, tx, st.ID); err != nil {
+		return CharacterState{}, fmt.Errorf("init character_wallets: %w", err)
+	}
+	if s.catalog != nil {
+		if err := inventory.EnsureStarterKitTx(ctx, tx, s.catalog, st.ID); err != nil {
+			return CharacterState{}, fmt.Errorf("grant starter kit: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return CharacterState{}, fmt.Errorf("commit create character: %w", err)
 	}
@@ -260,11 +284,13 @@ func (s *Service) ListByAccount(ctx context.Context, accountID uuid.UUID) ([]Cha
 		SELECT c.id, c.account_id, c.character_name, c.race_id, c.level, c.current_exp, c.zone_id,
 		       c.pos_x, c.pos_y, c.pos_z, c.rot_yaw, c.is_alive, c.fencing_epoch, c.updated_at,
 		       c.appearance_data,
-		       a.hp, a.max_hp, a.energy, a.max_energy,
-		       p.potential_exp
+		       a.hp, a.max_hp, a.energy, a.max_energy, a.phys_atk, a.defense,
+		       p.potential_exp,
+		       COALESCE(w.standard_coin, 0)
 		  FROM characters c
 		  JOIN character_attributes a ON a.character_id = c.id
 		  JOIN character_potential p ON p.character_id = c.id
+		  LEFT JOIN character_wallets w ON w.character_id = c.id
 		 WHERE c.account_id = $1 AND c.deleted_at IS NULL
 		 ORDER BY c.created_at ASC
 	`, accountID)
@@ -277,18 +303,33 @@ func (s *Service) ListByAccount(ctx context.Context, accountID uuid.UUID) ([]Cha
 	for rows.Next() {
 		var st CharacterState
 		var metaRaw []byte
+		var dbMaxHP, dbMaxEnergy, dbPhysAtk, dbDef float64
 		if err := rows.Scan(
 			&st.ID, &st.AccountID, &st.CharacterName, &st.RaceID, &st.Level, &st.CurrentExp, &st.ZoneID,
 			&st.PosX, &st.PosY, &st.PosZ, &st.RotYaw, &st.IsAlive, &st.FencingEpoch, &st.UpdatedAt,
 			&metaRaw,
-			&st.HP, &st.MaxHP, &st.Energy, &st.MaxEnergy,
+			&st.HP, &dbMaxHP, &st.Energy, &dbMaxEnergy, &dbPhysAtk, &dbDef,
 			&st.PotentialPoints,
+			&st.StandardCoin,
 		); err != nil {
 			return nil, err
 		}
 		var meta PersistedMeta
 		_ = json.Unmarshal(metaRaw, &meta)
 		populateStateFromMeta(&st, meta, false)
+		if dbMaxHP > st.MaxHP {
+			st.MaxHP = dbMaxHP
+		}
+		if dbMaxEnergy > st.MaxEnergy {
+			st.MaxEnergy = dbMaxEnergy
+		}
+		if dbPhysAtk > st.AttackPower {
+			st.AttackPower = dbPhysAtk
+			st.AttackPowerMultiplier = dbPhysAtk / progression.BaseAttackPower
+		}
+		if dbDef > st.Defense {
+			st.Defense = dbDef
+		}
 		out = append(out, st)
 	}
 	return out, rows.Err()
@@ -341,23 +382,46 @@ func (s *Service) AdvanceEpochAndLoad(ctx context.Context, characterID uuid.UUID
 		return CharacterState{}, fmt.Errorf("advance fencing_epoch: %w", err)
 	}
 
+	if err := economy.EnsureWalletTx(ctx, tx, characterID); err != nil {
+		return CharacterState{}, fmt.Errorf("ensure wallet on claim: %w", err)
+	}
+	if s.catalog != nil {
+		if err := inventory.EnsureStarterKitTx(ctx, tx, s.catalog, characterID); err != nil {
+			return CharacterState{}, fmt.Errorf("ensure starter kit on claim: %w", err)
+		}
+	}
+
 	err = tx.QueryRow(ctx, `
-		SELECT a.hp, a.max_hp, a.energy, a.max_energy, p.potential_exp
+		SELECT a.hp, a.max_hp, a.energy, a.max_energy, p.potential_exp, COALESCE(w.standard_coin, 0)
 		  FROM character_attributes a
 		  JOIN character_potential p ON p.character_id = a.character_id
+		  LEFT JOIN character_wallets w ON w.character_id = a.character_id
 		 WHERE a.character_id = $1
-	`, characterID).Scan(&st.HP, &st.MaxHP, &st.Energy, &st.MaxEnergy, &st.PotentialPoints)
+	`, characterID).Scan(&st.HP, &st.MaxHP, &st.Energy, &st.MaxEnergy, &st.PotentialPoints, &st.StandardCoin)
 	if err != nil {
 		return CharacterState{}, fmt.Errorf("load character_attributes & potential: %w", err)
 	}
+
+	eqBonus, err := inventory.ComputeEquippedBonusesTx(ctx, tx, s.catalog, characterID)
+	if err != nil {
+		return CharacterState{}, fmt.Errorf("compute equipped bonuses on claim: %w", err)
+	}
+
+	var meta PersistedMeta
+	_ = json.Unmarshal(metaRaw, &meta)
+	populateStateFromMetaWithBonus(&st, meta, eqBonus, true)
+
+	_, _ = tx.Exec(ctx, `
+		UPDATE character_attributes
+		   SET hp = $2, max_hp = $3, energy = $4, max_energy = $5,
+		       phys_atk = $6, ki_atk = $7, defense = $8
+		 WHERE character_id = $1
+	`, characterID, st.HP, st.MaxHP, st.Energy, st.MaxEnergy, st.AttackPower, st.AttackPower, st.Defense)
 
 	if err := tx.Commit(ctx); err != nil {
 		return CharacterState{}, err
 	}
 
-	var meta PersistedMeta
-	_ = json.Unmarshal(metaRaw, &meta)
-	populateStateFromMeta(&st, meta, true)
 	return st, nil
 }
 
@@ -435,7 +499,11 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 		return CharacterState{}, fmt.Errorf("fenced update character: %w", err)
 	}
 
-	compiled := progression.CompileCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades)
+	eqBonus, err := inventory.ComputeEquippedBonusesTx(ctx, tx, s.catalog, st.ID)
+	if err != nil {
+		return CharacterState{}, fmt.Errorf("compute equipped bonuses on save: %w", err)
+	}
+	compiled := progression.CompileTotalCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades, eqBonus)
 	clampedHP := clampFloat(in.HP, 0.0, compiled.MaxHP)
 	clampedEnergy := clampFloat(in.Energy, 0.0, compiled.MaxEnergy)
 
@@ -450,16 +518,19 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 	}
 
 	_ = tx.QueryRow(ctx, `SELECT potential_exp FROM character_potential WHERE character_id = $1`, st.ID).Scan(&st.PotentialPoints)
+	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, st.ID).Scan(&st.StandardCoin)
 
 	snapPayload, _ := json.Marshal(map[string]any{
 		"level":            st.Level,
 		"current_exp":      st.CurrentExp,
 		"potential_points": st.PotentialPoints,
+		"standard_coin":    st.StandardCoin,
 		"hp":               clampedHP,
 		"max_hp":           compiled.MaxHP,
 		"energy":           clampedEnergy,
 		"max_energy":       compiled.MaxEnergy,
 		"attack_power":     compiled.AttackPower,
+		"defense":          compiled.Defense,
 		"hp_upgrades":      meta.HPUpgrades,
 		"ki_upgrades":      meta.KiUpgrades,
 		"atk_upgrades":     meta.AtkUpgrades,
@@ -484,7 +555,7 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 
 	st.HP = clampedHP
 	st.Energy = clampedEnergy
-	populateStateFromMeta(&st, meta, false)
+	populateStateFromMetaWithBonus(&st, meta, eqBonus, false)
 	return st, nil
 }
 
@@ -608,7 +679,12 @@ func (s *Service) GrantEXPFenced(
 	}
 
 	// Read current vitals UNCHANGED (Level-Up NEVER increases MaxHP, MaxKi, or AttackPower!)
-	_ = tx.QueryRow(ctx, `SELECT hp, energy FROM character_attributes WHERE character_id = $1`, characterID).Scan(&st.HP, &st.Energy)
+	var dbMaxHP, dbMaxEnergy, dbPhysAtk, dbDef float64
+	_ = tx.QueryRow(ctx, `
+		SELECT hp, max_hp, energy, max_energy, phys_atk, defense
+		  FROM character_attributes WHERE character_id = $1
+	`, characterID).Scan(&st.HP, &dbMaxHP, &st.Energy, &dbMaxEnergy, &dbPhysAtk, &dbDef)
+	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, characterID).Scan(&st.StandardCoin)
 
 	if leveledUp {
 		snapPayload, _ := json.Marshal(map[string]any{
@@ -636,6 +712,19 @@ func (s *Service) GrantEXPFenced(
 	st.Level = newLevel
 	st.CurrentExp = newExp
 	populateStateFromMeta(&st, meta, false)
+	if dbMaxHP > st.MaxHP {
+		st.MaxHP = dbMaxHP
+	}
+	if dbMaxEnergy > st.MaxEnergy {
+		st.MaxEnergy = dbMaxEnergy
+	}
+	if dbPhysAtk > st.AttackPower {
+		st.AttackPower = dbPhysAtk
+		st.AttackPowerMultiplier = dbPhysAtk / progression.BaseAttackPower
+	}
+	if dbDef > st.Defense {
+		st.Defense = dbDef
+	}
 
 	res := GrantEXPResult{
 		CharacterState:   st,
@@ -738,7 +827,11 @@ func (s *Service) AllocatePotentialFenced(
 		meta.AtkUpgrades++
 	}
 
-	compiled := progression.CompileCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades)
+	eqBonus, err := inventory.ComputeEquippedBonusesTx(ctx, tx, s.catalog, characterID)
+	if err != nil {
+		return AllocatePotentialResult{}, err
+	}
+	compiled := progression.CompileTotalCharacterStats(meta.HPUpgrades, meta.KiUpgrades, meta.AtkUpgrades, eqBonus)
 	curHP = clampFloat(curHP, 1.0, compiled.MaxHP)
 	curEnergy = clampFloat(curEnergy, 0.0, compiled.MaxEnergy)
 	updatedMeta, _ := json.Marshal(meta)
@@ -769,6 +862,8 @@ func (s *Service) AllocatePotentialFenced(
 		return AllocatePotentialResult{}, err
 	}
 
+	_ = tx.QueryRow(ctx, `SELECT COALESCE(standard_coin, 0) FROM character_wallets WHERE character_id = $1`, characterID).Scan(&st.StandardCoin)
+
 	if err := tx.Commit(ctx); err != nil {
 		return AllocatePotentialResult{}, err
 	}
@@ -776,7 +871,7 @@ func (s *Service) AllocatePotentialFenced(
 	st.HP = curHP
 	st.Energy = curEnergy
 	st.PotentialPoints = newPotential
-	populateStateFromMeta(&st, meta, false)
+	populateStateFromMetaWithBonus(&st, meta, eqBonus, false)
 
 	return AllocatePotentialResult{
 		CharacterState: st,
