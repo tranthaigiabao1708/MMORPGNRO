@@ -4,8 +4,11 @@
 #include "UI/IU_PlayerHUDWidget.h"
 #include "Core/IU_GameState.h"
 #include "Core/IU_PlayerState.h"
+#include "Core/IU_PlayerController.h"
+#include "Core/IU_ZonePortalActor.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "Characters/Enemy/IU_WorldBossCharacter.h"
 #include "Movement/IU_MovementComponent.h"
 #include "Movement/IU_FlightComponent.h"
 #include "Combat/IU_TargetingComponent.h"
@@ -732,9 +735,112 @@ void AIU_HUDManager::DrawHUD()
 	}
 
 	const double Now = World->GetTimeSeconds();
+	const AIU_PlayerController* LocalIUPC = Cast<AIU_PlayerController>(GetOwningPlayerController());
+	const bool bProfileOrTradeModalOpen = LocalIUPC && (LocalIUPC->IsInventoryPanelVisible() || LocalIUPC->IsPlayerTradePanelVisible());
+
+	// 3b. Render 3D NRO Capsule Spaceship / Zone Warp Portal Overhead Beacons (Step 6)
+	if (!bProfileOrTradeModalOpen)
+	{
+		for (TActorIterator<AIU_ZonePortalActor> GateIt(World); GateIt; ++GateIt)
+		{
+			const AIU_ZonePortalActor* Gate = *GateIt;
+			if (!IsValid(Gate)) { continue; }
+			const float DistM = FVector::Dist(PlayerPos, Gate->GetActorLocation()) / 100.0f;
+			if (DistM > 55.0f) { continue; }
+			const FVector GateProj = Project(Gate->GetActorLocation() + FVector(0.0f, 0.0f, 155.0f));
+			if (GateProj.Z > 0.0f && GateProj.X >= 30.0f && GateProj.X <= Canvas->ClipX - 30.0f)
+			{
+				const FString GateTxt = FString::Printf(TEXT("[ %s | %.0fm ]"), *Gate->PortalTitle, DistM);
+				float GW = 0.0f, GH = 0.0f;
+				Canvas->StrLen(HUDFont, GateTxt, GW, GH);
+				const float Scale = 0.78f;
+				const float BoxW = FMath::Clamp(GW * Scale + 16.0f, 140.0f, 380.0f);
+				const float GX = FMath::Clamp(GateProj.X - BoxW * 0.5f, 8.0f, Canvas->ClipX - BoxW - 8.0f);
+				const float GY = GateProj.Y - 22.0f;
+				DrawRect(FLinearColor(0.03f, 0.14f, 0.24f, 0.88f), GX, GY, BoxW, 22.0f);
+				DrawText(GateTxt, FLinearColor(0.42f, 0.96f, 1.0f, 1.0f), GX + 8.0f, GY + 2.0f, HUDFont, Scale);
+			}
+		}
+	}
+
+	// 3c. Step 6 World Boss 3-Phase Raid HUD (HP + Poise/Stagger + Aerial Quake Telegraph + Top-3 Contributors)
+	if (!bProfileOrTradeModalOpen)
+	{
+		const AIU_WorldBossCharacter* NearbyBoss = nullptr;
+		for (TActorIterator<AIU_WorldBossCharacter> BossIt(World); BossIt; ++BossIt)
+		{
+			const AIU_WorldBossCharacter* Cand = *BossIt;
+			if (IsValid(Cand) && FVector::Dist(PlayerPos, Cand->GetActorLocation()) <= 4500.0f)
+			{
+				NearbyBoss = Cand;
+				break;
+			}
+		}
+
+		if (NearbyBoss)
+		{
+			const UIU_AttributeComponent* BAttr = NearbyBoss->GetAttributeComponent();
+			const float CurHP = BAttr ? BAttr->GetHP() : 0.0f;
+			const float MaxHP = BAttr ? FMath::Max(1.0f, BAttr->GetMaxHP()) : 850.0f;
+			const float HPPct = FMath::Clamp(CurHP / MaxHP, 0.0f, 1.0f);
+			const float PoisePct = FMath::Clamp(NearbyBoss->GetCurrentPoise() / FMath::Max(1.0f, NearbyBoss->GetMaxPoise()), 0.0f, 1.0f);
+			const int32 PhaseNum = NearbyBoss->GetBossPhase();
+			const bool bStaggered = NearbyBoss->IsBossStaggered();
+
+			// On 960x540 split-screen, dock cleanly below Top-Right Telemetry (X=528..936, Y=186..268) so 0px overlap with Vitals/Party/Banners!
+			const bool bSmallViewport = (Canvas->ClipX < 1200.0f);
+			const float RaidW = bSmallViewport ? 408.0f : 480.0f;
+			const float RaidH = 84.0f;
+			const float RaidX = bSmallViewport ? (Canvas->ClipX - RaidW - 24.0f) : (CenterX - RaidW * 0.5f);
+			const float RaidY = bSmallViewport ? 186.0f : 86.0f;
+
+			DrawRect(FLinearColor(0.14f, 0.05f, 0.04f, 0.90f), RaidX - 2.0f, RaidY - 2.0f, RaidW + 4.0f, RaidH + 4.0f);
+			DrawRect(FLinearColor(0.24f, 0.12f, 0.07f, 0.92f), RaidX, RaidY, RaidW, RaidH);
+
+			const FLinearColor TitleCol = (PhaseNum >= 3)
+				? FLinearColor(1.0f, 0.36f, 0.22f, 1.0f)
+				: (PhaseNum == 2)
+				? FLinearColor(1.0f, 0.76f, 0.18f, 1.0f)
+				: FLinearColor(1.0f, 0.94f, 0.62f, 1.0f);
+			const FString BossHeader = NearbyBoss->IsDead()
+				? FString::Printf(TEXT("[DA HA GUC!] WORLD BOSS %s"), *NearbyBoss->BossDisplayName)
+				: FString::Printf(TEXT("[PHASE %d/3] %s  |  HP: %.0f / %.0f (%.0f%%)"), PhaseNum, *NearbyBoss->BossDisplayName, CurHP, MaxHP, HPPct * 100.0f);
+			DrawText(BossHeader, TitleCol, RaidX + 8.0f, RaidY + 4.0f, HUDFont, 0.78f);
+
+			// Crimson Boss HP Bar with Phase 2 (50%) & Phase 3 (20%) threshold ticks
+			const float BarX = RaidX + 8.0f;
+			const float BarW = RaidW - 16.0f;
+			DrawRect(FLinearColor(0.06f, 0.03f, 0.03f, 0.95f), BarX, RaidY + 24.0f, BarW, 11.0f);
+			const FLinearColor HPFill = (PhaseNum >= 3) ? FLinearColor(1.0f, 0.18f, 0.14f, 0.98f) : FLinearColor(0.90f, 0.22f, 0.18f, 0.98f);
+			DrawRect(HPFill, BarX, RaidY + 24.0f, BarW * HPPct, 11.0f);
+			DrawRect(FLinearColor(1.0f, 0.95f, 0.75f, 0.85f), BarX + BarW * 0.50f, RaidY + 23.0f, 2.0f, 13.0f);
+			DrawRect(FLinearColor(1.0f, 0.95f, 0.75f, 0.85f), BarX + BarW * 0.20f, RaidY + 23.0f, 2.0f, 13.0f);
+
+			// Poise / Stagger Bar (Cyan-White flashing when Staggered 1.25x, Amber-Gold while Super Armor active)
+			DrawRect(FLinearColor(0.05f, 0.06f, 0.08f, 0.95f), BarX, RaidY + 38.0f, BarW, 7.0f);
+			const FLinearColor PoiseCol = bStaggered
+				? FLinearColor(0.25f, 0.96f, 1.0f, 1.0f)
+				: FLinearColor(0.98f, 0.78f, 0.20f, 0.96f);
+			DrawRect(PoiseCol, BarX, RaidY + 38.0f, BarW * (bStaggered ? 1.0f : PoisePct), 7.0f);
+
+			const FString Banner = NearbyBoss->GetActiveTelegraphBanner();
+			const FString TopDmg = NearbyBoss->GetTopContributorsText();
+			if (!Banner.IsEmpty())
+			{
+				const FLinearColor WarnCol = bStaggered
+					? FLinearColor(0.38f, 1.0f, 0.82f, 1.0f)
+					: FLinearColor(1.0f, 0.88f, 0.25f, 1.0f);
+				DrawText(Banner.Left(62), WarnCol, BarX, RaidY + 47.0f, HUDFont, 0.72f);
+			}
+			const FString ContribLine = TopDmg.IsEmpty()
+				? TEXT("Top Sat Thuong (>=2% nhan Loot & Huy Chuong Titan): Chua ghi nhan")
+				: FString::Printf(TEXT("Top Dame: %s"), *TopDmg);
+			DrawText(ContribLine.Left(64), FLinearColor(0.88f, 0.95f, 1.0f, 0.95f), BarX, RaidY + 64.0f, HUDFont, 0.70f);
+		}
+	}
 
 	// 4. Center-Top Death / Victory Notification Banner & Optional Auto-Demo Stage Header
-	if (!ShowcaseStepBannerText.IsEmpty())
+	if (!bProfileOrTradeModalOpen && !ShowcaseStepBannerText.IsEmpty())
 	{
 		const float MaxSmallW = FMath::Max(320.0f, Canvas->ClipX - 472.0f);
 		const float BannerW = (Canvas->ClipX < 1200.0f) ? FMath::Min(480.0f, MaxSmallW) : FMath::Min(560.0f, Canvas->ClipX - 40.0f);
@@ -744,7 +850,7 @@ void AIU_HUDManager::DrawHUD()
 		DrawText(ShowcaseStepBannerText, FLinearColor(0.45f, 0.92f, 1.0f, 1.0f), BannerX + 10.0f, BannerTopY + 4.0f, HUDFont, 0.82f);
 	}
 
-	if (Now < CenterToastExpireTime && !ActiveCenterToastText.IsEmpty())
+	if (!bProfileOrTradeModalOpen && Now < CenterToastExpireTime && !ActiveCenterToastText.IsEmpty())
 	{
 		const float MaxSmallToastW = FMath::Max(320.0f, Canvas->ClipX - 472.0f);
 		const float ToastW = (Canvas->ClipX < 1200.0f) ? FMath::Min(480.0f, MaxSmallToastW) : FMath::Min(520.0f, Canvas->ClipX - 40.0f);
@@ -821,7 +927,7 @@ void AIU_HUDManager::DrawHUD()
 		int32 RepEnemyKills = DefeatedEnemyCount;
 		int32 RepPvPKills = 0;
 		int32 RepDeaths = PlayerDefeatedCount;
-		int32 CharLv = 1, EqCount = 0;
+		int32 CharLv = 1, EqCount = 0, KhuID = 1, TitanHC = 0;
 		int64 CurEXP = 0, NextEXP = 100, PoolTN = 0, CoinBal = 0, EpochNum = 0;
 		FString CharDisplayName = TEXT("OfflineDev");
 		if (const APlayerState* RawPS = OwningPawn->GetPlayerState())
@@ -838,6 +944,8 @@ void AIU_HUDManager::DrawHUD()
 				PoolTN = IUPS->GetPotentialPoints();
 				CoinBal = IUPS->GetStandardCoin();
 				EqCount = IUPS->GetEquippedItemCount();
+				KhuID = IUPS->GetCurrentChannelID();
+				TitanHC = IUPS->GetPityTitanTokens();
 				EpochNum = IUPS->GetActiveFencingEpoch();
 				if (!IUPS->GetPersistedCharacterName().IsEmpty())
 				{
@@ -848,17 +956,19 @@ void AIU_HUDManager::DrawHUD()
 
 		const int32 OnlineCount = GameState ? FMath::Max(1, GameState->PlayerArray.Num()) : 1;
 		const bool bInPvPArena = GameState && (GameState->bAllowGlobalPvPSparring || GameState->IsLocationInMartialArena(PlayerPos));
-		const TCHAR* ZoneLabel = bInPvPArena ? TEXT("[PVP ARENA]") : TEXT("[CO-OP PVE]");
+		const FString ZoneLabel = bInPvPArena
+			? FString::Printf(TEXT("[KHU %d - PVP]"), KhuID)
+			: FString::Printf(TEXT("[KHU %d - PVE]"), KhuID);
 
 		const FLinearColor HeaderCol(0.55f, 0.90f, 1.0f, 0.95f);
 		const FLinearColor NetCol = bInPvPArena ? FLinearColor(1.0f, 0.72f, 0.25f, 0.95f) : FLinearColor(0.35f, 0.95f, 0.80f, 0.95f);
 		const FLinearColor LineCol(0.90f, 0.95f, 0.98f, 0.92f);
 
 		DrawText(FString::Printf(TEXT("[DEBUG TELEMETRY - F3]  %.0f FPS (%.2f ms) | RAM %.0f MB"), FPS, FrameMs, UsedMemMB), HeaderCol, PX + 10.0f, PY + 8.0f, HUDFont, 0.82f);
-		DrawText(FString::Printf(TEXT("Net: %s | Ping: %.0f ms | Online: %d | %s"), NetModeStr, PingMs, OnlineCount, ZoneLabel), NetCol, PX + 10.0f, PY + 31.0f, HUDFont, 0.80f);
+		DrawText(FString::Printf(TEXT("Net: %s | Ping: %.0f ms | Online: %d | %s"), NetModeStr, PingMs, OnlineCount, *ZoneLabel), NetCol, PX + 10.0f, PY + 31.0f, HUDFont, 0.80f);
 		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 54.0f, HUDFont, 0.80f);
 		DrawText(FString::Printf(TEXT("Cfg: Atk %.0f (x%.2f) | Giap %.0f | Equip %d/8 | Fly %.0f"), FlatAtk, AtkMul, FlatDef, EqCount, FlyCfg), LineCol, PX + 10.0f, PY + 77.0f, HUDFont, 0.78f);
 		DrawText(FString::Printf(TEXT("AI: %d/%d Alive | PvE Kills: %d | PvP Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, RepEnemyKills, RepPvPKills, RepDeaths), LineCol, PX + 10.0f, PY + 100.0f, HUDFont, 0.80f);
-		DrawText(FString::Printf(TEXT("DB: %s Lv.%d | TN:%lld | Vang:%lld | Ep#%lld [TAB:HoSo]"), *CharDisplayName, CharLv, PoolTN, CoinBal, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.76f);
+		DrawText(FString::Printf(TEXT("DB: %s Lv.%d | TN:%lld | Vang:%lld | HC:%d | Ep#%lld"), *CharDisplayName, CharLv, PoolTN, CoinBal, TitanHC, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.75f);
 	}
 }

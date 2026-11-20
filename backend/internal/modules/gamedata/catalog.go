@@ -117,10 +117,14 @@ type LootTableDef struct {
 }
 
 type MonsterRewards struct {
-	BaseExp      int64  `json:"base_exp"`
-	CoinMin      int64  `json:"coin_min"`
-	CoinMax      int64  `json:"coin_max"`
-	LootTableID  string `json:"loot_table_id"`
+	BaseExp                int64   `json:"base_exp"`
+	CoinMin                int64   `json:"coin_min"`
+	CoinMax                int64   `json:"coin_max"`
+	LootTableID            string  `json:"loot_table_id"`
+	MinContributionRatio   float64 `json:"min_contribution_ratio"`
+	GuaranteedPityTokenID  *string `json:"guaranteed_pity_token_id"`
+	GuaranteedPityTokenMin int     `json:"guaranteed_pity_token_min"`
+	GuaranteedPityTokenMax int     `json:"guaranteed_pity_token_max"`
 }
 
 type MonsterDef struct {
@@ -130,14 +134,39 @@ type MonsterDef struct {
 	Rewards  MonsterRewards `json:"rewards"`
 }
 
+type PityShopEntryDef struct {
+	EntryID          string `json:"entry_id"`
+	TokenItemID      string `json:"token_item_id"`
+	TokenCost        int    `json:"token_cost"`
+	StandardCoinCost int64  `json:"standard_coin_cost"`
+	RewardItemID     string `json:"reward_item_id"`
+	RewardName       string `json:"reward_name,omitempty"`
+	RewardRarity     string `json:"reward_rarity,omitempty"`
+	RewardQuantity   int    `json:"reward_quantity"`
+	DailyLimit       *int   `json:"daily_limit"`
+}
+
+type ZoneDef struct {
+	ZoneID              string `json:"zone_id"`
+	PlanetID            string `json:"planet_id"`
+	UE5LevelName        string `json:"ue5_level_name"`
+	RecommendedLevelMin int    `json:"recommended_level_min"`
+	RecommendedLevelMax int    `json:"recommended_level_max"`
+	SoftCapCCU          int    `json:"soft_cap_ccu"`
+	HardCapCCU          int    `json:"hard_cap_ccu"`
+}
+
 type Catalog struct {
-	Items         map[string]ItemDef
-	ItemSets      map[string]ItemSetDef
-	Affixes       []AffixDef
-	AffixByID     map[string]AffixDef
-	EnhanceByLv   map[int16]EnhanceStepDef
-	LootTables    map[string]LootTableDef
-	Monsters      map[string]MonsterDef
+	Items       map[string]ItemDef
+	ItemSets    map[string]ItemSetDef
+	Affixes     []AffixDef
+	AffixByID   map[string]AffixDef
+	EnhanceByLv map[int16]EnhanceStepDef
+	LootTables  map[string]LootTableDef
+	Monsters    map[string]MonsterDef
+	PityShop    []PityShopEntryDef
+	PityByID    map[string]PityShopEntryDef
+	Zones       map[string]ZoneDef
 }
 
 var itemDisplayNames = map[string]string{
@@ -186,6 +215,8 @@ func LoadCatalogFromDir(coreDir string) (*Catalog, error) {
 		EnhanceByLv: make(map[int16]EnhanceStepDef),
 		LootTables:  make(map[string]LootTableDef),
 		Monsters:    make(map[string]MonsterDef),
+		PityByID:    make(map[string]PityShopEntryDef),
+		Zones:       make(map[string]ZoneDef),
 	}
 
 	readJSON := func(filename string, dst any) error {
@@ -363,6 +394,41 @@ func LoadCatalogFromDir(coreDir string) (*Catalog, error) {
 			CoinMax:     135,
 			LootTableID: "loot.mob_prototype_raider",
 		},
+	}
+
+	var pityEntries []PityShopEntryDef
+	if err := readJSON("pity_shop.json", &pityEntries); err != nil {
+		return nil, err
+	}
+	for i := range pityEntries {
+		if it, ok := cat.Items[pityEntries[i].RewardItemID]; ok {
+			pityEntries[i].RewardName = it.DisplayName
+			pityEntries[i].RewardRarity = it.Rarity
+		} else {
+			pityEntries[i].RewardName = pityEntries[i].RewardItemID
+			pityEntries[i].RewardRarity = "rarity.rare"
+		}
+		cat.PityByID[pityEntries[i].EntryID] = pityEntries[i]
+	}
+	cat.PityShop = pityEntries
+
+	var zones []ZoneDef
+	if err := readJSON("zones.json", &zones); err != nil {
+		return nil, err
+	}
+	for _, z := range zones {
+		cat.Zones[z.ZoneID] = z
+	}
+	if _, exists := cat.Zones["zone.p01_west_hub"]; !exists {
+		cat.Zones["zone.p01_west_hub"] = ZoneDef{
+			ZoneID:              "zone.p01_west_hub",
+			PlanetID:            "planet.p01_terra",
+			UE5LevelName:        "Lvl_Greybox_Prototype",
+			RecommendedLevelMin: 1,
+			RecommendedLevelMax: 20,
+			SoftCapCCU:          20,
+			HardCapCCU:          25,
+		}
 	}
 
 	return cat, nil

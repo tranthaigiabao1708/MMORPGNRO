@@ -42,7 +42,13 @@ struct INFINITEUNIVERSE_API FIU_BackendCharacterSummary
 	int64 StandardCoin = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int32 PityTitanTokens = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	FString ZoneID = TEXT("zone.p01_west_hub");
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
+	int32 ChannelID = 1;
 
 	UPROPERTY(BlueprintReadOnly, Category = "IU|Backend")
 	FVector SavedPosition = FVector(0.0f, 0.0f, 112.0f);
@@ -623,8 +629,249 @@ struct INFINITEUNIVERSE_API FIU_TradeSessionSnapshot
 	TArray<FIU_TradeItemView> RecipientItems;
 };
 
+// ============================================================================
+// Step 6 Authoritative Multi-Zone Channels, 3-Phase World Boss, Pity Shop & Quests
+// ============================================================================
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_ZoneChannelView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString ServerID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString ZoneID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString ZoneLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	int32 ChannelID = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString ServerAddr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	int32 OnlineCCU = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	int32 SoftCapCCU = 20;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	int32 HardCapCCU = 25;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString StatusColor = TEXT("GREEN");
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	bool bBossAlive = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	FString BossName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|World")
+	float BossHPRatio = 0.0f;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_BossParticipantReport
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "IU|Boss")
+	FString CharacterID;
+
+	UPROPERTY(BlueprintReadWrite, Category = "IU|Boss")
+	FString CharacterName;
+
+	UPROPERTY(BlueprintReadWrite, Category = "IU|Boss")
+	int64 FencingEpoch = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = "IU|Boss")
+	float DamageDealt = 0.0f;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_BossParticipantRewardView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString CharacterID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString CharacterName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	int32 Rank = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	float SharePct = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	bool bEligible = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	int64 CoinsGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	int32 TokensGranted = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	int32 NewTokenBalance = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	int32 ConsecutiveDryKills = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	bool bHardPityTriggered = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	TArray<FString> DroppedItemLabels;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_BossKillSettleSummary
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString KillID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString BossID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString TopKillerName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	FString Announcement;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Boss")
+	TArray<FIU_BossParticipantRewardView> Rewards;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_PityShopEntryView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString EntryID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString TokenItemID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 TokenCost = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int64 StandardCoinCost = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString RewardItemID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString RewardName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString RewardRarity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 RewardQuantity = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 DailyLimit = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 DailyPurchased = 0;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_PityShopSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString TokenID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 TokenBalance = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 LifetimeEarned = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 LifetimeRedeemed = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 ConsecutiveDryKills = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int32 HardPityThreshold = 4;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	int64 StandardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	FString ActionMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|PityShop")
+	TArray<FIU_PityShopEntryView> Entries;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_QuestEntryView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	FString QuestID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	FString Description;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	FString QuestState = TEXT("IN_PROGRESS");
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int32 CurrentCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int32 TargetCount = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int32 RepeatCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int64 RewardCoin = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int64 RewardExpAndPot = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	int32 RewardTitanToken = 0;
+};
+
+USTRUCT(BlueprintType)
+struct INFINITEUNIVERSE_API FIU_QuestSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	FString ActionMessage;
+
+	UPROPERTY(BlueprintReadOnly, Category = "IU|Quest")
+	TArray<FIU_QuestEntryView> Quests;
+};
+
 /**
- * Payload sent from UE5 Dedicated Server to Go Backend for fenced periodic/logout saves.
+ * Payload sent from UE5 Dedicated Server to Go Backend for fenced periodic/logout/zone-transfer saves.
  */
 struct INFINITEUNIVERSE_API FIU_CharacterSavePayload
 {
@@ -633,6 +880,7 @@ struct INFINITEUNIVERSE_API FIU_CharacterSavePayload
 	FString ServerID;
 	FString SnapshotReason = TEXT("PERIODIC_60S");
 	FString ZoneID = TEXT("zone.p01_west_hub");
+	int32 ChannelID = 1;
 	FVector Position = FVector::ZeroVector;
 	float Yaw = 0.0f;
 	bool bIsAlive = true;
@@ -679,6 +927,12 @@ public:
 	static bool ParseTradeSnapshotFromJson(const FString& JsonString, FIU_TradeSessionSnapshot& OutSnapshot);
 	static bool ParseTradeConfirmResponseFromJson(const FString& JsonString, FIU_TradeSessionSnapshot& OutTrade, FIU_InventorySnapshot& OutInv, bool& bOutHasInv);
 	static bool ParseChatMessageFromJson(const FString& JsonString, FIU_ChatMessageView& OutMessage);
+	static bool ParseWorldChannelsFromJson(const FString& JsonString, TArray<FIU_ZoneChannelView>& OutChannels);
+	static bool ParseBossKillSettleFromJson(const FString& JsonString, FIU_BossKillSettleSummary& OutSummary);
+	static bool ParsePityShopSnapshotFromJson(const FString& JsonString, FIU_PityShopSnapshot& OutSnapshot);
+	static bool ParsePityRedeemResponseFromJson(const FString& JsonString, FIU_PityShopSnapshot& OutPity, FIU_InventorySnapshot& OutInv, bool& bOutHasInv);
+	static bool ParseQuestSnapshotFromJson(const FString& JsonString, FIU_QuestSnapshot& OutSnapshot);
+	static bool ParseQuestClaimResponseFromJson(const FString& JsonString, FIU_QuestSnapshot& OutQuests, FIU_InventorySnapshot& OutInv, bool& bOutHasInv);
 	static FString SerializeSavePayloadToJson(const FIU_CharacterSavePayload& Payload);
 
 	// ========================================================================
@@ -705,6 +959,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "IU|Backend")
 	FString GetServerZoneID() const { return ServerZoneID; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Backend")
+	int32 GetServerChannelID() const { return ServerChannelID; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|Backend")
+	FString GetServerPublicAddr() const { return ServerPublicAddr; }
 
 	UFUNCTION(BlueprintPure, Category = "IU|Backend")
 	bool IsClientAuthenticated() const { return !ClientAccessToken.IsEmpty(); }
@@ -1005,6 +1265,63 @@ public:
 		const FString& TargetName,
 		TFunction<void(bool bSuccess, const FIU_ChatMessageView& SentMsg, const FString& ErrorMessage)> Callback);
 
+	// ========================================================================
+	// Step 6 Multi-Zone / Channel Handoff, World Boss Settlement, Pity & Quests
+	// ========================================================================
+
+	void SendWorldHeartbeat(
+		int32 OnlineCCU,
+		bool bBossAlive,
+		const FString& BossName,
+		float BossHPRatio,
+		TFunction<void(bool bSuccess, const FString& ErrorMessage)> Callback = nullptr);
+
+	void FetchWorldChannels(
+		TFunction<void(bool bSuccess, const TArray<FIU_ZoneChannelView>& Channels, const FString& ErrorMessage)> Callback);
+
+	void RequestZoneTransfer(
+		const FIU_CharacterSavePayload& Checkpoint,
+		const FString& TargetZoneID,
+		int32 TargetChannelID,
+		TFunction<void(bool bSuccess, const FString& ServerAddr, const FString& TicketID, const FString& ErrorMessage)> Callback);
+
+	void SettleWorldBossKill(
+		const FString& BossID,
+		int32 FightDurationMs,
+		const FString& IdempotencyKey,
+		const TArray<FIU_BossParticipantReport>& Reports,
+		TFunction<void(bool bSuccess, const FIU_BossKillSettleSummary& Summary, const FString& ErrorMessage)> Callback);
+
+	void FetchPityShopSnapshot(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_PityShopSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void RedeemPityShopEntry(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& EntryID,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_PityShopSnapshot& PitySnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback);
+
+	void FetchQuestSnapshot(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		TFunction<void(bool bSuccess, const FIU_QuestSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
+	void ClaimQuestReward(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& QuestID,
+		const FString& IdempotencyKey,
+		TFunction<void(bool bSuccess, const FIU_QuestSnapshot& QuestSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback);
+
+	void RepeatQuest(
+		const FString& CharacterID,
+		int64 FencingEpoch,
+		const FString& QuestID,
+		TFunction<void(bool bSuccess, const FIU_QuestSnapshot& Snapshot, const FString& ErrorMessage)> Callback);
+
 private:
 	void SendJsonRequest(
 		const FString& Verb,
@@ -1020,6 +1337,8 @@ private:
 	FString InternalHMACSecret = TEXT("iu_step3_internal_server_hmac_2026");
 	FString ServerInstanceID = TEXT("ue5-ded-7777");
 	FString ServerZoneID = TEXT("zone.p01_west_hub");
+	int32 ServerChannelID = 1;
+	FString ServerPublicAddr = TEXT("127.0.0.1:7777");
 
 	bool bBackendBridgeEnabled = false;
 	bool bRequireBackendTicket = false;

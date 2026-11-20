@@ -5,6 +5,10 @@
 #include "Core/IU_PlayerState.h"
 #include "Core/IU_PlayerController.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "Characters/Enemy/IU_WorldBossCharacter.h"
+#include "AI/IU_EnemySpawner.h"
+#include "Core/IU_ZonePortalActor.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_HUDManager.h"
@@ -44,6 +48,8 @@ void AIU_GameMode::StartPlay()
 {
 	Super::StartPlay();
 
+	SpawnStep6ZoneActorsIfApplicable();
+
 	UWorld* World = GetWorld();
 	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
@@ -63,8 +69,17 @@ void AIU_GameMode::StartPlay()
 			25.0f,
 			true);
 
+		HandleWorldHeartbeatTick();
+		World->GetTimerManager().SetTimer(
+			WorldHeartbeatTimerHandle,
+			this,
+			&AIU_GameMode::HandleWorldHeartbeatTick,
+			4.0f,
+			true);
+
 		UE_LOG(LogInfiniteUniverse, Log,
-			TEXT("[GameMode] Step 3 Lease Renewal (12s) & Periodic Checkpoint Save (25s) timers active."));
+			TEXT("[GameMode] Step 3..6 Lease Renewal (12s), Periodic Save (25s) & Multi-Zone Heartbeat (4s) active for Zone='%s' Khu %d."),
+			*Backend->GetServerZoneID(), Backend->GetServerChannelID());
 	}
 }
 
@@ -74,6 +89,7 @@ void AIU_GameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		World->GetTimerManager().ClearTimer(LeaseRenewTimerHandle);
 		World->GetTimerManager().ClearTimer(PeriodicSaveTimerHandle);
+		World->GetTimerManager().ClearTimer(WorldHeartbeatTimerHandle);
 
 		// Flush final state on orderly Dedicated Server shutdown for any remaining valid leased players
 		if (UGameInstance* GI = GetGameInstance())
@@ -262,6 +278,10 @@ void AIU_GameMode::PostLogin(APlayerController* NewPlayer)
 			if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(PC))
 			{
 				IUPC->Server_RequestRefreshInventory();
+				IUPC->Server_RequestRefreshParty();
+				IUPC->Server_RequestRefreshQuests();
+				IUPC->Server_RequestRefreshChannels();
+				IUPC->Server_RequestRefreshPityShop();
 			}
 
 			UE_LOG(LogInfiniteUniverse, Log,
@@ -355,6 +375,15 @@ bool AIU_GameMode::BuildCharacterSavePayload(
 	OutPayload.CharacterID = PS->GetPersistedCharacterUUID();
 	OutPayload.FencingEpoch = PS->GetActiveFencingEpoch();
 	OutPayload.SnapshotReason = SnapshotReason;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (const UIU_BackendSubsystem* Backend = GI->GetSubsystem<UIU_BackendSubsystem>())
+		{
+			OutPayload.ServerID = Backend->GetServerInstanceID();
+			OutPayload.ZoneID = Backend->GetServerZoneID();
+			OutPayload.ChannelID = Backend->GetServerChannelID();
+		}
+	}
 	OutPayload.EnemyKills = PS->GetEnemyKills();
 	OutPayload.PvPKills = PS->GetPvPKills();
 	OutPayload.Deaths = PS->GetDeaths();
@@ -491,6 +520,114 @@ void AIU_GameMode::HandlePeriodicSaveTick()
 						}
 					}
 				});
+		}
+	}
+}
+
+void AIU_GameMode::HandleWorldHeartbeatTick()
+{
+	UWorld* World = GetWorld();
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!World || !Backend || !Backend->IsBackendBridgeEnabled())
+	{
+		return;
+	}
+
+	bool bBossAlive = false;
+	FString BossName;
+	float BossHPRatio = 0.0f;
+	for (TActorIterator<AIU_WorldBossCharacter> It(World); It; ++It)
+	{
+		if (const AIU_WorldBossCharacter* Boss = *It)
+		{
+			BossName = Boss->BossDisplayName;
+			if (!Boss->IsDead())
+			{
+				bBossAlive = true;
+				if (const UIU_AttributeComponent* BAttr = Boss->GetAttributeComponent())
+				{
+					BossHPRatio = BAttr->GetHPPercent();
+				}
+				break;
+			}
+		}
+	}
+
+	Backend->SendWorldHeartbeat(GetNumPlayers(), bBossAlive, BossName, BossHPRatio);
+}
+
+void AIU_GameMode::SpawnStep6ZoneActorsIfApplicable()
+{
+	UWorld* World = GetWorld();
+	if (!World || GIsAutomationTesting || World->GetNetMode() == NM_Client)
+	{
+		return;
+	}
+
+	UGameInstance* GI = World->GetGameInstance();
+	const UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	const bool bForceWorldBoss = FParse::Param(FCommandLine::Get(), TEXT("SpawnWorldBoss"));
+	if ((!Backend || !Backend->IsBackendBridgeEnabled()) && !bForceWorldBoss)
+	{
+		return;
+	}
+
+	const FString ZoneID = Backend ? Backend->GetServerZoneID() : TEXT("zone.p01_highland_01");
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	if (ZoneID == TEXT("zone.p01_highland_01") || bForceWorldBoss)
+	{
+		// Clear starter greybox Raiders/Spawners on Highland Boss Arena so Zone 2 is a dedicated World Boss battlefield!
+		TArray<AActor*> StarterActorsToClear;
+		for (TActorIterator<AIU_EnemySpawner> SpIt(World); SpIt; ++SpIt)
+		{
+			if (IsValid(*SpIt)) { StarterActorsToClear.Add(*SpIt); }
+		}
+		for (TActorIterator<AIU_EnemyCharacter> EnIt(World); EnIt; ++EnIt)
+		{
+			if (IsValid(*EnIt) && !EnIt->IsA<AIU_WorldBossCharacter>())
+			{
+				StarterActorsToClear.Add(*EnIt);
+			}
+		}
+		for (AActor* A : StarterActorsToClear)
+		{
+			A->Destroy();
+		}
+
+		// Spawn 3-Phase World Boss Highland Titan in center-west arena facing landing pad (-420, 0, 118)
+		World->SpawnActor<AIU_WorldBossCharacter>(
+			AIU_WorldBossCharacter::StaticClass(),
+			FVector(-1450.0f, 0.0f, 192.0f),
+			FRotator(0.0f, 0.0f, 0.0f),
+			Params);
+
+		// Spawn Return Capsule Spaceship Portal back to Tram Tay Nam (Khu 1)
+		if (AIU_ZonePortalActor* ReturnGate = World->SpawnActor<AIU_ZonePortalActor>(
+			AIU_ZonePortalActor::StaticClass(),
+			FVector(420.0f, 320.0f, 118.0f),
+			FRotator::ZeroRotator,
+			Params))
+		{
+			ReturnGate->PortalTitle = TEXT("TAU VU TRU -> TRAM TAY NAM (KHU 1)");
+			ReturnGate->TargetZoneID = TEXT("zone.p01_west_hub");
+			ReturnGate->TargetChannelID = 1;
+		}
+	}
+	else if (ZoneID == TEXT("zone.p01_west_hub"))
+	{
+		// Spawn NRO Capsule Spaceship Portal to Cao Nguyen Titan (Khu 2) at East Pad (+460, 0, 118)
+		if (AIU_ZonePortalActor* OutGate = World->SpawnActor<AIU_ZonePortalActor>(
+			AIU_ZonePortalActor::StaticClass(),
+			FVector(460.0f, 0.0f, 118.0f),
+			FRotator::ZeroRotator,
+			Params))
+		{
+			OutGate->PortalTitle = TEXT("TAU VU TRU -> CAO NGUYEN TITAN (KHU 2)");
+			OutGate->TargetZoneID = TEXT("zone.p01_highland_01");
+			OutGate->TargetChannelID = 2;
 		}
 	}
 }

@@ -211,6 +211,23 @@ void UIU_BackendSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		ServerZoneID = ParsedZoneID;
 	}
 
+	int32 ParsedChannelID = 0;
+	if (FParse::Value(CmdLine, TEXT("ChannelID="), ParsedChannelID) && ParsedChannelID > 0)
+	{
+		ServerChannelID = ParsedChannelID;
+	}
+
+	int32 ParsedListenPort = 0;
+	if (FParse::Value(CmdLine, TEXT("port="), ParsedListenPort) && ParsedListenPort > 0)
+	{
+		ServerPublicAddr = FString::Printf(TEXT("127.0.0.1:%d"), ParsedListenPort);
+	}
+	FString ParsedPublicAddr;
+	if (FParse::Value(CmdLine, TEXT("PublicAddr="), ParsedPublicAddr) && !ParsedPublicAddr.IsEmpty())
+	{
+		ServerPublicAddr = ParsedPublicAddr;
+	}
+
 	bRequireBackendTicket = FParse::Param(CmdLine, TEXT("RequireBackendTicket"));
 	const bool bUseBackendFlag = FParse::Param(CmdLine, TEXT("UseBackend"));
 	const bool bShowLoginUI = FParse::Param(CmdLine, TEXT("ShowLoginUI"));
@@ -281,6 +298,8 @@ bool UIU_BackendSubsystem::ParseCharacterSummaryFromJson(const FString& JsonStri
 	if (RootObj->TryGetNumberField(TEXT("next_level_exp"), NumVal)) { OutSummary.NextLevelExp = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("potential_points"), NumVal)) { OutSummary.PotentialPoints = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
 	if (RootObj->TryGetNumberField(TEXT("standard_coin"), NumVal)) { OutSummary.StandardCoin = FMath::Max<int64>(0, static_cast<int64>(NumVal)); }
+	if (RootObj->TryGetNumberField(TEXT("pity_titan_tokens"), NumVal)) { OutSummary.PityTitanTokens = FMath::Max(0, static_cast<int32>(NumVal)); }
+	if (RootObj->TryGetNumberField(TEXT("channel_id"), NumVal)) { OutSummary.ChannelID = FMath::Max(1, static_cast<int32>(NumVal)); }
 
 	double PosX = 0.0, PosY = 0.0, PosZ = 112.0, Yaw = 0.0;
 	RootObj->TryGetNumberField(TEXT("pos_x"), PosX);
@@ -339,6 +358,7 @@ FString UIU_BackendSubsystem::SerializeSavePayloadToJson(const FIU_CharacterSave
 	Obj->SetStringField(TEXT("server_id"), Payload.ServerID);
 	Obj->SetStringField(TEXT("snapshot_reason"), Payload.SnapshotReason);
 	Obj->SetStringField(TEXT("zone_id"), Payload.ZoneID);
+	Obj->SetNumberField(TEXT("channel_id"), FMath::Max(1, Payload.ChannelID));
 	Obj->SetNumberField(TEXT("pos_x"), Payload.Position.X);
 	Obj->SetNumberField(TEXT("pos_y"), Payload.Position.Y);
 	Obj->SetNumberField(TEXT("pos_z"), Payload.Position.Z);
@@ -2510,5 +2530,583 @@ void UIU_BackendSubsystem::SendSocialChatMessage(
 				return;
 			}
 			if (Callback) { Callback(false, Msg, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+// ============================================================================
+// Step 6 Multi-Zone Channels, World Boss Settlement, Pity Shop & Quest Bridge
+// ============================================================================
+
+bool UIU_BackendSubsystem::ParseWorldChannelsFromJson(const FString& JsonString, TArray<FIU_ZoneChannelView>& OutChannels)
+{
+	OutChannels.Reset();
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!RootObj->TryGetArrayField(TEXT("channels"), Arr) || !Arr)
+	{
+		return false;
+	}
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		if (!V.IsValid() || V->Type != EJson::Object)
+		{
+			continue;
+		}
+		const TSharedPtr<FJsonObject> CObj = V->AsObject();
+		FIU_ZoneChannelView CV;
+		CObj->TryGetStringField(TEXT("server_id"), CV.ServerID);
+		CObj->TryGetStringField(TEXT("zone_id"), CV.ZoneID);
+		FString RawLabel, RawBoss;
+		CObj->TryGetStringField(TEXT("zone_label"), RawLabel);
+		CObj->TryGetStringField(TEXT("boss_name"), RawBoss);
+		CV.ZoneLabel = SanitizeVietnameseForSlateASCII(RawLabel);
+		CV.BossName = SanitizeVietnameseForSlateASCII(RawBoss);
+		CObj->TryGetStringField(TEXT("server_addr"), CV.ServerAddr);
+		CObj->TryGetStringField(TEXT("status_color"), CV.StatusColor);
+		CObj->TryGetBoolField(TEXT("boss_alive"), CV.bBossAlive);
+
+		double Num = 0.0;
+		if (CObj->TryGetNumberField(TEXT("channel_id"), Num)) { CV.ChannelID = FMath::Max(1, static_cast<int32>(Num)); }
+		if (CObj->TryGetNumberField(TEXT("online_ccu"), Num)) { CV.OnlineCCU = FMath::Max(0, static_cast<int32>(Num)); }
+		if (CObj->TryGetNumberField(TEXT("soft_cap_ccu"), Num)) { CV.SoftCapCCU = FMath::Max(1, static_cast<int32>(Num)); }
+		if (CObj->TryGetNumberField(TEXT("hard_cap_ccu"), Num)) { CV.HardCapCCU = FMath::Max(1, static_cast<int32>(Num)); }
+		if (CObj->TryGetNumberField(TEXT("boss_hp_ratio"), Num)) { CV.BossHPRatio = FMath::Clamp(static_cast<float>(Num), 0.0f, 1.0f); }
+		OutChannels.Add(MoveTemp(CV));
+	}
+	return true;
+}
+
+bool UIU_BackendSubsystem::ParseBossKillSettleFromJson(const FString& JsonString, FIU_BossKillSettleSummary& OutSummary)
+{
+	OutSummary = FIU_BossKillSettleSummary();
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+
+	RootObj->TryGetStringField(TEXT("kill_id"), OutSummary.KillID);
+	RootObj->TryGetStringField(TEXT("boss_id"), OutSummary.BossID);
+	FString RawTop, RawAnn;
+	RootObj->TryGetStringField(TEXT("top_killer_name"), RawTop);
+	RootObj->TryGetStringField(TEXT("announcement"), RawAnn);
+	OutSummary.TopKillerName = SanitizeVietnameseForSlateASCII(RawTop);
+	OutSummary.Announcement = SanitizeVietnameseForSlateASCII(RawAnn);
+
+	const TArray<TSharedPtr<FJsonValue>>* RwArr = nullptr;
+	if (RootObj->TryGetArrayField(TEXT("rewards"), RwArr) && RwArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *RwArr)
+		{
+			if (!V.IsValid() || V->Type != EJson::Object)
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject> RObj = V->AsObject();
+			FIU_BossParticipantRewardView Rw;
+			RObj->TryGetStringField(TEXT("character_id"), Rw.CharacterID);
+			FString RawName;
+			RObj->TryGetStringField(TEXT("character_name"), RawName);
+			Rw.CharacterName = SanitizeVietnameseForSlateASCII(RawName);
+			RObj->TryGetBoolField(TEXT("eligible"), Rw.bEligible);
+			RObj->TryGetBoolField(TEXT("hard_pity_triggered"), Rw.bHardPityTriggered);
+
+			double Num = 0.0;
+			if (RObj->TryGetNumberField(TEXT("rank"), Num)) { Rw.Rank = static_cast<int32>(Num); }
+			if (RObj->TryGetNumberField(TEXT("share_pct"), Num)) { Rw.SharePct = static_cast<float>(Num); }
+			if (RObj->TryGetNumberField(TEXT("coins_granted"), Num)) { Rw.CoinsGranted = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+			if (RObj->TryGetNumberField(TEXT("tokens_granted"), Num)) { Rw.TokensGranted = FMath::Max(0, static_cast<int32>(Num)); }
+			if (RObj->TryGetNumberField(TEXT("token_balance"), Num)) { Rw.NewTokenBalance = FMath::Max(0, static_cast<int32>(Num)); }
+			if (RObj->TryGetNumberField(TEXT("consecutive_dry_kills"), Num)) { Rw.ConsecutiveDryKills = FMath::Max(0, static_cast<int32>(Num)); }
+
+			if (Rw.TokensGranted > 0)
+			{
+				Rw.DroppedItemLabels.Add(FString::Printf(TEXT("Huy Chuong Titan +%d"), Rw.TokensGranted));
+			}
+
+			const TArray<TSharedPtr<FJsonValue>>* DropArr = nullptr;
+			if (RObj->TryGetArrayField(TEXT("items_dropped"), DropArr) && DropArr)
+			{
+				for (const TSharedPtr<FJsonValue>& DV : *DropArr)
+				{
+					if (DV.IsValid() && DV->Type == EJson::Object)
+					{
+						const TSharedPtr<FJsonObject> DObj = DV->AsObject();
+						FString RawDisp, Rarity;
+						double QtyN = 1.0;
+						DObj->TryGetStringField(TEXT("display_name"), RawDisp);
+						DObj->TryGetStringField(TEXT("rarity"), Rarity);
+						DObj->TryGetNumberField(TEXT("quantity"), QtyN);
+						const FString CleanDisp = SanitizeVietnameseForSlateASCII(RawDisp);
+						const int32 Qty = FMath::Max(1, static_cast<int32>(QtyN));
+						Rw.DroppedItemLabels.Add(Qty > 1
+							? FString::Printf(TEXT("%s x%d"), *CleanDisp, Qty)
+							: FString::Printf(TEXT("%s [%s]"), *CleanDisp, *Rarity));
+					}
+				}
+			}
+			OutSummary.Rewards.Add(MoveTemp(Rw));
+		}
+	}
+	return !OutSummary.KillID.IsEmpty();
+}
+
+static bool ParsePityShopObjectInternal(const TSharedPtr<FJsonObject>& Obj, FIU_PityShopSnapshot& OutSnap)
+{
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	OutSnap = FIU_PityShopSnapshot();
+	Obj->TryGetStringField(TEXT("token_id"), OutSnap.TokenID);
+	FString RawMsg;
+	if (Obj->TryGetStringField(TEXT("action_message"), RawMsg))
+	{
+		OutSnap.ActionMessage = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawMsg);
+	}
+	double Num = 0.0;
+	if (Obj->TryGetNumberField(TEXT("token_balance"), Num)) { OutSnap.TokenBalance = FMath::Max(0, static_cast<int32>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("lifetime_earned"), Num)) { OutSnap.LifetimeEarned = FMath::Max(0, static_cast<int32>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("lifetime_redeemed"), Num)) { OutSnap.LifetimeRedeemed = FMath::Max(0, static_cast<int32>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("consecutive_dry_kills"), Num)) { OutSnap.ConsecutiveDryKills = FMath::Max(0, static_cast<int32>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("hard_pity_threshold"), Num)) { OutSnap.HardPityThreshold = FMath::Max(1, static_cast<int32>(Num)); }
+	if (Obj->TryGetNumberField(TEXT("standard_coin"), Num)) { OutSnap.StandardCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (Obj->TryGetArrayField(TEXT("entries"), Arr) && Arr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			if (V.IsValid() && V->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject> EObj = V->AsObject();
+				FIU_PityShopEntryView EV;
+				EObj->TryGetStringField(TEXT("entry_id"), EV.EntryID);
+				EObj->TryGetStringField(TEXT("token_item_id"), EV.TokenItemID);
+				EObj->TryGetStringField(TEXT("reward_item_id"), EV.RewardItemID);
+				EObj->TryGetStringField(TEXT("reward_rarity"), EV.RewardRarity);
+				FString RawReward;
+				EObj->TryGetStringField(TEXT("reward_name"), RawReward);
+				EV.RewardName = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawReward);
+				if (EObj->TryGetNumberField(TEXT("token_cost"), Num)) { EV.TokenCost = FMath::Max(0, static_cast<int32>(Num)); }
+				if (EObj->TryGetNumberField(TEXT("standard_coin_cost"), Num)) { EV.StandardCoinCost = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+				if (EObj->TryGetNumberField(TEXT("reward_quantity"), Num)) { EV.RewardQuantity = FMath::Max(1, static_cast<int32>(Num)); }
+				if (EObj->TryGetNumberField(TEXT("daily_limit"), Num)) { EV.DailyLimit = FMath::Max(0, static_cast<int32>(Num)); }
+				if (EObj->TryGetNumberField(TEXT("daily_purchased"), Num)) { EV.DailyPurchased = FMath::Max(0, static_cast<int32>(Num)); }
+				OutSnap.Entries.Add(MoveTemp(EV));
+			}
+		}
+	}
+	return !OutSnap.TokenID.IsEmpty() || OutSnap.Entries.Num() > 0;
+}
+
+bool UIU_BackendSubsystem::ParsePityShopSnapshotFromJson(const FString& JsonString, FIU_PityShopSnapshot& OutSnapshot)
+{
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	return ParsePityShopObjectInternal(RootObj, OutSnapshot);
+}
+
+bool UIU_BackendSubsystem::ParsePityRedeemResponseFromJson(
+	const FString& JsonString,
+	FIU_PityShopSnapshot& OutPity,
+	FIU_InventorySnapshot& OutInv,
+	bool& bOutHasInv)
+{
+	bOutHasInv = false;
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject>* PityObj = nullptr;
+	if (!RootObj->TryGetObjectField(TEXT("pity_shop"), PityObj) || !PityObj || !PityObj->IsValid())
+	{
+		return ParsePityShopObjectInternal(RootObj, OutPity);
+	}
+	const bool bOK = ParsePityShopObjectInternal(*PityObj, OutPity);
+	const TSharedPtr<FJsonObject>* InvObj = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("inventory"), InvObj) && InvObj && InvObj->IsValid())
+	{
+		bOutHasInv = ParseInventorySnapshotObject(*InvObj, OutInv);
+	}
+	return bOK;
+}
+
+static bool ParseQuestObjectInternal(const TSharedPtr<FJsonObject>& Obj, FIU_QuestSnapshot& OutSnap)
+{
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	OutSnap = FIU_QuestSnapshot();
+	FString RawMsg;
+	if (Obj->TryGetStringField(TEXT("action_message"), RawMsg))
+	{
+		OutSnap.ActionMessage = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawMsg);
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!Obj->TryGetArrayField(TEXT("quests"), Arr) || !Arr)
+	{
+		return false;
+	}
+	double Num = 0.0;
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		if (V.IsValid() && V->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject> QObj = V->AsObject();
+			FIU_QuestEntryView QV;
+			QObj->TryGetStringField(TEXT("quest_id"), QV.QuestID);
+			QObj->TryGetStringField(TEXT("quest_state"), QV.QuestState);
+			FString RawTitle, RawDesc;
+			QObj->TryGetStringField(TEXT("title"), RawTitle);
+			QObj->TryGetStringField(TEXT("description"), RawDesc);
+			QV.Title = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawTitle);
+			QV.Description = UIU_BackendSubsystem::SanitizeVietnameseForSlateASCII(RawDesc);
+			if (QObj->TryGetNumberField(TEXT("current_count"), Num)) { QV.CurrentCount = FMath::Max(0, static_cast<int32>(Num)); }
+			if (QObj->TryGetNumberField(TEXT("target_count"), Num)) { QV.TargetCount = FMath::Max(1, static_cast<int32>(Num)); }
+			if (QObj->TryGetNumberField(TEXT("repeat_count"), Num)) { QV.RepeatCount = FMath::Max(0, static_cast<int32>(Num)); }
+			if (QObj->TryGetNumberField(TEXT("reward_coin"), Num)) { QV.RewardCoin = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+			if (QObj->TryGetNumberField(TEXT("reward_exp_pot"), Num)) { QV.RewardExpAndPot = FMath::Max<int64>(0, static_cast<int64>(Num)); }
+			if (QObj->TryGetNumberField(TEXT("reward_titan_token"), Num)) { QV.RewardTitanToken = FMath::Max(0, static_cast<int32>(Num)); }
+			OutSnap.Quests.Add(MoveTemp(QV));
+		}
+	}
+	return true;
+}
+
+bool UIU_BackendSubsystem::ParseQuestSnapshotFromJson(const FString& JsonString, FIU_QuestSnapshot& OutSnapshot)
+{
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	return ParseQuestObjectInternal(RootObj, OutSnapshot);
+}
+
+bool UIU_BackendSubsystem::ParseQuestClaimResponseFromJson(
+	const FString& JsonString,
+	FIU_QuestSnapshot& OutQuests,
+	FIU_InventorySnapshot& OutInv,
+	bool& bOutHasInv)
+{
+	bOutHasInv = false;
+	TSharedPtr<FJsonObject> RootObj;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(JsonString), RootObj) || !RootObj.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FJsonObject>* QObj = nullptr;
+	if (!RootObj->TryGetObjectField(TEXT("quests"), QObj) || !QObj || !QObj->IsValid())
+	{
+		return ParseQuestObjectInternal(RootObj, OutQuests);
+	}
+	const bool bOK = ParseQuestObjectInternal(*QObj, OutQuests);
+	const TSharedPtr<FJsonObject>* InvObj = nullptr;
+	if (RootObj->TryGetObjectField(TEXT("inventory"), InvObj) && InvObj && InvObj->IsValid())
+	{
+		bOutHasInv = ParseInventorySnapshotObject(*InvObj, OutInv);
+	}
+	return bOK;
+}
+
+void UIU_BackendSubsystem::SendWorldHeartbeat(
+	int32 OnlineCCU,
+	bool bBossAlive,
+	const FString& BossName,
+	float BossHPRatio,
+	TFunction<void(bool bSuccess, const FString& ErrorMessage)> Callback)
+{
+	const FString FriendlyZoneLabel = (ServerZoneID == TEXT("zone.p01_highland_01"))
+		? TEXT("Cao Nguyen Titan")
+		: TEXT("Tram Tay Nam");
+
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("zone_id"), ServerZoneID);
+	Obj->SetStringField(TEXT("zone_label"), FriendlyZoneLabel);
+	Obj->SetNumberField(TEXT("channel_id"), ServerChannelID);
+	Obj->SetStringField(TEXT("server_addr"), ServerPublicAddr);
+	Obj->SetNumberField(TEXT("online_ccu"), FMath::Max(0, OnlineCCU));
+	Obj->SetNumberField(TEXT("soft_cap_ccu"), 20);
+	Obj->SetNumberField(TEXT("hard_cap_ccu"), 25);
+	Obj->SetBoolField(TEXT("boss_alive"), bBossAlive);
+	Obj->SetStringField(TEXT("boss_name"), BossName);
+	Obj->SetNumberField(TEXT("boss_hp_ratio"), FMath::Clamp(BossHPRatio, 0.0f, 1.0f));
+
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/world/heartbeat"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			if (Callback)
+			{
+				if (bConnected && Code == 200) { Callback(true, TEXT("")); }
+				else { Callback(false, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+			}
+		});
+}
+
+void UIU_BackendSubsystem::FetchWorldChannels(
+	TFunction<void(bool bSuccess, const TArray<FIU_ZoneChannelView>& Channels, const FString& ErrorMessage)> Callback)
+{
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/world/channels"), TEXT("{}"), false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			TArray<FIU_ZoneChannelView> Channels;
+			if (bConnected && Code == 200 && ParseWorldChannelsFromJson(RespBody, Channels))
+			{
+				if (Callback) { Callback(true, Channels, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Channels, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RequestZoneTransfer(
+	const FIU_CharacterSavePayload& Checkpoint,
+	const FString& TargetZoneID,
+	int32 TargetChannelID,
+	TFunction<void(bool bSuccess, const FString& ServerAddr, const FString& TicketID, const FString& ErrorMessage)> Callback)
+{
+	FIU_CharacterSavePayload Cp = Checkpoint;
+	if (Cp.ServerID.IsEmpty()) { Cp.ServerID = ServerInstanceID; }
+	if (Cp.ZoneID.IsEmpty()) { Cp.ZoneID = ServerZoneID; }
+	if (Cp.ChannelID <= 0) { Cp.ChannelID = ServerChannelID; }
+	Cp.SnapshotReason = TEXT("ZONE_TRANSFER");
+
+	TSharedPtr<FJsonObject> CpObj;
+	FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(SerializeSavePayloadToJson(Cp)), CpObj);
+
+	TSharedRef<FJsonObject> RootObj = MakeShared<FJsonObject>();
+	if (CpObj.IsValid())
+	{
+		RootObj->SetObjectField(TEXT("checkpoint"), CpObj);
+	}
+	RootObj->SetStringField(TEXT("target_zone_id"), TargetZoneID);
+	RootObj->SetNumberField(TEXT("target_channel_id"), FMath::Max(1, TargetChannelID));
+	RootObj->SetBoolField(TEXT("has_custom_dest"), false);
+
+	FString Body;
+	FJsonSerializer::Serialize(RootObj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/world/transfer"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			if (bConnected && Code == 200)
+			{
+				TSharedPtr<FJsonObject> Obj;
+				if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(RespBody), Obj) && Obj.IsValid())
+				{
+					FString SrvAddr, TicketID;
+					Obj->TryGetStringField(TEXT("server_addr"), SrvAddr);
+					Obj->TryGetStringField(TEXT("ticket_id"), TicketID);
+					if (!SrvAddr.IsEmpty() && !TicketID.IsEmpty())
+					{
+						if (Callback) { Callback(true, SrvAddr, TicketID, TEXT("")); }
+						return;
+					}
+				}
+			}
+			if (Callback)
+			{
+				Callback(false, TEXT(""), TEXT(""), bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable"));
+			}
+		});
+}
+
+void UIU_BackendSubsystem::SettleWorldBossKill(
+	const FString& BossID,
+	int32 FightDurationMs,
+	const FString& IdempotencyKey,
+	const TArray<FIU_BossParticipantReport>& Reports,
+	TFunction<void(bool bSuccess, const FIU_BossKillSettleSummary& Summary, const FString& ErrorMessage)> Callback)
+{
+	TArray<TSharedPtr<FJsonValue>> PartArr;
+	for (const FIU_BossParticipantReport& R : Reports)
+	{
+		if (R.CharacterID.IsEmpty() || R.DamageDealt <= 0.0f)
+		{
+			continue;
+		}
+		TSharedRef<FJsonObject> PObj = MakeShared<FJsonObject>();
+		PObj->SetStringField(TEXT("character_id"), R.CharacterID);
+		PObj->SetStringField(TEXT("character_name"), R.CharacterName);
+		PObj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(R.FencingEpoch));
+		PObj->SetNumberField(TEXT("damage_dealt"), R.DamageDealt);
+		PartArr.Add(MakeShared<FJsonValueObject>(PObj));
+	}
+
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("boss_id"), BossID);
+	Obj->SetStringField(TEXT("zone_id"), ServerZoneID);
+	Obj->SetNumberField(TEXT("channel_id"), ServerChannelID);
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetNumberField(TEXT("fight_duration_ms"), FMath::Max(1, FightDurationMs));
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	Obj->SetArrayField(TEXT("participants"), PartArr);
+
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/boss/settle-kill"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_BossKillSettleSummary Summary;
+			if (bConnected && Code == 200 && ParseBossKillSettleFromJson(RespBody, Summary))
+			{
+				if (Callback) { Callback(true, Summary, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Summary, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::FetchPityShopSnapshot(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_PityShopSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/boss/pity/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PityShopSnapshot Snap;
+			if (bConnected && Code == 200 && ParsePityShopSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RedeemPityShopEntry(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& EntryID,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_PityShopSnapshot& PitySnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("entry_id"), EntryID);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/boss/pity/redeem"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_PityShopSnapshot PSnap;
+			FIU_InventorySnapshot ISnap;
+			bool bHasInv = false;
+			if (bConnected && Code == 200 && ParsePityRedeemResponseFromJson(RespBody, PSnap, ISnap, bHasInv))
+			{
+				if (Callback) { Callback(true, PSnap, ISnap, bHasInv, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, PSnap, ISnap, false, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::FetchQuestSnapshot(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	TFunction<void(bool bSuccess, const FIU_QuestSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/quest/get"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_QuestSnapshot Snap;
+			if (bConnected && Code == 200 && ParseQuestSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::ClaimQuestReward(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& QuestID,
+	const FString& IdempotencyKey,
+	TFunction<void(bool bSuccess, const FIU_QuestSnapshot& QuestSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("quest_id"), QuestID);
+	Obj->SetStringField(TEXT("idempotency_key"), IdempotencyKey);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/quest/claim"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_QuestSnapshot QSnap;
+			FIU_InventorySnapshot ISnap;
+			bool bHasInv = false;
+			if (bConnected && Code == 200 && ParseQuestClaimResponseFromJson(RespBody, QSnap, ISnap, bHasInv))
+			{
+				if (Callback) { Callback(true, QSnap, ISnap, bHasInv, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, QSnap, ISnap, false, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
+		});
+}
+
+void UIU_BackendSubsystem::RepeatQuest(
+	const FString& CharacterID,
+	int64 FencingEpoch,
+	const FString& QuestID,
+	TFunction<void(bool bSuccess, const FIU_QuestSnapshot& Snapshot, const FString& ErrorMessage)> Callback)
+{
+	TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("character_id"), CharacterID);
+	Obj->SetNumberField(TEXT("fencing_epoch"), static_cast<double>(FencingEpoch));
+	Obj->SetStringField(TEXT("server_id"), ServerInstanceID);
+	Obj->SetStringField(TEXT("quest_id"), QuestID);
+	FString Body;
+	FJsonSerializer::Serialize(Obj, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body));
+
+	SendJsonRequest(TEXT("POST"), TEXT("/internal/v1/quest/repeat"), Body, false, true,
+		[Callback = MoveTemp(Callback)](int32 Code, const FString& RespBody, bool bConnected)
+		{
+			FIU_QuestSnapshot Snap;
+			if (bConnected && Code == 200 && ParseQuestSnapshotFromJson(RespBody, Snap))
+			{
+				if (Callback) { Callback(true, Snap, TEXT("")); }
+				return;
+			}
+			if (Callback) { Callback(false, Snap, bConnected ? ExtractErrorFromJson(RespBody, Code) : TEXT("Backend unreachable")); }
 		});
 }

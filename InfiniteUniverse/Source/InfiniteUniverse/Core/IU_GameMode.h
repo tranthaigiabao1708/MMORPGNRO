@@ -40,6 +40,8 @@ private:
 	bool BuildCharacterSavePayload(AController* Controller, const FString& SnapshotReason, FIU_CharacterSavePayload& OutPayload) const;
 	void HandleLeaseRenewTick();
 	void HandlePeriodicSaveTick();
+	void HandleWorldHeartbeatTick();
+	void SpawnStep6ZoneActorsIfApplicable();
 	void KickPlayerControllerWithReason(APlayerController* TargetPC, const FString& Reason);
 
 	int32 NextSpawnSlotIndex = 0;
@@ -48,4 +50,5 @@ private:
 
 	FTimerHandle LeaseRenewTimerHandle;
 	FTimerHandle PeriodicSaveTimerHandle;
+	FTimerHandle WorldHeartbeatTimerHandle;
 };

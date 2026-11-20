@@ -177,6 +177,15 @@ public:
 	bool HasCachedTradeSnapshot() const { return bHasCachedTradeSnapshot; }
 	const FIU_TradeSessionSnapshot& GetCachedTradeSnapshot() const { return CachedTradeSnapshot; }
 
+	bool HasCachedWorldChannels() const { return bHasCachedWorldChannels; }
+	const TArray<FIU_ZoneChannelView>& GetCachedWorldChannels() const { return CachedWorldChannels; }
+
+	bool HasCachedQuestSnapshot() const { return bHasCachedQuestSnapshot; }
+	const FIU_QuestSnapshot& GetCachedQuestSnapshot() const { return CachedQuestSnapshot; }
+
+	bool HasCachedPityShopSnapshot() const { return bHasCachedPityShopSnapshot; }
+	const FIU_PityShopSnapshot& GetCachedPityShopSnapshot() const { return CachedPityShopSnapshot; }
+
 	/** Shows or hides the NRO 2-Step P2P Direct Trade modal (Key T). */
 	UFUNCTION(BlueprintCallable, Category = "IU|Trade")
 	void SetPlayerTradePanelVisible(bool bVisible, bool bUpdateMouseInputMode = true);
@@ -313,6 +322,43 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Trade")
 	void Server_RequestTradeCancel();
 
+	// ========================================================================
+	// Step 6 Multi-Zone / Channel Transfer, Quest Turn-In & Boss Pity Shop RPCs
+	// ========================================================================
+
+	UFUNCTION(Client, Reliable, Category = "IU|World")
+	void Client_ReceiveWorldChannels(const TArray<FIU_ZoneChannelView>& Channels);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|World")
+	void Server_RequestRefreshChannels();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|World")
+	void Server_RequestZoneTransfer(const FString& TargetZoneID, int32 TargetChannelID);
+
+	UFUNCTION(Client, Reliable, Category = "IU|World")
+	void Client_ExecuteZoneTransfer(const FString& ServerAddr, const FString& TicketID, const FString& TargetZoneID, int32 TargetChannelID);
+
+	UFUNCTION(Client, Reliable, Category = "IU|Quest")
+	void Client_ReceiveQuestSnapshot(const FIU_QuestSnapshot& Snapshot);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Quest")
+	void Server_RequestRefreshQuests();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Quest")
+	void Server_RequestClaimQuest(const FString& QuestID);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|Quest")
+	void Server_RequestRepeatQuest(const FString& QuestID);
+
+	UFUNCTION(Client, Reliable, Category = "IU|PityShop")
+	void Client_ReceivePityShopSnapshot(const FIU_PityShopSnapshot& Snapshot);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|PityShop")
+	void Server_RequestRefreshPityShop();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "IU|PityShop")
+	void Server_RequestRedeemPityEntry(const FString& EntryID);
+
 private:
 	void ApplyAuthoritativeInventorySnapshotOnServer(const FIU_InventorySnapshot& Snapshot);
 	void SyncAllWorldControllersPartyStateOnServer();
@@ -375,5 +421,12 @@ private:
 	bool bHasCachedPartySnapshot = false;
 	FIU_TradeSessionSnapshot CachedTradeSnapshot;
 	bool bHasCachedTradeSnapshot = false;
+	TArray<FIU_ZoneChannelView> CachedWorldChannels;
+	bool bHasCachedWorldChannels = false;
+	FIU_QuestSnapshot CachedQuestSnapshot;
+	bool bHasCachedQuestSnapshot = false;
+	FIU_PityShopSnapshot CachedPityShopSnapshot;
+	bool bHasCachedPityShopSnapshot = false;
+	bool bZoneTransferInFlight = false;
 	double LastConsumableUseServerTime = -100.0;
 };

@@ -6,6 +6,8 @@
 #include "Core/IU_PlayerState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
+#include "Characters/Enemy/IU_WorldBossCharacter.h"
+#include "Core/IU_ZonePortalActor.h"
 #include "AI/IU_EnemySpawner.h"
 #include "Movement/IU_FlightComponent.h"
 #include "Movement/IU_MovementComponent.h"
@@ -30,6 +32,12 @@
 #include "UnrealClient.h"
 #include "InfiniteUniverse.h"
 
+namespace
+{
+	static TSet<FString> GClearedDemoFrameDirsInProcess;
+	static TMap<FString, int32> GSharedFrameCounterByDir;
+}
+
 bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
 	if (!Super::ShouldCreateSubsystem(Outer))
@@ -47,15 +55,17 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	int32 ParsedStep3Phase = 0;
 	int32 ParsedStep4Phase = 0;
 	int32 ParsedStep5Phase = 0;
+	int32 ParsedStep6Phase = 0;
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), ParsedNetRole);
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), ParsedStep3Phase);
 	FParse::Value(Cmd, TEXT("AutoStep4Phase="), ParsedStep4Phase);
 	FParse::Value(Cmd, TEXT("AutoStep5Phase="), ParsedStep5Phase);
+	FParse::Value(Cmd, TEXT("AutoStep6Demo="), ParsedStep6Phase);
 
 	FString AutoAuthUser;
 	FParse::Value(Cmd, TEXT("AutoAuthUser="), AutoAuthUser);
 	// When client boots onto temporary local map while awaiting AutoAuth -> ClientTravel(?Ticket=...), wait for NM_Client world!
-	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0 || ParsedStep4Phase > 0 || ParsedStep5Phase > 0) && World->GetNetMode() != NM_Client)
+	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0 || ParsedStep4Phase > 0 || ParsedStep5Phase > 0 || ParsedStep6Phase > 0) && World->GetNetMode() != NM_Client)
 	{
 		return false;
 	}
@@ -65,7 +75,8 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 		ParsedNetRole > 0 ||
 		ParsedStep3Phase > 0 ||
 		ParsedStep4Phase > 0 ||
-		ParsedStep5Phase > 0;
+		ParsedStep5Phase > 0 ||
+		ParsedStep6Phase > 0;
 }
 
 TStatId UIU_AutoDemoSubsystem::GetStatId() const
@@ -84,13 +95,20 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	FParse::Value(Cmd, TEXT("AutoStep3Phase="), Step3PersistencePhase);
 	FParse::Value(Cmd, TEXT("AutoStep4Phase="), Step4EconomyPhase);
 	FParse::Value(Cmd, TEXT("AutoStep5Phase="), Step5SocialPhase);
-	if ((Step3PersistencePhase > 0 || Step4EconomyPhase > 0 || Step5SocialPhase > 0) && NetDemoClientRole == 0)
+	FParse::Value(Cmd, TEXT("AutoStep6Demo="), Step6BossMultiZonePhase);
+	if ((Step3PersistencePhase > 0 || Step4EconomyPhase > 0 || Step5SocialPhase > 0 || Step6BossMultiZonePhase > 0) && NetDemoClientRole == 0)
 	{
 		NetDemoClientRole = 1;
 	}
 
 	bRecordFrames = FParse::Param(Cmd, TEXT("RecordDemoFrames"));
-	if (Step5SocialPhase > 0)
+	if (Step6BossMultiZonePhase > 0)
+	{
+		TargetDurationSeconds = 42.0;
+		DemoFramesSubdir = FString::Printf(TEXT("Step6Frames_Client%d"), NetDemoClientRole);
+		CSVOutputFilename = FString::Printf(TEXT("Step6_Client%dProfile.csv"), NetDemoClientRole);
+	}
+	else if (Step5SocialPhase > 0)
 	{
 		TargetDurationSeconds = (Step5SocialPhase == 1) ? 33.5 : 10.5;
 		DemoFramesSubdir = FString::Printf(TEXT("Step5Frames_Phase%d_Client%d"), Step5SocialPhase, NetDemoClientRole);
@@ -144,8 +162,17 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	if (bRecordFrames && !bServerTelemetryMode)
 	{
 		const FString OutDir = FPaths::Combine(FPaths::ProjectSavedDir(), DemoFramesSubdir);
-		IFileManager::Get().DeleteDirectory(*OutDir, false, true);
-		IFileManager::Get().MakeDirectory(*OutDir, true);
+		if (!GClearedDemoFrameDirsInProcess.Contains(DemoFramesSubdir))
+		{
+			GClearedDemoFrameDirsInProcess.Add(DemoFramesSubdir);
+			GSharedFrameCounterByDir.Add(DemoFramesSubdir, 0);
+			IFileManager::Get().DeleteDirectory(*OutDir, false, true);
+			IFileManager::Get().MakeDirectory(*OutDir, true);
+		}
+		else
+		{
+			CapturedFrameIndex = GSharedFrameCounterByDir.FindRef(DemoFramesSubdir);
+		}
 	}
 
 	if (InWorld.GetNetMode() != NM_Client)
@@ -196,6 +223,23 @@ AIU_EnemyCharacter* UIU_AutoDemoSubsystem::FindClosestLivingEnemy(const FVector&
 		}
 	}
 	return Best;
+}
+
+AIU_WorldBossCharacter* UIU_AutoDemoSubsystem::FindWorldBossInArena() const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AIU_WorldBossCharacter> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			return *It;
+		}
+	}
+	return nullptr;
 }
 
 AIU_PlayerCharacter* UIU_AutoDemoSubsystem::FindOtherPlayerCharacter(const AIU_PlayerCharacter* SelfPlayer) const
@@ -355,6 +399,11 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 	{
 		TickSinglePlayerShowcase(World, Player, RawPC);
 	}
+	else if (Step6BossMultiZonePhase > 0 && Player && RawPC)
+	{
+		ConnectedPlaySeconds += ClampedDt;
+		TickStep6BossMultiZoneShowcase(World, Player, RawPC);
+	}
 	else if (Step5SocialPhase > 0 && Player && RawPC)
 	{
 		ConnectedPlaySeconds += ClampedDt;
@@ -378,10 +427,12 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 
 	if (bRecordFrames && !bServerTelemetryMode && ElapsedSeconds >= NextFrameCaptureTime)
 	{
+		int32& SharedIdx = GSharedFrameCounterByDir.FindOrAdd(DemoFramesSubdir);
+		CapturedFrameIndex = SharedIdx++;
 		const FString FrameFile = FPaths::Combine(
 			FPaths::ProjectSavedDir(),
 			DemoFramesSubdir,
-			FString::Printf(TEXT("frame_%04d.png"), CapturedFrameIndex++));
+			FString::Printf(TEXT("frame_%04d.png"), CapturedFrameIndex));
 		FScreenshotRequest::RequestScreenshot(FrameFile, /*bShowUI=*/true, /*bAddFilenameSuffix=*/false);
 		NextFrameCaptureTime += (1.0 / 15.0);
 	}
@@ -1798,6 +1849,380 @@ void UIU_AutoDemoSubsystem::TickStep5SocialTradeShowcase(UWorld* World, AIU_Play
 			*CharName,
 			CurLv,
 			CoinBal));
+	}
+}
+
+void UIU_AutoDemoSubsystem::TickStep6BossMultiZoneShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC)
+{
+	AIU_HUDManager* HUD = Cast<AIU_HUDManager>(RawPC->GetHUD());
+	AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(RawPC);
+	auto SetBanner = [HUD](const FString& Text)
+	{
+		if (HUD)
+		{
+			HUD->SetShowcaseStepBanner(Text);
+		}
+	};
+
+	const AIU_PlayerState* IUPS = Player->GetPlayerState<AIU_PlayerState>();
+	const int32 CurLv = IUPS ? IUPS->GetCharacterLevel() : 1;
+	const int64 CoinBal = IUPS ? IUPS->GetStandardCoin() : 0;
+	const int32 TitanHC = IUPS ? IUPS->GetPityTitanTokens() : 0;
+	const int64 CurEpoch = IUPS ? IUPS->GetActiveFencingEpoch() : 0;
+	const FString CharName = (IUPS && !IUPS->GetPersistedCharacterName().IsEmpty()) ? IUPS->GetPersistedCharacterName() : TEXT("Hero");
+	const UIU_AttributeComponent* Attr = Player->GetAttributeComponent();
+
+	AIU_WorldBossCharacter* Boss = FindWorldBossInArena();
+	const bool bInBossZone = (Boss != nullptr) ||
+		(IUPS && (IUPS->GetCurrentZoneID() == TEXT("zone.p01_highland_01") || IUPS->GetCurrentChannelID() >= 2));
+	const double T = ConnectedPlaySeconds;
+
+	// =========================================================================
+	// STAGE A (SERVER #1 :7777 — zone.p01_west_hub / KHU 1):
+	// Form Party -> Defeat 3 Raiders -> Claim Quest -> Open Channel List -> Warp via Tau Vu Tru to :7778!
+	// =========================================================================
+	if (!bInBossZone)
+	{
+		AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player);
+		const FVector RaidAnchor = (NetDemoClientRole == 1)
+			? FVector(-1850.0f, -200.0f, 95.0f)
+			: FVector(-2950.0f, 350.0f, 95.0f);
+
+		if (T < 2.6)
+		{
+			if (LastTriggeredStage != 601)
+			{
+				LastTriggeredStage = 601;
+				if (IUPC)
+				{
+					IUPC->Server_RequestRefreshInventory();
+					IUPC->Server_RequestRefreshQuests();
+					IUPC->Server_RequestRefreshChannels();
+				}
+				SetBanner(FString::Printf(TEXT("STEP 6 [1/6 - KHU 1 :7777]: Lap Party (+15%% Synergy) & Nhan Nhiem Vu Tuan Tra (Ep#%lld)"), CurEpoch));
+			}
+
+			if (Ally)
+			{
+				SteerPlayerToward(Player, RawPC, Ally->GetActorLocation(), 210.0f, false, false);
+			}
+
+			if (IUPC && !bStep6FormedParty)
+			{
+				if (NetDemoClientRole == 1 && T >= 0.9 && Ally)
+				{
+					bStep6FormedParty = true;
+					IUPC->Server_RequestPartyInvite(TEXT(""));
+					IUPC->Server_RequestSendChat(TEXT("LOCAL"), TEXT("Diet 3 Raider xong bay Tau Vu Tru sang Khu 2 san Boss Titan!"), TEXT(""));
+				}
+				else if (NetDemoClientRole == 2 && T >= 1.7)
+				{
+					bStep6FormedParty = true;
+					IUPC->Server_RequestPartyRespond(TEXT(""), true);
+				}
+			}
+		}
+		else if (T < 11.4)
+		{
+			if (LastTriggeredStage != 602)
+			{
+				LastTriggeredStage = 602;
+				SetBanner(TEXT("STEP 6 [2/6 - KHU 1 :7777]: Diet 3 Raider hoan thanh Nhiem Vu Tuan Tra Cao Nguyen!"));
+			}
+
+			AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
+			if (!TargetEnemy)
+			{
+				TargetEnemy = FindClosestLivingEnemy(Player->GetActorLocation());
+			}
+
+			if (TargetEnemy && !TargetEnemy->IsDead())
+			{
+				if (Player->GetTargetingComponent()->GetLockedTarget() != TargetEnemy)
+				{
+					Player->GetTargetingComponent()->SetLockedTarget(TargetEnemy);
+				}
+				SteerPlayerToward(Player, RawPC, TargetEnemy->GetActorLocation(), 140.0f, true, false);
+				if (ElapsedSeconds >= NextActionCooldownTime)
+				{
+					const float DistE = FVector::Dist2D(Player->GetActorLocation(), TargetEnemy->GetActorLocation());
+					if (DistE > 220.0f)
+					{
+						Player->KiBlastInput();
+						NextActionCooldownTime = ElapsedSeconds + 0.48;
+					}
+					else
+					{
+						Player->MeleeAttackInput();
+						NextActionCooldownTime = ElapsedSeconds + 0.20;
+					}
+				}
+			}
+			else
+			{
+				SteerPlayerToward(Player, RawPC, RaidAnchor, 85.0f, true, false);
+			}
+		}
+		else if (T < 14.2)
+		{
+			if (LastTriggeredStage != 603)
+			{
+				LastTriggeredStage = 603;
+				Player->StopSprintInput();
+				Player->ApplyMovementInput(FVector2D::ZeroVector);
+				if (IUPC)
+				{
+					IUPC->Server_RequestRefreshQuests();
+					if (NetDemoClientRole == 1)
+					{
+						IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::NhiemVu, false);
+					}
+				}
+				SetBanner(TEXT("STEP 6 [3/6 - KHU 1]: Tab [Nhiem Vu] -> Tra Nhiem Vu Tuan Tra (+300 Vang, +1 Huy Chuong)!"));
+			}
+
+			if (IUPC && !bStep6ClaimedRaiderQuest && T >= 12.2)
+			{
+				bStep6ClaimedRaiderQuest = true;
+				IUPC->Server_RequestClaimQuest(TEXT("quest.nro_raider_patrol_01"));
+			}
+		}
+		else if (T < 16.8)
+		{
+			if (LastTriggeredStage != 604)
+			{
+				LastTriggeredStage = 604;
+				if (IUPC && !bStep6OpenedChannelList)
+				{
+					bStep6OpenedChannelList = true;
+					IUPC->Server_RequestRefreshChannels();
+					if (NetDemoClientRole == 1)
+					{
+						IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::ChucNang, false);
+						if (UIU_InventoryEquipmentWidget* W = IUPC->GetActiveCharacterProfileWidget())
+						{
+							W->SetActiveFuncSubMode(0);
+						}
+					}
+				}
+				SetBanner(TEXT("STEP 6 [4/6 - KHU 1]: Tab [Chuc Nang -> Doi Khu] Phat Hien BOSS TITAN tai KHU 2 (:7778)!"));
+			}
+			Player->StopSprintInput();
+			Player->ApplyMovementInput(FVector2D::ZeroVector);
+		}
+		else
+		{
+			if (LastTriggeredStage != 605)
+			{
+				LastTriggeredStage = 605;
+				if (IUPC && IUPC->IsInventoryPanelVisible())
+				{
+					IUPC->SetInventoryPanelVisible(false, false);
+				}
+				SetBanner(TEXT("STEP 6 [4/6]: Bay Vao Tau Vu Tru -> Chuyen Vung Lien Server (:7777 -> :7778 KHU 2)!"));
+			}
+
+			const FVector GatePos(460.0f, 0.0f, 118.0f);
+			SteerPlayerToward(Player, RawPC, GatePos, 40.0f, true, false);
+
+			const double TransferTriggerT = (NetDemoClientRole == 1) ? 18.0 : 18.35;
+			if (IUPC && !bStep6TriggeredZoneTransfer && T >= TransferTriggerT)
+			{
+				bStep6TriggeredZoneTransfer = true;
+				IUPC->Server_RequestZoneTransfer(TEXT("zone.p01_highland_01"), 2);
+			}
+		}
+		return;
+	}
+
+	// =========================================================================
+	// STAGE B (SERVER #2 :7778 — zone.p01_highland_01 / KHU 2):
+	// 3-Phase World Boss Highland Titan + 3D Aerial Quake Dodge (>4.5m) + Poise Stagger + Quest & Pity Shop!
+	// =========================================================================
+	if (T < 2.2)
+	{
+		if (LastTriggeredStage != 611)
+		{
+			LastTriggeredStage = 611;
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshInventory();
+				IUPC->Server_RequestRefreshParty();
+				IUPC->Server_RequestRefreshQuests();
+				IUPC->Server_RequestRefreshPityShop();
+			}
+			SetBanner(FString::Printf(TEXT("STEP 6 [5/6 - KHU 2 :7778]: Da Den Cao Nguyen Titan (Epoch #%lld) -> Tiep Can BOSS!"), CurEpoch));
+		}
+		if (Boss && !Boss->IsDead())
+		{
+			Player->GetTargetingComponent()->SetLockedTarget(Boss);
+			SteerPlayerToward(Player, RawPC, Boss->GetActorLocation(), 320.0f, true, false);
+		}
+		return;
+	}
+
+	if (Boss && !Boss->IsDead() && T < 21.0)
+	{
+		if (Player->GetTargetingComponent()->GetLockedTarget() != Boss)
+		{
+			Player->GetTargetingComponent()->SetLockedTarget(Boss);
+		}
+
+		// Use Dau Than automatically if HP drops below 65% during Phase 2/3 Boss attacks!
+		if (IUPC && Attr && Attr->GetHPPercent() < 0.65f)
+		{
+			IUPC->TriggerQuickUseElixirFromHUD();
+		}
+
+		const bool bQuakeTelegraphActive = (Boss->GetActiveSpecialAction() == EIU_BossSpecialAction::GroundQuake) ||
+			(T >= 3.4 && T <= 5.8);
+
+		if (bQuakeTelegraphActive)
+		{
+			if (LastTriggeredStage != 612)
+			{
+				LastTriggeredStage = 612;
+				SetBanner(TEXT("STEP 6 [5/6 - KHU 2]: DIA CHAN 360 DO! Bay Vu Tru > 4.5m Ne 100% Sat Thuong & Ban Ki!"));
+			}
+
+			// 3D Aerial Quake Counterplay: Ascend to Z >= 640 cm (> 450cm above ground) and rain Ki Blasts!
+			if (!Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+			if (Player->GetActorLocation().Z < 650.0f)
+			{
+				Player->StartJumpInput();
+			}
+			else
+			{
+				Player->StopJumpInput();
+			}
+
+			const FVector AerialOrbit = Boss->GetActorLocation() + FVector(380.0f, (NetDemoClientRole == 1) ? -140.0f : 140.0f, 520.0f);
+			SteerPlayerToward(Player, RawPC, AerialOrbit, 90.0f, true, true);
+			if (ElapsedSeconds >= NextActionCooldownTime)
+			{
+				Player->KiBlastInput();
+				NextActionCooldownTime = ElapsedSeconds + 0.44;
+			}
+		}
+		else
+		{
+			Player->StopJumpInput();
+			Player->StopDescendInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+
+			const int32 BPhase = Boss->GetBossPhase();
+			const bool bStag = Boss->IsBossStaggered();
+			SetBanner(FString::Printf(
+				TEXT("STEP 6 [5/6 - KHU 2]: Boss Phase %d/3 | %s | Co-op Don Dame!"),
+				BPhase,
+				bStag ? TEXT("STAGGER CHOANG 1.25x SAT THUONG!") : TEXT("Pha Thanh Poise Super Armor")));
+			LastTriggeredStage = 613;
+
+			const FVector FlankGoal = Boss->GetActorLocation() + FVector(190.0f, (NetDemoClientRole == 1) ? -95.0f : 95.0f, 0.0f);
+			SteerPlayerToward(Player, RawPC, FlankGoal, 85.0f, true, false);
+			if (ElapsedSeconds >= NextActionCooldownTime)
+			{
+				const float DistB = FVector::Dist2D(Player->GetActorLocation(), Boss->GetActorLocation());
+				if (DistB > 300.0f)
+				{
+					Player->KiBlastInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.44;
+				}
+				else
+				{
+					Player->MeleeAttackInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.19;
+				}
+			}
+		}
+		return;
+	}
+
+	// World Boss Defeated -> Post-Boss Quest Claim + Pity Shop Redemption -> Clean Disconnect!
+	if (Step6BossDefeatedTime < 0.0)
+	{
+		Step6BossDefeatedTime = T;
+		Player->StopJumpInput();
+		Player->StopDescendInput();
+		Player->StopSprintInput();
+		if (Player->GetFlightComponent()->IsFlying())
+		{
+			Player->ToggleFlightInput();
+		}
+		Player->ApplyMovementInput(FVector2D::ZeroVector);
+	}
+
+	const double PostKill = T - Step6BossDefeatedTime;
+	Player->ApplyMovementInput(FVector2D::ZeroVector);
+
+	if (PostKill < 3.6)
+	{
+		if (LastTriggeredStage != 614)
+		{
+			LastTriggeredStage = 614;
+			if (IUPC)
+			{
+				IUPC->Server_RequestRefreshQuests();
+				IUPC->Server_RequestRefreshPityShop();
+				if (NetDemoClientRole == 1)
+				{
+					IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::NhiemVu, false);
+				}
+			}
+			SetBanner(TEXT("STEP 6 [6/6 - KHU 2]: Ha Guc HIGHLAND TITAN -> Nhan Thuong Nhiem Vu (+1000V, +3 HC)!"));
+		}
+
+		if (IUPC && !bStep6ClaimedTitanQuest && PostKill >= 1.3)
+		{
+			bStep6ClaimedTitanQuest = true;
+			IUPC->Server_RequestClaimQuest(TEXT("quest.nro_titan_slayer_01"));
+		}
+	}
+	else if (PostKill < 7.4)
+	{
+		if (LastTriggeredStage != 615)
+		{
+			LastTriggeredStage = 615;
+			if (IUPC && NetDemoClientRole == 1)
+			{
+				IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::ChucNang, false);
+				if (UIU_InventoryEquipmentWidget* W = IUPC->GetActiveCharacterProfileWidget())
+				{
+					W->SetActiveFuncSubMode(1);
+				}
+			}
+			SetBanner(TEXT("STEP 6 [6/6 - KHU 2]: Shop Bao Hiem Boss -> Doi Huy Chuong Titan Lay Da Cuong Hoa Do!"));
+		}
+
+		if (IUPC && !bStep6RedeemedPityShop && PostKill >= 4.6)
+		{
+			bStep6RedeemedPityShop = true;
+			IUPC->Server_RequestRedeemPityEntry(TEXT("pity.mat_crimson_ore_t1"));
+		}
+	}
+	else if (PostKill < 9.2)
+	{
+		if (LastTriggeredStage != 616)
+		{
+			LastTriggeredStage = 616;
+			if (IUPC && IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
+			}
+		}
+		SetBanner(FString::Printf(
+			TEXT("STEP 6 HOAN TAT: %s Lv.%d | Vang:%lld | HuyChuong:%d | Khu 2 Ep#%lld -> LOGOUT!"),
+			*CharName, CurLv, CoinBal, TitanHC, CurEpoch));
+	}
+	else
+	{
+		TargetDurationSeconds = ElapsedSeconds;
 	}
 }
 

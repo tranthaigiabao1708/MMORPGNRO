@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/infinite-universe/backend/internal/modules/account"
 	"github.com/infinite-universe/backend/internal/modules/auth"
+	"github.com/infinite-universe/backend/internal/modules/boss"
 	"github.com/infinite-universe/backend/internal/modules/character"
 	"github.com/infinite-universe/backend/internal/modules/economy"
 	"github.com/infinite-universe/backend/internal/modules/gamedata"
@@ -21,6 +22,7 @@ import (
 	"github.com/infinite-universe/backend/internal/modules/inventory"
 	"github.com/infinite-universe/backend/internal/modules/loot"
 	"github.com/infinite-universe/backend/internal/modules/party"
+	"github.com/infinite-universe/backend/internal/modules/quest"
 	"github.com/infinite-universe/backend/internal/modules/social"
 	"github.com/infinite-universe/backend/internal/modules/trade"
 	"github.com/infinite-universe/backend/internal/modules/world"
@@ -46,6 +48,8 @@ type Handler struct {
 	guildSvc   *guild.Service
 	tradeSvc   *trade.Service
 	chatRouter *social.Router
+	bossSvc    *boss.Service
+	questSvc   *quest.Service
 	logger     *slog.Logger
 
 	rateMu    sync.Mutex
@@ -99,6 +103,12 @@ func (h *Handler) AttachStep5Modules(
 	h.guildSvc = guildSvc
 	h.tradeSvc = tradeSvc
 	h.chatRouter = chatRouter
+}
+
+// AttachStep6Modules wires Step 6 3-Phase World Boss + Pity Shop and NRO Quest services.
+func (h *Handler) AttachStep6Modules(bossSvc *boss.Service, questSvc *quest.Service) {
+	h.bossSvc = bossSvc
+	h.questSvc = questSvc
 }
 
 // SetAuthRateLimit configures the per-IP token bucket for /v1/auth/* endpoints.
@@ -200,6 +210,19 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /internal/v1/social/chat/send", h.requireServerHMAC(h.handleInternalChatSend))
 	mux.HandleFunc("POST /internal/v1/social/chat/fetch", h.requireServerHMAC(h.handleInternalChatFetch))
+
+	// Step 6 Authoritative Multi-Zone/Channel Transfer, 3-Phase World Boss, Pity Shop & Quest Bridge
+	mux.HandleFunc("POST /internal/v1/world/heartbeat", h.requireServerHMAC(h.handleInternalWorldHeartbeat))
+	mux.HandleFunc("POST /internal/v1/world/channels", h.requireServerHMAC(h.handleInternalWorldChannels))
+	mux.HandleFunc("POST /internal/v1/world/transfer", h.requireServerHMAC(h.handleInternalWorldTransfer))
+
+	mux.HandleFunc("POST /internal/v1/boss/settle-kill", h.requireServerHMAC(h.handleInternalSettleBossKill))
+	mux.HandleFunc("POST /internal/v1/boss/pity/get", h.requireServerHMAC(h.handleInternalPityShopGet))
+	mux.HandleFunc("POST /internal/v1/boss/pity/redeem", h.requireServerHMAC(h.handleInternalPityShopRedeem))
+
+	mux.HandleFunc("POST /internal/v1/quest/get", h.requireServerHMAC(h.handleInternalQuestGet))
+	mux.HandleFunc("POST /internal/v1/quest/claim", h.requireServerHMAC(h.handleInternalQuestClaim))
+	mux.HandleFunc("POST /internal/v1/quest/repeat", h.requireServerHMAC(h.handleInternalQuestRepeat))
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -901,6 +924,9 @@ func (h *Handler) handleInternalRollMobLoot(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		h.writeInventoryErr(w, err)
 		return
+	}
+	if !lootRes.Idempotent && h.questSvc != nil {
+		_ = h.questSvc.RecordKillProgress(r.Context(), charUUID, req.SourceEntityID, 1)
 	}
 	snap, err := h.inventory.GetInventorySnapshot(r.Context(), charUUID)
 	if err != nil {

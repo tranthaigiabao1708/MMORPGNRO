@@ -17,6 +17,7 @@ import (
 	"github.com/infinite-universe/backend/internal/httpapi"
 	"github.com/infinite-universe/backend/internal/modules/account"
 	"github.com/infinite-universe/backend/internal/modules/auth"
+	"github.com/infinite-universe/backend/internal/modules/boss"
 	"github.com/infinite-universe/backend/internal/modules/character"
 	"github.com/infinite-universe/backend/internal/modules/economy"
 	"github.com/infinite-universe/backend/internal/modules/gamedata"
@@ -24,6 +25,7 @@ import (
 	"github.com/infinite-universe/backend/internal/modules/inventory"
 	"github.com/infinite-universe/backend/internal/modules/loot"
 	"github.com/infinite-universe/backend/internal/modules/party"
+	"github.com/infinite-universe/backend/internal/modules/quest"
 	"github.com/infinite-universe/backend/internal/modules/social"
 	"github.com/infinite-universe/backend/internal/modules/trade"
 	"github.com/infinite-universe/backend/internal/modules/world"
@@ -195,10 +197,13 @@ func run() error {
 		guildSvc := guild.NewService(pgPool)
 		tradeSvc := trade.NewService(pgPool, catalog)
 		chatRouter := social.NewRouter()
+		bossSvc := boss.NewService(pgPool, catalog, lootSvc)
+		questSvc := quest.NewService(pgPool)
 		worldCoord := world.NewCoordinator(rdb, cfg.DefaultJoinZone, cfg.DedicatedServerPublicAddr)
 		apiHandler := httpapi.NewHandler(accountSvc, authMgr, characterSvc, worldCoord, logger)
 		apiHandler.AttachStep4Modules(catalog, economySvc, inventorySvc, lootSvc)
 		apiHandler.AttachStep5Modules(partyCoord, guildSvc, tradeSvc, chatRouter)
+		apiHandler.AttachStep6Modules(bossSvc, questSvc)
 		apiHandler.RegisterRoutes(edgeMux)
 		logger.Info("step3-5 edge, persistence, inventory, loot, economy, party, guild, trade & social routes registered",
 			slog.String("dedicated_server_addr", cfg.DedicatedServerPublicAddr),

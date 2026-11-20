@@ -44,6 +44,9 @@ void AIU_PlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AIU_PlayerState, OverheadChatBubbleText);
 	DOREPLIFETIME(AIU_PlayerState, OverheadChatChannel);
 	DOREPLIFETIME(AIU_PlayerState, OverheadChatExpireServerTime);
+	DOREPLIFETIME(AIU_PlayerState, PityTitanTokens);
+	DOREPLIFETIME(AIU_PlayerState, CurrentZoneID);
+	DOREPLIFETIME(AIU_PlayerState, CurrentChannelID);
 	DOREPLIFETIME(AIU_PlayerState, PersistedCharacterUUID);
 	DOREPLIFETIME_CONDITION(AIU_PlayerState, ActiveFencingEpoch, COND_OwnerOnly);
 }
@@ -105,6 +108,9 @@ void AIU_PlayerState::ApplyLoadedBackendSummary(const FIU_BackendCharacterSummar
 	NextKiCost = FMath::Max<int64>(100, Summary.NextKiCost);
 	NextAtkCost = FMath::Max<int64>(150, Summary.NextAtkCost);
 	StandardCoin = FMath::Max<int64>(0, Summary.StandardCoin);
+	PityTitanTokens = FMath::Max(0, Summary.PityTitanTokens);
+	CurrentZoneID = Summary.ZoneID.IsEmpty() ? TEXT("zone.p01_west_hub") : Summary.ZoneID;
+	CurrentChannelID = FMath::Max(1, Summary.ChannelID);
 	EnemyKills = FMath::Max(0, Summary.EnemyKills);
 	PvPKills = FMath::Max(0, Summary.PvPKills);
 	Deaths = FMath::Max(0, Summary.Deaths);
@@ -298,6 +304,17 @@ void AIU_PlayerState::ApplyAuthoritativeEconomySummary(
 	ElixirCount = FMath::Max(0, InElixirCount);
 	CrimsonOreCount = FMath::Max(0, InCrimsonOreCount);
 	EquippedItemCount = FMath::Max(0, InEquippedCount);
+	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
+	ForceNetUpdate();
+}
+
+void AIU_PlayerState::SetAuthoritativeTitanTokens(int32 NewTokenBalance)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	PityTitanTokens = FMath::Max(0, NewTokenBalance);
 	OnCharacterEconomyChanged.Broadcast(StandardCoin, ElixirCount, CrimsonOreCount, EquippedItemCount);
 	ForceNetUpdate();
 }

@@ -33,6 +33,7 @@ var (
 	ErrStaleFencingEpoch      = errors.New("stale fencing_epoch rejected by PostgreSQL lease fence")
 	ErrInvalidPotentialStat   = errors.New("invalid potential stat_type (expected hp, ki, or atk)")
 	ErrInsufficientPotential  = errors.New("insufficient potential points for requested stat upgrade")
+	ErrDeadCannotTransfer     = errors.New("dead characters cannot initiate zone/channel transfer")
 )
 
 var validRaces = map[string]bool{
@@ -66,7 +67,9 @@ type CharacterState struct {
 	NextLevelExp          int64     `json:"next_level_exp"`
 	PotentialPoints       int64     `json:"potential_points"`
 	StandardCoin          int64     `json:"standard_coin"`
+	PityTitanTokens       int       `json:"pity_titan_tokens"`
 	ZoneID                string    `json:"zone_id"`
+	ChannelID             int       `json:"channel_id"`
 	PosX                  float64   `json:"pos_x"`
 	PosY                  float64   `json:"pos_y"`
 	PosZ                  float64   `json:"pos_z"`
@@ -104,6 +107,7 @@ type SaveCheckpointInput struct {
 	ServerID       string    `json:"server_id"`
 	SnapshotReason string    `json:"snapshot_reason"`
 	ZoneID         string    `json:"zone_id"`
+	ChannelID      int       `json:"channel_id"`
 	PosX           float64   `json:"pos_x"`
 	PosY           float64   `json:"pos_y"`
 	PosZ           float64   `json:"pos_z"`
@@ -382,10 +386,10 @@ func (s *Service) AdvanceEpochAndLoad(ctx context.Context, characterID uuid.UUID
 		   SET fencing_epoch = fencing_epoch + 1,
 		       last_saved_at = NOW()
 		 WHERE id = $1 AND deleted_at IS NULL
-		RETURNING id, account_id, character_name, race_id, level, current_exp, zone_id,
+		RETURNING id, account_id, character_name, race_id, level, current_exp, zone_id, last_channel_id,
 		          pos_x, pos_y, pos_z, rot_yaw, is_alive, fencing_epoch, updated_at, appearance_data
 	`, characterID).Scan(
-		&st.ID, &st.AccountID, &st.CharacterName, &st.RaceID, &st.Level, &st.CurrentExp, &st.ZoneID,
+		&st.ID, &st.AccountID, &st.CharacterName, &st.RaceID, &st.Level, &st.CurrentExp, &st.ZoneID, &st.ChannelID,
 		&st.PosX, &st.PosY, &st.PosZ, &st.RotYaw, &st.IsAlive, &st.FencingEpoch, &st.UpdatedAt, &metaRaw,
 	)
 	if err != nil {
@@ -426,6 +430,10 @@ func (s *Service) AdvanceEpochAndLoad(ctx context.Context, characterID uuid.UUID
 		st.GuildTag = gb.GuildTag
 		st.GuildRole = gb.GuildRole
 	}
+	_ = tx.QueryRow(ctx, `
+		SELECT COALESCE(amount, 0) FROM boss_pity_tokens
+		 WHERE character_id = $1 AND token_id = 'token.boss_highland_titan'
+	`, characterID).Scan(&st.PityTitanTokens)
 
 	var meta PersistedMeta
 	_ = json.Unmarshal(metaRaw, &meta)
@@ -501,6 +509,7 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 	err = tx.QueryRow(ctx, `
 		UPDATE characters
 		   SET zone_id = $3,
+		       last_channel_id = CASE WHEN $10 >= 1 THEN $10 ELSE last_channel_id END,
 		       pos_x = $4,
 		       pos_y = $5,
 		       pos_z = $6,
@@ -509,10 +518,10 @@ func (s *Service) SaveCheckpointFenced(ctx context.Context, in SaveCheckpointInp
 		       appearance_data = $9::jsonb,
 		       last_saved_at = NOW()
 		 WHERE id = $1 AND fencing_epoch = $2
-		RETURNING id, account_id, character_name, race_id, level, current_exp, zone_id,
+		RETURNING id, account_id, character_name, race_id, level, current_exp, zone_id, last_channel_id,
 		          pos_x, pos_y, pos_z, rot_yaw, is_alive, fencing_epoch, updated_at
-	`, in.CharacterID, in.FencingEpoch, zoneID, in.PosX, in.PosY, in.PosZ, in.RotYaw, in.IsAlive, string(metaBytes)).Scan(
-		&st.ID, &st.AccountID, &st.CharacterName, &st.RaceID, &st.Level, &st.CurrentExp, &st.ZoneID,
+	`, in.CharacterID, in.FencingEpoch, zoneID, in.PosX, in.PosY, in.PosZ, in.RotYaw, in.IsAlive, string(metaBytes), in.ChannelID).Scan(
+		&st.ID, &st.AccountID, &st.CharacterName, &st.RaceID, &st.Level, &st.CurrentExp, &st.ZoneID, &st.ChannelID,
 		&st.PosX, &st.PosY, &st.PosZ, &st.RotYaw, &st.IsAlive, &st.FencingEpoch, &st.UpdatedAt,
 	)
 	if err != nil {
@@ -744,6 +753,10 @@ func (s *Service) GrantEXPWithPartyFenced(
 		st.GuildTag = gb.GuildTag
 		st.GuildRole = gb.GuildRole
 	}
+	_ = tx.QueryRow(ctx, `
+		SELECT COALESCE(amount, 0) FROM boss_pity_tokens
+		 WHERE character_id = $1 AND token_id = 'token.boss_highland_titan'
+	`, characterID).Scan(&st.PityTitanTokens)
 
 	if leveledUp {
 		snapPayload, _ := json.Marshal(map[string]any{
@@ -929,6 +942,10 @@ func (s *Service) AllocatePotentialFenced(
 		st.GuildTag = gb.GuildTag
 		st.GuildRole = gb.GuildRole
 	}
+	_ = tx.QueryRow(ctx, `
+		SELECT COALESCE(amount, 0) FROM boss_pity_tokens
+		 WHERE character_id = $1 AND token_id = 'token.boss_highland_titan'
+	`, characterID).Scan(&st.PityTitanTokens)
 
 	if err := tx.Commit(ctx); err != nil {
 		return AllocatePotentialResult{}, err
@@ -954,4 +971,58 @@ func clampFloat(v, minV, maxV float64) float64 {
 		return maxV
 	}
 	return v
+}
+
+
+// PrepareZoneTransferFenced flushes an immutable ZONE_TRANSFER snapshot at the source zone
+// and atomically updates destination (zone_id, last_channel_id, pos_x, pos_y, pos_z, rot_yaw) under fencing_epoch.
+func (s *Service) PrepareZoneTransferFenced(
+	ctx context.Context,
+	in SaveCheckpointInput,
+	targetZoneID string,
+	targetChannelID int,
+	destX, destY, destZ float64,
+	destYaw float32,
+) (CharacterState, error) {
+	if !in.IsAlive || in.HP <= 0 {
+		return CharacterState{}, ErrDeadCannotTransfer
+	}
+	in.SnapshotReason = "ZONE_TRANSFER"
+	saved, err := s.SaveCheckpointFenced(ctx, in)
+	if err != nil {
+		return CharacterState{}, err
+	}
+
+	cleanTargetZone := strings.TrimSpace(targetZoneID)
+	if cleanTargetZone == "" {
+		cleanTargetZone = saved.ZoneID
+	}
+	cleanChan := max(1, targetChannelID)
+
+	res, err := s.pool.Exec(ctx, `
+		UPDATE characters
+		   SET zone_id = $3,
+		       last_channel_id = $4,
+		       pos_x = $5,
+		       pos_y = $6,
+		       pos_z = $7,
+		       rot_yaw = $8,
+		       last_saved_at = NOW()
+		 WHERE id = $1 AND fencing_epoch = $2 AND deleted_at IS NULL
+	`, in.CharacterID, in.FencingEpoch, cleanTargetZone, cleanChan, destX, destY, destZ, destYaw)
+	if err != nil {
+		return CharacterState{}, err
+	}
+	if res.RowsAffected() == 0 {
+		return CharacterState{}, ErrStaleFencingEpoch
+	}
+
+	saved.ZoneID = cleanTargetZone
+	saved.ChannelID = cleanChan
+	saved.PosX = destX
+	saved.PosY = destY
+	saved.PosZ = destZ
+	saved.RotYaw = destYaw
+	saved.HasSavedPosition = true
+	return saved, nil
 }

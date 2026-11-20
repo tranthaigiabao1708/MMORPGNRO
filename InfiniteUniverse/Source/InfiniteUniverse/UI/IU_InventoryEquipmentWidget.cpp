@@ -326,17 +326,53 @@ TSharedRef<SWidget> UIU_InventoryEquipmentWidget::RebuildWidget()
 			SWS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
 		}
 
-		// ---- PANE 0: NHIEM VU ----
+		// ---- PANE 0: NHIEM VU (STEP 6 POSTGRESQL character_quests + TURN-IN!) ----
 		{
 			UBorder* QuestPane = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("QuestPane"));
 			QuestPane->SetBrushColor(FLinearColor(0.46f, 0.35f, 0.21f, 0.96f));
-			QuestPane->SetPadding(FMargin(10.0f, 8.0f));
+			QuestPane->SetPadding(FMargin(8.0f, 7.0f));
 			USizeBox* QHeight = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 			QHeight->SetHeightOverride(318.0f);
-			QuestChecklistText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("QuestChecklistText"));
-			StyleNROText(QuestChecklistText, 10, FLinearColor(0.98f, 0.95f, 0.85f));
-			QHeight->SetContent(QuestChecklistText);
 			QuestPane->SetContent(QHeight);
+
+			UVerticalBox* QVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("QuestPaneVBox"));
+			QHeight->SetContent(QVBox);
+
+			UHorizontalBox* QHeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+			if (UVerticalBoxSlot* S = QVBox->AddChildToVerticalBox(QHeaderRow))
+			{
+				S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+			}
+			USizeBox* QTitleW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+			QTitleW->SetWidthOverride(322.0f);
+			UTextBlock* QTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			QTitle->SetText(FText::FromString(TEXT("NHIEM VU HANH TINH & SAN BOSS (POSTGRESQL 18):")));
+			StyleNROText(QTitle, 9, BrightGold);
+			QTitleW->SetContent(QTitle);
+			if (UHorizontalBoxSlot* S = QHeaderRow->AddChildToHorizontalBox(QTitleW))
+			{
+				S->SetVerticalAlignment(VAlign_Center);
+			}
+
+			QuestRefreshButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("QuestRefreshButton"));
+			QuestRefreshButton->SetBackgroundColor(FLinearColor(0.28f, 0.44f, 0.58f, 1.0f));
+			UTextBlock* QRefLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			QRefLbl->SetText(FText::FromString(TEXT(" TAI LAI ")));
+			StyleNROText(QRefLbl, 8, FLinearColor::White);
+			QuestRefreshButton->SetContent(QRefLbl);
+			QHeaderRow->AddChildToHorizontalBox(QuestRefreshButton);
+
+			USizeBox* QScrollH = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+			QScrollH->SetHeightOverride(278.0f);
+			UScrollBox* QScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("QuestScrollBox"));
+			QuestListVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("QuestListVBox"));
+			QuestChecklistText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("QuestChecklistText"));
+			StyleNROText(QuestChecklistText, 9, FLinearColor(0.98f, 0.95f, 0.85f));
+			QuestListVBox->AddChildToVerticalBox(QuestChecklistText);
+			QScroll->AddChild(QuestListVBox);
+			QScrollH->SetContent(QScroll);
+			QVBox->AddChildToVerticalBox(QScrollH);
+
 			TabContentSwitcher->AddChild(QuestPane);
 		}
 
@@ -702,42 +738,134 @@ TSharedRef<SWidget> UIU_InventoryEquipmentWidget::RebuildWidget()
 			TabContentSwitcher->AddChild(GuildPane);
 		}
 
-		// ---- PANE 4: CHUC NANG ----
+		// ---- PANE 4: CHUC NANG (STEP 6 DOI KHU / VUNG + SHOP BAO HIEM BOSS + CAI DAT!) ----
 		{
 			UBorder* FuncPane = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("FuncPane"));
 			FuncPane->SetBrushColor(FLinearColor(0.46f, 0.35f, 0.21f, 0.96f));
-			FuncPane->SetPadding(FMargin(12.0f, 10.0f));
+			FuncPane->SetPadding(FMargin(8.0f, 7.0f));
 			USizeBox* FHeight = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 			FHeight->SetHeightOverride(318.0f);
-			UVerticalBox* FVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-			FHeight->SetContent(FVBox);
+			UVerticalBox* FuncOuterVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("FuncOuterVBox"));
+			FHeight->SetContent(FuncOuterVBox);
 			FuncPane->SetContent(FHeight);
 
-			auto AddFuncBtn = [&](const TCHAR* Name, const TCHAR* Label, TObjectPtr<UButton>& OutBtn)
+			// Top Sub-Switcher Row: [DOI KHU / VUNG] | [SHOP BAO HIEM BOSS] | [CAI DAT]
+			UHorizontalBox* SubTabsRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("FuncSubTabsRow"));
+			if (UVerticalBoxSlot* STS = FuncOuterVBox->AddChildToVerticalBox(SubTabsRow))
+			{
+				STS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+			}
+
+			auto MakeSubTabBtn = [&](const TCHAR* Name, const TCHAR* Label, const FLinearColor& Bg, TObjectPtr<UButton>& OutBtn)
 			{
 				OutBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
-				OutBtn->SetBackgroundColor(FLinearColor(0.32f, 0.22f, 0.12f, 1.0f));
-				UTextBlock* Lbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-				Lbl->SetText(FText::FromString(Label));
-				StyleNROText(Lbl, 10, FLinearColor(1.0f, 0.95f, 0.82f));
-				OutBtn->SetContent(Lbl);
-				if (UVerticalBoxSlot* BS = FVBox->AddChildToVerticalBox(OutBtn))
+				OutBtn->SetBackgroundColor(Bg);
+				UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				T->SetText(FText::FromString(Label));
+				StyleNROText(T, 8, FLinearColor(1.0f, 0.98f, 0.88f));
+				OutBtn->SetContent(T);
+				if (UHorizontalBoxSlot* S = SubTabsRow->AddChildToHorizontalBox(OutBtn))
 				{
-					BS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 7.0f));
+					S->SetPadding(FMargin(0.0f, 0.0f, 5.0f, 0.0f));
 				}
 			};
 
-			AddFuncBtn(TEXT("FuncRefreshBtn"), TEXT(" Dong Bo Lai Ho So & Hanh Trang Server "), FuncRefreshButton);
-			AddFuncBtn(TEXT("FuncRotModeBtn"), TEXT(" Doi Che Do Xoay Camera (Phim R) "), FuncRotModeButton);
-			AddFuncBtn(TEXT("FuncDebugBtn"),   TEXT(" Bat / Tat Bang Telemetry Debug (F3) "), FuncDebugButton);
-			AddFuncBtn(TEXT("FuncPvPBtn"),     TEXT(" Bat / Tat Co Hieu Luyen Tap PvP (F4) "), FuncPvPButton);
-			AddFuncBtn(TEXT("FuncAuthBtn"),    TEXT(" Mo Bang Dang Nhap / Doi Nhan Vat (F5) "), FuncAuthButton);
+			MakeSubTabBtn(TEXT("FuncTabChannelsBtn"), TEXT(" DOI KHU / VUNG "), FLinearColor(0.16f, 0.56f, 0.34f, 1.0f), FuncTabChannelsBtn);
+			MakeSubTabBtn(TEXT("FuncTabPityShopBtn"), TEXT(" SHOP BAO HIEM BOSS "), FLinearColor(0.76f, 0.44f, 0.10f, 1.0f), FuncTabPityShopBtn);
+			MakeSubTabBtn(TEXT("FuncTabSettingsBtn"), TEXT(" CAI DAT HE THONG "), FLinearColor(0.32f, 0.24f, 0.16f, 1.0f), FuncTabSettingsBtn);
+
+			FuncModeSwitcher = WidgetTree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(), TEXT("FuncModeSwitcher"));
+			FuncOuterVBox->AddChildToVerticalBox(FuncModeSwitcher);
+
+			// Sub-Mode 0: NRO Multi-Zone & Channel Switcher (Khu 1..N + World Boss Indicator)
+			{
+				UVerticalBox* ChanVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ChanVBox"));
+				FuncModeSwitcher->AddChild(ChanVBox);
+
+				UHorizontalBox* ChanHdr = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+				if (UVerticalBoxSlot* S = ChanVBox->AddChildToVerticalBox(ChanHdr))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+				}
+				USizeBox* CHW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				CHW->SetWidthOverride(318.0f);
+				ChannelHeaderInfoText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ChannelHeaderInfoText"));
+				StyleNROText(ChannelHeaderInfoText, 9, BrightGold);
+				CHW->SetContent(ChannelHeaderInfoText);
+				if (UHorizontalBoxSlot* S = ChanHdr->AddChildToHorizontalBox(CHW))
+				{
+					S->SetVerticalAlignment(VAlign_Center);
+				}
+
+				ChannelRefreshButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("ChannelRefreshButton"));
+				ChannelRefreshButton->SetBackgroundColor(FLinearColor(0.26f, 0.44f, 0.58f, 1.0f));
+				UTextBlock* CRLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				CRLbl->SetText(FText::FromString(TEXT(" LAM MOI ")));
+				StyleNROText(CRLbl, 8, FLinearColor::White);
+				ChannelRefreshButton->SetContent(CRLbl);
+				ChanHdr->AddChildToHorizontalBox(ChannelRefreshButton);
+
+				USizeBox* ChanScrollH = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				ChanScrollH->SetHeightOverride(242.0f);
+				UScrollBox* ChanScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+				ChannelListVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ChannelListVBox"));
+				ChanScroll->AddChild(ChannelListVBox);
+				ChanScrollH->SetContent(ChanScroll);
+				ChanVBox->AddChildToVerticalBox(ChanScrollH);
+			}
+
+			// Sub-Mode 1: World Boss Pity Token Redemption Shop (7 entries from pity_shop.json)
+			{
+				UVerticalBox* PityVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PityVBox"));
+				FuncModeSwitcher->AddChild(PityVBox);
+
+				PityHeaderInfoText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PityHeaderInfoText"));
+				StyleNROText(PityHeaderInfoText, 9, BrightGold);
+				if (UVerticalBoxSlot* S = PityVBox->AddChildToVerticalBox(PityHeaderInfoText))
+				{
+					S->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+				}
+
+				USizeBox* PityScrollH = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+				PityScrollH->SetHeightOverride(236.0f);
+				UScrollBox* PityScroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
+				PityShopListVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PityShopListVBox"));
+				PityScroll->AddChild(PityShopListVBox);
+				PityScrollH->SetContent(PityScroll);
+				PityVBox->AddChildToVerticalBox(PityScrollH);
+			}
+
+			// Sub-Mode 2: Classic System & Camera Settings
+			{
+				UVerticalBox* FVBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("SettingsVBox"));
+				FuncModeSwitcher->AddChild(FVBox);
+
+				auto AddFuncBtn = [&](const TCHAR* Name, const TCHAR* Label, TObjectPtr<UButton>& OutBtn)
+				{
+					OutBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), Name);
+					OutBtn->SetBackgroundColor(FLinearColor(0.32f, 0.22f, 0.12f, 1.0f));
+					UTextBlock* Lbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+					Lbl->SetText(FText::FromString(Label));
+					StyleNROText(Lbl, 9, FLinearColor(1.0f, 0.95f, 0.82f));
+					OutBtn->SetContent(Lbl);
+					if (UVerticalBoxSlot* BS = FVBox->AddChildToVerticalBox(OutBtn))
+					{
+						BS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+					}
+				};
+
+				AddFuncBtn(TEXT("FuncRefreshBtn"), TEXT(" Dong Bo Lai Ho So & Hanh Trang Server "), FuncRefreshButton);
+				AddFuncBtn(TEXT("FuncRotModeBtn"), TEXT(" Doi Che Do Xoay Camera (Phim R) "), FuncRotModeButton);
+				AddFuncBtn(TEXT("FuncDebugBtn"),   TEXT(" Bat / Tat Bang Telemetry Debug (F3) "), FuncDebugButton);
+				AddFuncBtn(TEXT("FuncPvPBtn"),     TEXT(" Bat / Tat Co Hieu Luyen Tap PvP (F4) "), FuncPvPButton);
+				AddFuncBtn(TEXT("FuncAuthBtn"),    TEXT(" Mo Bang Dang Nhap / Doi Nhan Vat (F5) "), FuncAuthButton);
+			}
 
 			TabContentSwitcher->AddChild(FuncPane);
 		}
 
 		// ====================================================================
-		// 4. BOTTOM CURRENCY FOOTER BAR (Exact Image 1 Gold/Green/Ruby Bar!)
+		// 4. BOTTOM CURRENCY FOOTER BAR (Exact Image 1 Gold/Green/Ruby + Titan Token Bar!)
 		// ====================================================================
 		UBorder* FooterBar = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("FooterCurrencyBar"));
 		FooterBar->SetBrushColor(FLinearColor(0.30f, 0.21f, 0.11f, 0.98f));
@@ -753,20 +881,26 @@ TSharedRef<SWidget> UIU_InventoryEquipmentWidget::RebuildWidget()
 		FooterGoldText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FooterGoldText"));
 		FooterPotentialText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FooterPotentialText"));
 		FooterOreText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FooterOreText"));
+		FooterTokenText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FooterTokenText"));
 
-		StyleNROText(FooterGoldText, 10, FLinearColor(1.0f, 0.88f, 0.22f));
-		StyleNROText(FooterPotentialText, 10, FLinearColor(0.42f, 1.0f, 0.58f));
-		StyleNROText(FooterOreText, 10, FLinearColor(1.0f, 0.52f, 0.62f));
+		StyleNROText(FooterGoldText, 9, FLinearColor(1.0f, 0.88f, 0.22f));
+		StyleNROText(FooterPotentialText, 9, FLinearColor(0.42f, 1.0f, 0.58f));
+		StyleNROText(FooterOreText, 9, FLinearColor(1.0f, 0.52f, 0.62f));
+		StyleNROText(FooterTokenText, 9, FLinearColor(0.45f, 0.96f, 1.0f));
 
 		if (UHorizontalBoxSlot* S1 = CurrenciesRow->AddChildToHorizontalBox(FooterGoldText))
 		{
-			S1->SetPadding(FMargin(0.0f, 0.0f, 16.0f, 0.0f));
+			S1->SetPadding(FMargin(0.0f, 0.0f, 12.0f, 0.0f));
 		}
 		if (UHorizontalBoxSlot* S2 = CurrenciesRow->AddChildToHorizontalBox(FooterPotentialText))
 		{
-			S2->SetPadding(FMargin(0.0f, 0.0f, 16.0f, 0.0f));
+			S2->SetPadding(FMargin(0.0f, 0.0f, 12.0f, 0.0f));
 		}
-		CurrenciesRow->AddChildToHorizontalBox(FooterOreText);
+		if (UHorizontalBoxSlot* S3 = CurrenciesRow->AddChildToHorizontalBox(FooterOreText))
+		{
+			S3->SetPadding(FMargin(0.0f, 0.0f, 12.0f, 0.0f));
+		}
+		CurrenciesRow->AddChildToHorizontalBox(FooterTokenText);
 
 		FeedbackStatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FeedbackStatusText"));
 		FeedbackStatusText->SetText(FText::FromString(TEXT("Chon o Trang bi / Tui do de thao tac, hoac sang tab [Ky Nang] de cong Tiem Nang!")));
@@ -820,6 +954,11 @@ void UIU_InventoryEquipmentWidget::NativeConstruct()
 	if (GuildRefreshRosterButton) { GuildRefreshRosterButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshGuildClicked); }
 	if (GuildLeaveButton) { GuildLeaveButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleLeaveGuildClicked); }
 
+	if (QuestRefreshButton) { QuestRefreshButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshQuestsClicked); }
+	if (FuncTabChannelsBtn) { FuncTabChannelsBtn->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncSubModeChannelsClicked); }
+	if (FuncTabPityShopBtn) { FuncTabPityShopBtn->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncSubModePityShopClicked); }
+	if (FuncTabSettingsBtn) { FuncTabSettingsBtn->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncSubModeSettingsClicked); }
+	if (ChannelRefreshButton) { ChannelRefreshButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshChannelsClicked); }
 	if (FuncRefreshButton) { FuncRefreshButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleRefreshClicked); }
 	if (FuncDebugButton) { FuncDebugButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncToggleDebugClicked); }
 	if (FuncRotModeButton) { FuncRotModeButton->OnClicked.AddUniqueDynamic(this, &UIU_InventoryEquipmentWidget::HandleFuncToggleRotClicked); }
@@ -843,7 +982,20 @@ void UIU_InventoryEquipmentWidget::SetActiveProfileTab(EIU_CharacterProfileTab N
 	{
 		TabContentSwitcher->SetActiveWidgetIndex(static_cast<int32>(CurrentProfileTab));
 	}
-	if (CurrentProfileTab == EIU_CharacterProfileTab::BangHoi)
+	if (CurrentProfileTab == EIU_CharacterProfileTab::NhiemVu)
+	{
+		if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+		{
+			if (IUPC->HasCachedQuestSnapshot())
+			{
+				DisplayedQuestSnapshot = IUPC->GetCachedQuestSnapshot();
+				bHasQuestSnapshotData = true;
+			}
+			IUPC->Server_RequestRefreshQuests();
+		}
+		RebuildQuestPaneView();
+	}
+	else if (CurrentProfileTab == EIU_CharacterProfileTab::BangHoi)
 	{
 		if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
 		{
@@ -855,6 +1007,26 @@ void UIU_InventoryEquipmentWidget::SetActiveProfileTab(EIU_CharacterProfileTab N
 			IUPC->Server_RequestRefreshGuild();
 		}
 		RebuildGuildPaneView();
+	}
+	else if (CurrentProfileTab == EIU_CharacterProfileTab::ChucNang)
+	{
+		if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+		{
+			if (IUPC->HasCachedWorldChannels())
+			{
+				DisplayedWorldChannels = IUPC->GetCachedWorldChannels();
+				bHasWorldChannelData = true;
+			}
+			if (IUPC->HasCachedPityShopSnapshot())
+			{
+				DisplayedPityShopSnapshot = IUPC->GetCachedPityShopSnapshot();
+				bHasPityShopData = true;
+			}
+			IUPC->Server_RequestRefreshChannels();
+			IUPC->Server_RequestRefreshPityShop();
+		}
+		RebuildChannelListView();
+		RebuildPityShopView();
 	}
 	UpdateTabHighlightVisuals();
 	UpdateAllReadouts();
@@ -914,11 +1086,29 @@ void UIU_InventoryEquipmentWidget::RefreshBindingsAndRebuild()
 			DisplayedGuildSnapshot = IUPC->GetCachedGuildSnapshot();
 			bHasGuildSnapshotData = true;
 		}
+		if (IUPC->HasCachedQuestSnapshot())
+		{
+			DisplayedQuestSnapshot = IUPC->GetCachedQuestSnapshot();
+			bHasQuestSnapshotData = true;
+		}
+		if (IUPC->HasCachedWorldChannels())
+		{
+			DisplayedWorldChannels = IUPC->GetCachedWorldChannels();
+			bHasWorldChannelData = true;
+		}
+		if (IUPC->HasCachedPityShopSnapshot())
+		{
+			DisplayedPityShopSnapshot = IUPC->GetCachedPityShopSnapshot();
+			bHasPityShopData = true;
+		}
 	}
 
 	UpdateAllReadouts();
 	RebuildPaperdollAndBagGrid();
 	RebuildGuildPaneView();
+	RebuildQuestPaneView();
+	RebuildChannelListView();
+	RebuildPityShopView();
 }
 
 void UIU_InventoryEquipmentWidget::UnbindAll()
@@ -1033,8 +1223,320 @@ void UIU_InventoryEquipmentWidget::ExecuteRowAction(
 		SetFeedbackMessage(TEXT("Dang truc xuat thanh vien khoi Bang..."));
 		IUPC->Server_RequestKickGuildMember(ItemInstanceID);
 		break;
+	case EIU_InvRowAction::SwitchZoneChannel:
+		SetFeedbackMessage(FString::Printf(TEXT("Dang khoi hanh Tau Vu Tru sang %s (Khu %d)..."), *SlotID, BagSlotIndex));
+		IUPC->Server_RequestZoneTransfer(SlotID, BagSlotIndex);
+		break;
+	case EIU_InvRowAction::ClaimQuestReward:
+		SetFeedbackMessage(TEXT("Dang nhan thuong Nhiem Vu (Vang + SM/TN + Huy Chuong)..."));
+		IUPC->Server_RequestClaimQuest(SlotID);
+		break;
+	case EIU_InvRowAction::RepeatQuest:
+		SetFeedbackMessage(TEXT("Dang nhan lai Nhiem Vu..."));
+		IUPC->Server_RequestRepeatQuest(SlotID);
+		break;
+	case EIU_InvRowAction::RedeemPityShopItem:
+		SetFeedbackMessage(TEXT("Dang doi vat pham Bao Hiem Boss..."));
+		IUPC->Server_RequestRedeemPityEntry(SlotID);
+		break;
 	default:
 		break;
+	}
+}
+
+void UIU_InventoryEquipmentWidget::ApplyQuestSnapshot(const FIU_QuestSnapshot& Snapshot)
+{
+	DisplayedQuestSnapshot = Snapshot;
+	bHasQuestSnapshotData = true;
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		SetFeedbackMessage(Snapshot.ActionMessage, false);
+	}
+	RebuildQuestPaneView();
+	UpdateAllReadouts();
+}
+
+void UIU_InventoryEquipmentWidget::ApplyWorldChannels(const TArray<FIU_ZoneChannelView>& Channels)
+{
+	DisplayedWorldChannels = Channels;
+	bHasWorldChannelData = true;
+	RebuildChannelListView();
+}
+
+void UIU_InventoryEquipmentWidget::ApplyPityShopSnapshot(const FIU_PityShopSnapshot& Snapshot)
+{
+	DisplayedPityShopSnapshot = Snapshot;
+	bHasPityShopData = true;
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		SetFeedbackMessage(Snapshot.ActionMessage, false);
+	}
+	RebuildPityShopView();
+	UpdateAllReadouts();
+}
+
+void UIU_InventoryEquipmentWidget::SetActiveFuncSubMode(int32 SubModeIndex)
+{
+	CurrentFuncSubMode = FMath::Clamp(SubModeIndex, 0, 2);
+	if (FuncModeSwitcher)
+	{
+		FuncModeSwitcher->SetActiveWidgetIndex(CurrentFuncSubMode);
+	}
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		if (CurrentFuncSubMode == 0) { IUPC->Server_RequestRefreshChannels(); }
+		else if (CurrentFuncSubMode == 1) { IUPC->Server_RequestRefreshPityShop(); }
+	}
+}
+
+void UIU_InventoryEquipmentWidget::RebuildQuestPaneView()
+{
+	if (!WidgetTree || !QuestListVBox)
+	{
+		return;
+	}
+	if (!bHasQuestSnapshotData || DisplayedQuestSnapshot.Quests.Num() == 0)
+	{
+		return;
+	}
+
+	QuestListVBox->ClearChildren();
+	for (const FIU_QuestEntryView& Q : DisplayedQuestSnapshot.Quests)
+	{
+		UBorder* Card = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Card->SetBrushColor(FLinearColor(0.31f, 0.22f, 0.12f, 0.97f));
+		Card->SetPadding(FMargin(7.0f, 5.0f));
+		if (UVerticalBoxSlot* CS = QuestListVBox->AddChildToVerticalBox(Card))
+		{
+			CS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 5.0f));
+		}
+
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		Card->SetContent(Row);
+
+		const bool bReady = (Q.QuestState == TEXT("READY_TO_TURN_IN"));
+		const bool bDone = (Q.QuestState == TEXT("COMPLETED"));
+		const FString StateTag = bReady
+			? FString::Printf(TEXT("[SAN SANG %d/%d]"), Q.CurrentCount, Q.TargetCount)
+			: bDone
+			? FString::Printf(TEXT("[HOAN THANH x%d]"), FMath::Max(1, Q.RepeatCount))
+			: FString::Printf(TEXT("[DANG LAM %d/%d]"), Q.CurrentCount, Q.TargetCount);
+
+		USizeBox* InfoW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		InfoW->SetWidthOverride((bReady || bDone) ? 286.0f : 386.0f);
+		UTextBlock* InfoTxt = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		InfoTxt->SetText(FText::FromString(FString::Printf(
+			TEXT("%s %s\n%s\nThuong: +%lld Vang | +%lld SM/TN | +%d Huy Chuong Titan"),
+			*StateTag, *Q.Title, *Q.Description, Q.RewardCoin, Q.RewardExpAndPot, Q.RewardTitanToken)));
+		StyleNROText(InfoTxt, 8, bReady ? FLinearColor(0.45f, 1.0f, 0.62f) : (bDone ? FLinearColor(1.0f, 0.90f, 0.42f) : FLinearColor(0.96f, 0.94f, 0.86f)));
+		InfoW->SetContent(InfoTxt);
+		if (UHorizontalBoxSlot* IS = Row->AddChildToHorizontalBox(InfoW))
+		{
+			IS->SetVerticalAlignment(VAlign_Center);
+			IS->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+		}
+
+		if (bReady || bDone)
+		{
+			UButton* ActBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+			ActBtn->SetBackgroundColor(bReady ? FLinearColor(0.16f, 0.62f, 0.26f, 1.0f) : FLinearColor(0.24f, 0.44f, 0.62f, 1.0f));
+			UTextBlock* Lbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			Lbl->SetText(FText::FromString(bReady ? TEXT(" NHAN THUONG ") : TEXT(" LAM LAI ")));
+			StyleNROText(Lbl, 8, FLinearColor::White);
+			ActBtn->SetContent(Lbl);
+
+			UIU_InventoryActionProxy* Proxy = NewObject<UIU_InventoryActionProxy>(this);
+			Proxy->OwnerWidget = this;
+			Proxy->Action = bReady ? EIU_InvRowAction::ClaimQuestReward : EIU_InvRowAction::RepeatQuest;
+			Proxy->SlotID = Q.QuestID;
+			ActiveActionProxies.Add(Proxy);
+			ActBtn->OnClicked.AddDynamic(Proxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+			if (UHorizontalBoxSlot* BS = Row->AddChildToHorizontalBox(ActBtn))
+			{
+				BS->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+	}
+}
+
+void UIU_InventoryEquipmentWidget::RebuildChannelListView()
+{
+	if (!WidgetTree || !ChannelListVBox)
+	{
+		return;
+	}
+	const AIU_PlayerState* PS = BoundPS.Get();
+	const FString CurZone = PS ? PS->GetCurrentZoneID() : TEXT("zone.p01_west_hub");
+	const int32 CurKhu = PS ? PS->GetCurrentChannelID() : 1;
+
+	if (ChannelHeaderInfoText)
+	{
+		const FString ZName = (CurZone == TEXT("zone.p01_highland_01")) ? TEXT("Cao Nguyen Titan") : TEXT("Tram Tay Nam");
+		ChannelHeaderInfoText->SetText(FText::FromString(FString::Printf(TEXT("Vi tri hien tai: %s - KHU %d"), *ZName, CurKhu)));
+	}
+
+	ChannelListVBox->ClearChildren();
+	if (DisplayedWorldChannels.Num() == 0)
+	{
+		UTextBlock* EmptyT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		EmptyT->SetText(FText::FromString(TEXT("Dang cap nhat danh sach Khu / Vung tu World Coordinator...")));
+		StyleNROText(EmptyT, 8, FLinearColor(0.95f, 0.92f, 0.84f));
+		ChannelListVBox->AddChildToVerticalBox(EmptyT);
+		return;
+	}
+
+	for (const FIU_ZoneChannelView& Ch : DisplayedWorldChannels)
+	{
+		UBorder* RowBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		const bool bIsCurrent = (Ch.ZoneID == CurZone && Ch.ChannelID == CurKhu);
+		RowBdr->SetBrushColor(bIsCurrent ? FLinearColor(0.20f, 0.36f, 0.22f, 0.98f) : FLinearColor(0.31f, 0.22f, 0.12f, 0.96f));
+		RowBdr->SetPadding(FMargin(6.0f, 4.5f));
+		if (UVerticalBoxSlot* RS = ChannelListVBox->AddChildToVerticalBox(RowBdr))
+		{
+			RS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		}
+
+		UHorizontalBox* RowH = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		RowBdr->SetContent(RowH);
+
+		const FLinearColor LoadCol = (Ch.StatusColor == TEXT("RED"))
+			? FLinearColor(1.0f, 0.38f, 0.32f)
+			: (Ch.StatusColor == TEXT("YELLOW"))
+			? FLinearColor(1.0f, 0.86f, 0.25f)
+			: FLinearColor(0.45f, 1.0f, 0.58f);
+		const FString BossBadge = Ch.bBossAlive
+			? FString::Printf(TEXT("  [BOSS TITAN %.0f%%]"), Ch.BossHPRatio * 100.0f)
+			: TEXT("");
+
+		USizeBox* InfoW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		InfoW->SetWidthOverride(292.0f);
+		UTextBlock* InfoT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		InfoT->SetText(FText::FromString(FString::Printf(
+			TEXT("[KHU %d] %s (%d/%d - %s)%s\nMay chu: %s"),
+			Ch.ChannelID,
+			Ch.ZoneLabel.IsEmpty() ? *Ch.ZoneID : *Ch.ZoneLabel,
+			Ch.OnlineCCU, Ch.SoftCapCCU, *Ch.StatusColor, *BossBadge, *Ch.ServerAddr)));
+		StyleNROText(InfoT, 8, LoadCol);
+		InfoW->SetContent(InfoT);
+		if (UHorizontalBoxSlot* IS = RowH->AddChildToHorizontalBox(InfoW))
+		{
+			IS->SetVerticalAlignment(VAlign_Center);
+			IS->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+		}
+
+		if (bIsCurrent)
+		{
+			UTextBlock* HereT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			HereT->SetText(FText::FromString(TEXT("[DANG O DAY]")));
+			StyleNROText(HereT, 8, FLinearColor(0.65f, 1.0f, 0.72f));
+			if (UHorizontalBoxSlot* HS = RowH->AddChildToHorizontalBox(HereT))
+			{
+				HS->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+		else
+		{
+			UButton* GoBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+			GoBtn->SetBackgroundColor(FLinearColor(0.16f, 0.58f, 0.28f, 1.0f));
+			UTextBlock* GoLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+			GoLbl->SetText(FText::FromString(TEXT(" CHUYEN KHU ")));
+			StyleNROText(GoLbl, 8, FLinearColor::White);
+			GoBtn->SetContent(GoLbl);
+
+			UIU_InventoryActionProxy* Proxy = NewObject<UIU_InventoryActionProxy>(this);
+			Proxy->OwnerWidget = this;
+			Proxy->Action = EIU_InvRowAction::SwitchZoneChannel;
+			Proxy->SlotID = Ch.ZoneID;
+			Proxy->BagSlotIndex = Ch.ChannelID;
+			ActiveActionProxies.Add(Proxy);
+			GoBtn->OnClicked.AddDynamic(Proxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+			if (UHorizontalBoxSlot* BS = RowH->AddChildToHorizontalBox(GoBtn))
+			{
+				BS->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+	}
+}
+
+void UIU_InventoryEquipmentWidget::RebuildPityShopView()
+{
+	if (!WidgetTree || !PityShopListVBox)
+	{
+		return;
+	}
+	const AIU_PlayerState* PS = BoundPS.Get();
+	const int32 Tokens = bHasPityShopData ? DisplayedPityShopSnapshot.TokenBalance : (PS ? PS->GetPityTitanTokens() : 0);
+
+	if (PityHeaderInfoText)
+	{
+		PityHeaderInfoText->SetText(FText::FromString(FString::Printf(
+			TEXT("Huy Chuong Titan: %d HC  |  Bao Hiem Hard Pity: %d/%d (Lan 5 -> 100%% Do Hi!)"),
+			Tokens, DisplayedPityShopSnapshot.ConsecutiveDryKills, FMath::Max(1, DisplayedPityShopSnapshot.HardPityThreshold))));
+	}
+
+	PityShopListVBox->ClearChildren();
+	if (DisplayedPityShopSnapshot.Entries.Num() == 0)
+	{
+		UTextBlock* EmptyT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		EmptyT->SetText(FText::FromString(TEXT("Dang tai danh muc 7 vat pham Shop Bao Hiem Boss (pity_shop.json)...")));
+		StyleNROText(EmptyT, 8, FLinearColor(0.95f, 0.92f, 0.84f));
+		PityShopListVBox->AddChildToVerticalBox(EmptyT);
+		return;
+	}
+
+	for (const FIU_PityShopEntryView& EV : DisplayedPityShopSnapshot.Entries)
+	{
+		UBorder* RowBdr = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		RowBdr->SetBrushColor(FLinearColor(0.31f, 0.22f, 0.12f, 0.96f));
+		RowBdr->SetPadding(FMargin(6.0f, 4.0f));
+		if (UVerticalBoxSlot* RS = PityShopListVBox->AddChildToVerticalBox(RowBdr))
+		{
+			RS->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 3.5f));
+		}
+
+		UHorizontalBox* RowH = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		RowBdr->SetContent(RowH);
+
+		const FString LimitStr = (EV.DailyLimit > 0)
+			? FString::Printf(TEXT("GH Ngay: %d/%d"), EV.DailyPurchased, EV.DailyLimit)
+			: TEXT("Khong GH");
+		const FString QtyStr = (EV.RewardQuantity > 1) ? FString::Printf(TEXT(" x%d"), EV.RewardQuantity) : TEXT("");
+
+		USizeBox* InfoW = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		InfoW->SetWidthOverride(302.0f);
+		UTextBlock* InfoT = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		InfoT->SetText(FText::FromString(FString::Printf(
+			TEXT("%s%s [%s]\nGia: %d Huy Chuong + %lld Vang  |  %s"),
+			*EV.RewardName, *QtyStr, *EV.RewardRarity, EV.TokenCost, EV.StandardCoinCost, *LimitStr)));
+		StyleNROText(InfoT, 8, GetRarityTintColor(EV.RewardRarity));
+		InfoW->SetContent(InfoT);
+		if (UHorizontalBoxSlot* IS = RowH->AddChildToHorizontalBox(InfoW))
+		{
+			IS->SetVerticalAlignment(VAlign_Center);
+			IS->SetPadding(FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+		}
+
+		UButton* BuyBtn = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+		const bool bSoldOutToday = (EV.DailyLimit > 0 && EV.DailyPurchased >= EV.DailyLimit);
+		BuyBtn->SetBackgroundColor(bSoldOutToday ? FLinearColor(0.35f, 0.32f, 0.30f, 1.0f) : FLinearColor(0.80f, 0.46f, 0.08f, 1.0f));
+		UTextBlock* BuyLbl = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		BuyLbl->SetText(FText::FromString(bSoldOutToday ? TEXT(" HET LUOT ") : TEXT(" DOI NGAY ")));
+		StyleNROText(BuyLbl, 8, FLinearColor::White);
+		BuyBtn->SetContent(BuyLbl);
+
+		if (!bSoldOutToday)
+		{
+			UIU_InventoryActionProxy* Proxy = NewObject<UIU_InventoryActionProxy>(this);
+			Proxy->OwnerWidget = this;
+			Proxy->Action = EIU_InvRowAction::RedeemPityShopItem;
+			Proxy->SlotID = EV.EntryID;
+			ActiveActionProxies.Add(Proxy);
+			BuyBtn->OnClicked.AddDynamic(Proxy, &UIU_InventoryActionProxy::HandleButtonClicked);
+		}
+		if (UHorizontalBoxSlot* BS = RowH->AddChildToHorizontalBox(BuyBtn))
+		{
+			BS->SetVerticalAlignment(VAlign_Center);
+		}
 	}
 }
 
@@ -1361,7 +1863,7 @@ void UIU_InventoryEquipmentWidget::UpdateAllReadouts()
 		UpgradeAtkBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" +10 SD (%lld TN) "), AtkCost)));
 	}
 
-	// Tab 0: Nhiem Vu live checklist
+	// Tab 0: Nhiem Vu fallback checklist when offline (preserved when PostgreSQL quests haven't been loaded)
 	int32 MaxEnhSeen = 0;
 	for (const FIU_InventoryItemView& Eq : DisplayedSnapshot.EquippedItems)
 	{
@@ -1371,7 +1873,7 @@ void UIU_InventoryEquipmentWidget::UpdateAllReadouts()
 	{
 		MaxEnhSeen = FMath::Max(MaxEnhSeen, Bg.EnhanceLevel);
 	}
-	if (QuestChecklistText)
+	if (QuestChecklistText && (!bHasQuestSnapshotData || DisplayedQuestSnapshot.Quests.Num() == 0))
 	{
 		QuestChecklistText->SetText(FText::FromString(FString::Printf(
 			TEXT("NHIEM VU TAN THU HANH TINH TRAI DAT:\n\n")
@@ -1385,18 +1887,24 @@ void UIU_InventoryEquipmentWidget::UpdateAllReadouts()
 			(MaxEnhSeen >= 1) ? TEXT("HOAN THANH") : TEXT("DANG LAM"), MaxEnhSeen)));
 	}
 
-	// Bottom Currency Footer Bar (Image 1!)
+	const int32 TitanTokens = bHasPityShopData ? DisplayedPityShopSnapshot.TokenBalance : (PS ? PS->GetPityTitanTokens() : 0);
+
+	// Bottom Currency Footer Bar (Image 1 + Step 6 Huy Chuong Titan!)
 	if (FooterGoldText)
 	{
 		FooterGoldText->SetText(FText::FromString(FString::Printf(TEXT("[VANG] %lld"), Coin)));
 	}
 	if (FooterPotentialText)
 	{
-		FooterPotentialText->SetText(FText::FromString(FString::Printf(TEXT("[TIEM NANG] %lld"), PoolTN)));
+		FooterPotentialText->SetText(FText::FromString(FString::Printf(TEXT("[TN] %lld"), PoolTN)));
 	}
 	if (FooterOreText)
 	{
 		FooterOreText->SetText(FText::FromString(FString::Printf(TEXT("[DA CH] %d"), Ore)));
+	}
+	if (FooterTokenText)
+	{
+		FooterTokenText->SetText(FText::FromString(FString::Printf(TEXT("[HUY CHUONG] %d"), TitanTokens)));
 	}
 }
 
@@ -1841,6 +2349,39 @@ void UIU_InventoryEquipmentWidget::HandleRefreshClicked()
 	{
 		SetFeedbackMessage(TEXT("Dang dong bo Ho So & Hanh Trang tu Go Backend..."));
 		IUPC->Server_RequestRefreshInventory();
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleRefreshQuestsClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang tai danh sach Nhiem Vu tu PostgreSQL 18..."));
+		IUPC->Server_RequestRefreshQuests();
+	}
+}
+
+void UIU_InventoryEquipmentWidget::HandleFuncSubModeChannelsClicked()
+{
+	SetActiveFuncSubMode(0);
+}
+
+void UIU_InventoryEquipmentWidget::HandleFuncSubModePityShopClicked()
+{
+	SetActiveFuncSubMode(1);
+}
+
+void UIU_InventoryEquipmentWidget::HandleFuncSubModeSettingsClicked()
+{
+	SetActiveFuncSubMode(2);
+}
+
+void UIU_InventoryEquipmentWidget::HandleRefreshChannelsClicked()
+{
+	if (AIU_PlayerController* IUPC = Cast<AIU_PlayerController>(GetOwningPlayer()))
+	{
+		SetFeedbackMessage(TEXT("Dang cap nhat danh sach Khu / Vung truc tuyen..."));
+		IUPC->Server_RequestRefreshChannels();
 	}
 }
 

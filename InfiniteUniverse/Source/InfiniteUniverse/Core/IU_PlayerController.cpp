@@ -2487,3 +2487,337 @@ void AIU_PlayerController::Server_RequestTradeCancel_Implementation()
 			}
 		});
 }
+
+// ============================================================================
+// Step 6 Multi-Zone / Channel Handoff, Quest Turn-In & Boss Pity Shop RPCs
+// ============================================================================
+
+void AIU_PlayerController::Client_ReceiveWorldChannels_Implementation(const TArray<FIU_ZoneChannelView>& Channels)
+{
+	CachedWorldChannels = Channels;
+	bHasCachedWorldChannels = true;
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->ApplyWorldChannels(Channels);
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshChannels_Implementation()
+{
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled())
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->FetchWorldChannels(
+		[WeakPC](bool bSuccess, const TArray<FIU_ZoneChannelView>& Channels, const FString&)
+		{
+			if (bSuccess)
+			{
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					PC->Client_ReceiveWorldChannels(Channels);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestZoneTransfer_Implementation(const FString& TargetZoneID, int32 TargetChannelID)
+{
+	if (bZoneTransferInFlight)
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	APawn* ControlledPawn = GetPawn();
+	if (!IUPS || !IUPS->HasValidBackendLease() || !ControlledPawn)
+	{
+		return;
+	}
+	const UIU_AttributeComponent* Attr = ControlledPawn->FindComponentByClass<UIU_AttributeComponent>();
+	if (Attr && Attr->IsDead())
+	{
+		Client_NotifyInventoryFeedback(TEXT("Nhan vat dang kiet suc, khong the doi khu / chuyen vung!"), true);
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled())
+	{
+		return;
+	}
+
+	const FString CleanTargetZone = TargetZoneID.TrimStartAndEnd().IsEmpty()
+		? Backend->GetServerZoneID()
+		: TargetZoneID.TrimStartAndEnd();
+	const int32 CleanTargetChannel = FMath::Max(1, TargetChannelID);
+
+	if (CleanTargetZone == Backend->GetServerZoneID() && CleanTargetChannel == Backend->GetServerChannelID())
+	{
+		Client_NotifyInventoryFeedback(FString::Printf(TEXT("Ban dang o ngay tai Khu %d cua vung nay!"), CleanTargetChannel), false);
+		return;
+	}
+
+	FIU_CharacterSavePayload Cp;
+	Cp.CharacterID = IUPS->GetPersistedCharacterUUID();
+	Cp.FencingEpoch = IUPS->GetActiveFencingEpoch();
+	Cp.ServerID = Backend->GetServerInstanceID();
+	Cp.SnapshotReason = TEXT("ZONE_TRANSFER");
+	Cp.ZoneID = Backend->GetServerZoneID();
+	Cp.ChannelID = Backend->GetServerChannelID();
+	Cp.Position = ControlledPawn->GetActorLocation();
+	Cp.Yaw = ControlledPawn->GetActorRotation().Yaw;
+	Cp.bIsAlive = true;
+	Cp.HP = Attr ? Attr->GetHP() : 200.0f;
+	Cp.Energy = Attr ? Attr->GetKi() : 200.0f;
+	Cp.EnemyKills = IUPS->GetEnemyKills();
+	Cp.PvPKills = IUPS->GetPvPKills();
+	Cp.Deaths = IUPS->GetDeaths();
+
+	bZoneTransferInFlight = true;
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+
+	Backend->RequestZoneTransfer(
+		Cp,
+		CleanTargetZone,
+		CleanTargetChannel,
+		[WeakPC, WeakPS, CleanTargetZone, CleanTargetChannel](bool bSuccess, const FString& ServerAddr, const FString& TicketID, const FString& ErrMsg)
+		{
+			AIU_PlayerController* PC = WeakPC.Get();
+			if (!PC)
+			{
+				return;
+			}
+			if (!bSuccess)
+			{
+				PC->bZoneTransferInFlight = false;
+				PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+				return;
+			}
+
+			// CRITICAL ANTI-DUPE HANDOFF: Mark local lease revoked immediately on Source Server so GameMode::Logout
+			// NEVER overwrites the ZONE_TRANSFER snapshot or destination Epoch #(N+1)!
+			if (AIU_PlayerState* PS = WeakPS.Get())
+			{
+				PS->MarkLeaseRevoked();
+			}
+
+			PC->Client_ExecuteZoneTransfer(ServerAddr, TicketID, CleanTargetZone, CleanTargetChannel);
+		});
+}
+
+void AIU_PlayerController::Client_ExecuteZoneTransfer_Implementation(
+	const FString& ServerAddr,
+	const FString& TicketID,
+	const FString& TargetZoneID,
+	int32 TargetChannelID)
+{
+	if (IsInventoryPanelVisible())
+	{
+		SetInventoryPanelVisible(false, false);
+	}
+	if (IsPlayerTradePanelVisible())
+	{
+		SetPlayerTradePanelVisible(false, false);
+	}
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		IUHUD->NotifyInventoryToast(
+			FString::Printf(TEXT("Dang bay Tau Vu Tru sang %s (Khu %d)..."), *TargetZoneID, TargetChannelID),
+			true);
+	}
+
+	const FString TravelURL = FString::Printf(TEXT("%s?Ticket=%s"), *ServerAddr, *TicketID);
+	ClientTravel(TravelURL, TRAVEL_Absolute);
+}
+
+void AIU_PlayerController::Client_ReceiveQuestSnapshot_Implementation(const FIU_QuestSnapshot& Snapshot)
+{
+	CachedQuestSnapshot = Snapshot;
+	bHasCachedQuestSnapshot = true;
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->ApplyQuestSnapshot(Snapshot);
+	}
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+		{
+			IUHUD->NotifyInventoryToast(Snapshot.ActionMessage, true);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshQuests_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled()) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->FetchQuestSnapshot(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC](bool bSuccess, const FIU_QuestSnapshot& Snap, const FString&)
+		{
+			if (bSuccess)
+			{
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					PC->Client_ReceiveQuestSnapshot(Snap);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestClaimQuest_Implementation(const FString& QuestID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled()) { return; }
+
+	const uint64 OpSeq = ++GServerEconOpSeq;
+	const FString IdemKey = FString::Printf(TEXT("qclaim_%s_%lld_%llu"), *IUPS->GetPersistedCharacterUUID(), IUPS->GetActiveFencingEpoch(), OpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->ClaimQuestReward(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		QuestID.TrimStartAndEnd(),
+		IdemKey,
+		[WeakPC](bool bSuccess, const FIU_QuestSnapshot& QSnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (!bSuccess)
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+					return;
+				}
+				if (bHasInv)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(InvSnap);
+				}
+				PC->Client_ReceiveQuestSnapshot(QSnap);
+				PC->Server_RequestRefreshPityShop();
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestRepeatQuest_Implementation(const FString& QuestID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled()) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	Backend->RepeatQuest(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		QuestID.TrimStartAndEnd(),
+		[WeakPC](bool bSuccess, const FIU_QuestSnapshot& Snap, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (bSuccess) { PC->Client_ReceiveQuestSnapshot(Snap); }
+				else { PC->Client_NotifyInventoryFeedback(ErrMsg, true); }
+			}
+		});
+}
+
+void AIU_PlayerController::Client_ReceivePityShopSnapshot_Implementation(const FIU_PityShopSnapshot& Snapshot)
+{
+	CachedPityShopSnapshot = Snapshot;
+	bHasCachedPityShopSnapshot = true;
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->ApplyPityShopSnapshot(Snapshot);
+	}
+	if (!Snapshot.ActionMessage.IsEmpty())
+	{
+		if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+		{
+			IUHUD->NotifyInventoryToast(Snapshot.ActionMessage, true);
+		}
+	}
+}
+
+void AIU_PlayerController::Server_RequestRefreshPityShop_Implementation()
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled()) { return; }
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->FetchPityShopSnapshot(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		[WeakPC, WeakPS](bool bSuccess, const FIU_PityShopSnapshot& Snap, const FString&)
+		{
+			if (bSuccess)
+			{
+				if (AIU_PlayerState* PS = WeakPS.Get())
+				{
+					PS->SetAuthoritativeTitanTokens(Snap.TokenBalance);
+				}
+				if (AIU_PlayerController* PC = WeakPC.Get())
+				{
+					PC->Client_ReceivePityShopSnapshot(Snap);
+				}
+			}
+		});
+}
+
+void AIU_PlayerController::Server_RequestRedeemPityEntry_Implementation(const FString& EntryID)
+{
+	AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || !IUPS->HasValidBackendLease()) { return; }
+	UGameInstance* GI = GetGameInstance();
+	UIU_BackendSubsystem* Backend = GI ? GI->GetSubsystem<UIU_BackendSubsystem>() : nullptr;
+	if (!Backend || !Backend->IsBackendBridgeEnabled()) { return; }
+
+	const uint64 OpSeq = ++GServerEconOpSeq;
+	const FString IdemKey = FString::Printf(TEXT("pity_%s_%lld_%llu"), *IUPS->GetPersistedCharacterUUID(), IUPS->GetActiveFencingEpoch(), OpSeq);
+
+	TWeakObjectPtr<AIU_PlayerController> WeakPC(this);
+	TWeakObjectPtr<AIU_PlayerState> WeakPS(IUPS);
+	Backend->RedeemPityShopEntry(
+		IUPS->GetPersistedCharacterUUID(),
+		IUPS->GetActiveFencingEpoch(),
+		EntryID.TrimStartAndEnd(),
+		IdemKey,
+		[WeakPC, WeakPS](bool bSuccess, const FIU_PityShopSnapshot& PitySnap, const FIU_InventorySnapshot& InvSnap, bool bHasInv, const FString& ErrMsg)
+		{
+			if (AIU_PlayerController* PC = WeakPC.Get())
+			{
+				if (!bSuccess)
+				{
+					PC->Client_NotifyInventoryFeedback(ErrMsg, true);
+					return;
+				}
+				if (AIU_PlayerState* PS = WeakPS.Get())
+				{
+					PS->SetAuthoritativeTitanTokens(PitySnap.TokenBalance);
+				}
+				if (bHasInv)
+				{
+					PC->ApplyAuthoritativeInventorySnapshotOnServer(InvSnap);
+				}
+				PC->Client_ReceivePityShopSnapshot(PitySnap);
+			}
+		});
+}

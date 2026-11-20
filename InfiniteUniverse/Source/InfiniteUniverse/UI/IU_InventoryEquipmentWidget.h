@@ -45,7 +45,11 @@ enum class EIU_InvRowAction : uint8
 	SellOne,
 	JoinGuildByID,
 	PromoteGuildVice,
-	KickGuildMember
+	KickGuildMember,
+	SwitchZoneChannel,
+	ClaimQuestReward,
+	RepeatQuest,
+	RedeemPityShopItem
 };
 
 /**
@@ -107,6 +111,23 @@ public:
 	/** Updates Tab [Bang Hoi] immediately from a newly received authoritative FIU_GuildSnapshot. */
 	void ApplyGuildSnapshot(const FIU_GuildSnapshot& Snapshot);
 
+	/** Updates Tab [Nhiem Vu] immediately from a newly received authoritative FIU_QuestSnapshot. */
+	void ApplyQuestSnapshot(const FIU_QuestSnapshot& Snapshot);
+
+	/** Updates Tab [Chuc Nang -> Doi Khu] immediately from live Dedicated Server channel list. */
+	void ApplyWorldChannels(const TArray<FIU_ZoneChannelView>& Channels);
+
+	/** Updates Tab [Chuc Nang -> Shop Bao Hiem Boss] immediately from authoritative FIU_PityShopSnapshot. */
+	void ApplyPityShopSnapshot(const FIU_PityShopSnapshot& Snapshot);
+
+	/** Switches Tab [Chuc Nang] sub-view (0 = Doi Khu / Vung, 1 = Shop Bao Hiem Boss, 2 = Cai Dat). */
+	UFUNCTION(BlueprintCallable, Category = "IU|UI")
+	void SetActiveFuncSubMode(int32 SubModeIndex);
+
+	int32 GetDisplayedQuestCount() const { return DisplayedQuestSnapshot.Quests.Num(); }
+	int32 GetDisplayedPityEntryCount() const { return DisplayedPityShopSnapshot.Entries.Num(); }
+	int32 GetDisplayedChannelCount() const { return DisplayedWorldChannels.Num(); }
+
 	/** Displays a feedback status line in the bottom footer. */
 	void SetFeedbackMessage(const FString& Message, bool bIsError = false);
 
@@ -160,6 +181,16 @@ private:
 	UFUNCTION()
 	void HandleRefreshClicked();
 	UFUNCTION()
+	void HandleRefreshQuestsClicked();
+	UFUNCTION()
+	void HandleFuncSubModeChannelsClicked();
+	UFUNCTION()
+	void HandleFuncSubModePityShopClicked();
+	UFUNCTION()
+	void HandleFuncSubModeSettingsClicked();
+	UFUNCTION()
+	void HandleRefreshChannelsClicked();
+	UFUNCTION()
 	void HandleCloseClicked();
 
 	UFUNCTION()
@@ -180,6 +211,9 @@ private:
 	void RebuildPaperdollAndBagGrid();
 	void RebuildSelectedInspectorBar();
 	void RebuildGuildPaneView();
+	void RebuildQuestPaneView();
+	void RebuildChannelListView();
+	void RebuildPityShopView();
 
 	// Header & Tab Bar Widgets
 	UPROPERTY(Transient)
@@ -202,7 +236,11 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetSwitcher> TabContentSwitcher;
 
-	// Pane 0: Nhiem Vu
+	// Pane 0: Nhiem Vu (Step 6 PostgreSQL character_quests + Turn-In)
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> QuestRefreshButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> QuestListVBox;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> QuestChecklistText;
 
@@ -277,7 +315,25 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UVerticalBox> GuildMembersListBox;
 
-	// Pane 4: Chuc Nang Buttons
+	// Pane 4: Chuc Nang (Step 6 Doi Khu / Chuyen Vung + Shop Bao Hiem Boss + Cai Dat)
+	UPROPERTY(Transient)
+	TObjectPtr<UWidgetSwitcher> FuncModeSwitcher;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> FuncTabChannelsBtn;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> FuncTabPityShopBtn;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> FuncTabSettingsBtn;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> ChannelHeaderInfoText;
+	UPROPERTY(Transient)
+	TObjectPtr<UButton> ChannelRefreshButton;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> ChannelListVBox;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PityHeaderInfoText;
+	UPROPERTY(Transient)
+	TObjectPtr<UVerticalBox> PityShopListVBox;
 	UPROPERTY(Transient)
 	TObjectPtr<UButton> FuncDebugButton;
 	UPROPERTY(Transient)
@@ -296,6 +352,8 @@ private:
 	TObjectPtr<UTextBlock> FooterPotentialText;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> FooterOreText;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> FooterTokenText;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> FeedbackStatusText;
 
@@ -321,6 +379,13 @@ private:
 	bool bHasSnapshotData = false;
 	FIU_GuildSnapshot DisplayedGuildSnapshot;
 	bool bHasGuildSnapshotData = false;
+	FIU_QuestSnapshot DisplayedQuestSnapshot;
+	bool bHasQuestSnapshotData = false;
+	TArray<FIU_ZoneChannelView> DisplayedWorldChannels;
+	bool bHasWorldChannelData = false;
+	FIU_PityShopSnapshot DisplayedPityShopSnapshot;
+	bool bHasPityShopData = false;
+	int32 CurrentFuncSubMode = 0;
 
 	TWeakObjectPtr<UIU_AttributeComponent> BoundAttr;
 	TWeakObjectPtr<AIU_PlayerState> BoundPS;

@@ -91,6 +91,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|Economy")
 	int32 GetEquippedItemCount() const { return EquippedItemCount; }
 
+	UFUNCTION(BlueprintPure, Category = "IU|Boss")
+	int32 GetPityTitanTokens() const { return PityTitanTokens; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|World")
+	FString GetCurrentZoneID() const { return CurrentZoneID; }
+
+	UFUNCTION(BlueprintPure, Category = "IU|World")
+	int32 GetCurrentChannelID() const { return CurrentChannelID; }
+
 	// ========================================================================
 	// Step 5 Replicated Guild, Party & Overhead Speech Bubble Accessors
 	// ========================================================================
@@ -160,6 +169,9 @@ public:
 
 	/** Server-only: updates replicated economy & inventory summary counts after authoritative Go Backend mutations. */
 	void ApplyAuthoritativeEconomySummary(int64 InStandardCoin, int32 InElixirCount, int32 InCrimsonOreCount, int32 InEquippedCount);
+
+	/** Server-only: updates replicated World Boss Pity Token balance (Huy Chuong Titan) after Boss kill / Quest / Pity Shop redemption. */
+	void SetAuthoritativeTitanTokens(int32 NewTokenBalance);
 
 	/** Server-only: updates replicated Guild identity ([TAG] Nameplate + GuildRole). */
 	void ApplyAuthoritativeGuildIdentity(const FString& InGuildID, const FString& InGuildName, const FString& InGuildTag, const FString& InGuildRole);
@@ -298,6 +310,15 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Social")
 	float OverheadChatExpireServerTime = 0.0f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_EconomyState, Category = "IU|Boss")
+	int32 PityTitanTokens = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|World")
+	FString CurrentZoneID = TEXT("zone.p01_west_hub");
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|World")
+	int32 CurrentChannelID = 1;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Replicated, Category = "IU|Backend")
 	FString PersistedCharacterUUID;
