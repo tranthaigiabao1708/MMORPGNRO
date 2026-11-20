@@ -1,0 +1,274 @@
+name: iu-backend-local
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: iu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iu_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iu_dev_secret_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-infinite_universe}
+      TZ: UTC
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "log_lock_waits=on"
+      - "-c"
+      - "deadlock_timeout=500ms"
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - iu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-iu_admin} -d $${POSTGRES_DB:-infinite_universe}"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    networks:
+      - iu-local-net
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    container_name: iu-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../backend/migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER:-iu_admin}:${POSTGRES_PASSWORD:-iu_dev_secret_2026}@postgres:5432/${POSTGRES_DB:-infinite_universe}?sslmode=disable"
+      - "up"
+    restart: "no"
+    networks:
+      - iu-local-net
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: iu-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "noeviction"
+    ports:
+      - "6379:6379"
+    volumes:
+      - iu_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  nats:
+    image: nats:2.10.22-alpine
+    container_name: iu-nats
+    restart: unless-stopped
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - iu_natsdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8222/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  gameapi:
+    build:
+      context: ../backend
+      dockerfile: build/Dockerfile.go
+      args:
+        SERVICE_NAME: gameapi
+    container_name: iu-gameapi
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      IU_ENV: local
+      IU_LOG_LEVEL: debug
+      IU_GRPC_LISTEN_ADDR: ":50051"
+      IU_METRICS_LISTEN_ADDR: ":9091"
+      IU_PG_DSN: "postgres://${POSTGRES_USER:-iu_admin}:${POSTGRES_PASSWORD:-iu_dev_secret_2026}@postgres:5432/${POSTGRES_DB:-infinite_universe}?sslmode=disable&pool_max_conns=40"
+      IU_REDIS_ADDR: "redis:6379"
+      IU_NATS_URL: "nats://nats:4222"
+      IU_GAMEDATA_DIR: "/app/gamedata"
+      IU_JWT_PUBLIC_KEY_HEX: "b4f09f2a4c7d8e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091"
+      IU_JWT_PRIVATE_KEY_SEED_HEX: "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
+      IU_ALLOW_PLAINTEXT_INTERNAL_GRPC: "true"
+    ports:
+      - "50051:50051"
+      - "9091:9091"
+    volumes:
+      - ../gamedata:/app/gamedata:ro
+    healthcheck:
+      test: ["CMD", "/app/service", "-healthcheck=http://127.0.0.1:9091/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  coordinator:
+    build:
+      context: ../backend
+      dockerfile: build/Dockerfile.go
+      args:
+        SERVICE_NAME: coordinator
+    container_name: iu-coordinator
+    restart: unless-stopped
+    depends_on:
+      gameapi:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      IU_ENV: local
+      IU_LOG_LEVEL: debug
+      IU_GRPC_LISTEN_ADDR: ":50052"
+      IU_METRICS_LISTEN_ADDR: ":9092"
+      IU_REDIS_ADDR: "redis:6379"
+      IU_NATS_URL: "nats://nats:4222"
+      IU_GAMEDATA_DIR: "/app/gamedata"
+      IU_ZONE_SOFT_CAP_CCU: "60"
+      IU_ZONE_HARD_CAP_CCU: "80"
+      IU_DEFAULT_JOIN_ZONE: "zone.p01_highland_01"
+      IU_ALLOW_PLAINTEXT_INTERNAL_GRPC: "true"
+    ports:
+      - "50052:50052"
+      - "9092:9092"
+    volumes:
+      - ../gamedata:/app/gamedata:ro
+    healthcheck:
+      test: ["CMD", "/app/service", "-healthcheck=http://127.0.0.1:9092/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  gateway:
+    build:
+      context: ../backend
+      dockerfile: build/Dockerfile.go
+      args:
+        SERVICE_NAME: gateway
+    container_name: iu-gateway
+    restart: unless-stopped
+    depends_on:
+      gameapi:
+        condition: service_healthy
+      coordinator:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      IU_ENV: local
+      IU_LOG_LEVEL: debug
+      IU_HTTP_LISTEN_ADDR: ":8080"
+      IU_METRICS_LISTEN_ADDR: ":9090"
+      IU_GAMEAPI_GRPC_ADDR: "gameapi:50051"
+      IU_COORDINATOR_GRPC_ADDR: "coordinator:50052"
+      IU_REDIS_ADDR: "redis:6379"
+      IU_NATS_URL: "nats://nats:4222"
+      IU_JWT_PUBLIC_KEY_HEX: "b4f09f2a4c7d8e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091"
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "/app/service", "-healthcheck=http://127.0.0.1:9090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: iu-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9095:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - iu_promdata:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - iu-local-net
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: iu-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: iu_grafana_admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - iu_grafanadata:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - iu-local-net
+
+networks:
+  iu-local-net:
+    driver: bridge
+
+volumes:
+  iu_pgdata:
+  iu_redisdata:
+  iu_natsdata:
+  iu_promdata:
+  iu_grafanadata:

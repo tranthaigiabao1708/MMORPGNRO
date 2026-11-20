@@ -1,0 +1,132 @@
+[
+  {
+    "zone_id": "zone.p01_highland_01",
+    "planet_id": "planet.p01_terra",
+    "ue5_level_name": "L_P01_Highland01",
+    "scope_status": "VERTICAL_SLICE_FULL",
+    "recommended_level_min": 5,
+    "recommended_level_max": 20,
+    "soft_cap_ccu": 20,
+    "hard_cap_ccu": 25,
+    "world_bounds_cm": {
+      "min_x": -100000,
+      "max_x": 100000,
+      "min_y": -100000,
+      "max_y": 100000,
+      "min_z": 4200,
+      "max_z": 45000,
+      "kill_z": -5000
+    },
+    "subzones": [
+      {
+        "subzone_id": "subzone.highland_outpost",
+        "is_safe_zone": true,
+        "recommended_level_min": 1,
+        "recommended_level_max": 20,
+        "bounds_cm": {
+          "min_x": -85000,
+          "max_x": -60000,
+          "min_y": -20000,
+          "max_y": 20000,
+          "min_z": 4500,
+          "max_z": 12000
+        },
+        "spawns": []
+      },
+      {
+        "subzone_id": "subzone.wolf_plateau",
+        "is_safe_zone": false,
+        "recommended_level_min": 5,
+        "recommended_level_max": 8,
+        "bounds_cm": {
+          "min_x": -55000,
+          "max_x": -10000,
+          "min_y": -45000,
+          "max_y": 35000,
+          "min_z": 5000,
+          "max_z": 9500
+        },
+        "spawns": [
+          {
+            "entity_id": "mob.highland_wolf_01",
+            "group_count": 6,
+            "entities_per_group": 4,
+            "respawn_time_sec": 15.0
+          }
+        ]
+      },
+      {
+        "subzone_id": "subzone.raider_camp",
+        "is_safe_zone": false,
+        "recommended_level_min": 8,
+        "recommended_level_max": 12,
+        "bounds_cm": {
+          "min_x": -5000,
+          "max_x": 45000,
+          "min_y": -50000,
+          "max_y": 40000,
+          "min_z": 9500,
+          "max_z": 16000
+        },
+        "spawns": [
+          {
+            "entity_id": "mob.raider_scouter_01",
+            "group_count": 7,
+            "entities_per_group": 4,
+            "respawn_time_sec": 15.0
+          }
+        ]
+      },
+      {
+        "subzone_id": "subzone.crimson_gorge",
+        "is_safe_zone": false,
+        "recommended_level_min": 14,
+        "recommended_level_max": 16,
+        "bounds_cm": {
+          "min_x": 45000,
+          "max_x": 78000,
+          "min_y": -35000,
+          "max_y": 35000,
+          "min_z": 16000,
+          "max_z": 24000
+        },
+        "spawns": [
+          {
+            "entity_id": "mob.crimson_enforcer_elite",
+            "group_count": 4,
+            "entities_per_group": 1,
+            "respawn_time_sec": 60.0
+          },
+          {
+            "entity_id": "mob.raider_scouter_01",
+            "group_count": 4,
+            "entities_per_group": 2,
+            "respawn_time_sec": 15.0
+          }
+        ]
+      },
+      {
+        "subzone_id": "subzone.titan_summit_arena",
+        "is_safe_zone": false,
+        "recommended_level_min": 18,
+        "recommended_level_max": 20,
+        "bounds_cm": {
+          "min_x": 81500,
+          "max_x": 90500,
+          "min_y": -4500,
+          "max_y": 4500,
+          "min_z": 32000,
+          "max_z": 40000
+        },
+        "spawns": [
+          {
+            "entity_id": "boss.highland_titan_01",
+            "group_count": 1,
+            "entities_per_group": 1,
+            "respawn_time_sec": 300.0
+          }
+        ]
+      }
+    ]
+  }
+]

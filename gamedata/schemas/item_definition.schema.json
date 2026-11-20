@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/item_definition.schema.json",
+  "title": "ItemDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/ItemDefinition"
+  },
+  "$defs": {
+    "BaseStatEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attr_id", "value"],
+      "properties": {
+        "attr_id": {
+          "type": "string",
+          "pattern": "^(attr|pot)\\.[a-z0-9_]+$"
+        },
+        "value": { "type": "number" }
+      }
+    },
+    "EquipSpec": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "slot",
+        "allowed_races",
+        "max_enhance_level",
+        "random_affix_count",
+        "affix_tier_pool",
+        "set_id",
+        "base_stats",
+        "innate_effect_id"
+      ],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "enum": [
+            "slot.head",
+            "slot.body",
+            "slot.hands",
+            "slot.legs",
+            "slot.feet",
+            "slot.acc_1",
+            "slot.acc_2",
+            "slot.special"
+          ]
+        },
+        "allowed_races": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(ALL|race\\.[a-z0-9_]+)$"
+          }
+        },
+        "max_enhance_level": { "type": "integer", "minimum": 0, "maximum": 15 },
+        "random_affix_count": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "affix_tier_pool": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "set_id": {
+          "type": ["string", "null"],
+          "pattern": "^set\\.[a-z0-9_]+$"
+        },
+        "base_stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BaseStatEntry"
+          }
+        },
+        "innate_effect_id": {
+          "type": ["string", "null"],
+          "pattern": "^effect\\.[a-z0-9_]+$"
+        }
+      }
+    },
+    "ItemDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "item_type",
+        "rarity",
+        "required_level",
+        "max_stack",
+        "is_tradeable",
+        "sell_price_coin",
+        "equip_spec"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^(item|token)\\.[a-z0-9_]+$"
+        },
+        "item_type": {
+          "type": "string",
+          "enum": [
+            "EQUIPMENT",
+            "CONSUMABLE",
+            "ENHANCE_MATERIAL",
+            "BOSS_TOKEN",
+            "QUEST_ITEM"
+          ]
+        },
+        "rarity": {
+          "type": "string",
+          "enum": [
+            "rarity.common",
+            "rarity.uncommon",
+            "rarity.rare",
+            "rarity.epic",
+            "rarity.legendary",
+            "rarity.mythic"
+          ]
+        },
+        "required_level": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_stack": { "type": "integer", "minimum": 1, "maximum": 9999 },
+        "is_tradeable": { "type": "boolean" },
+        "sell_price_coin": { "type": "integer", "minimum": 0 },
+        "equip_spec": { "$ref": "#/$defs/EquipSpec" }
+      },
+      "if": {
+        "properties": {
+          "item_type": { "const": "EQUIPMENT" }
+        },
+        "required": ["item_type"]
+      },
+      "then": {
+        "properties": {
+          "equip_spec": { "type": "object" },
+          "max_stack": { "const": 1 }
+        }
+      },
+      "else": {
+        "properties": {
+          "equip_spec": { "type": "null" }
+        }
+      }
+    }
+  }
+}

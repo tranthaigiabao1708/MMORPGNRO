@@ -1,0 +1,122 @@
+[
+  {
+    "affix_id": "affix.flat_max_hp",
+    "target_attr_id": "attr.max_hp",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_HP",
+    "roll_weight": 150,
+    "allowed_slots": ["slot.head", "slot.body", "slot.legs", "slot.feet", "slot.acc_2"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 40, "max_value": 110, "step": 10 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 100, "max_value": 240, "step": 10 }
+    ]
+  },
+  {
+    "affix_id": "affix.flat_phys_atk",
+    "target_attr_id": "attr.phys_atk",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_FLAT_PATK",
+    "roll_weight": 120,
+    "allowed_slots": ["slot.hands", "slot.acc_1", "slot.acc_2", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 5, "max_value": 14, "step": 1 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 12, "max_value": 28, "step": 2 }
+    ]
+  },
+  {
+    "affix_id": "affix.flat_ki_atk",
+    "target_attr_id": "attr.ki_atk",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_FLAT_KATK",
+    "roll_weight": 120,
+    "allowed_slots": ["slot.head", "slot.hands", "slot.acc_1", "slot.acc_2", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 5, "max_value": 14, "step": 1 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 12, "max_value": 28, "step": 2 }
+    ]
+  },
+  {
+    "affix_id": "affix.phys_dmg_pct",
+    "target_attr_id": "attr.phys_dmg_pct",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_DMG_PCT",
+    "roll_weight": 85,
+    "allowed_slots": ["slot.hands", "slot.acc_1", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.02, "max_value": 0.045, "step": 0.005 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.04, "max_value": 0.08, "step": 0.005 }
+    ]
+  },
+  {
+    "affix_id": "affix.ki_dmg_pct",
+    "target_attr_id": "attr.ki_dmg_pct",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_DMG_PCT",
+    "roll_weight": 85,
+    "allowed_slots": ["slot.head", "slot.acc_1", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.02, "max_value": 0.045, "step": 0.005 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.04, "max_value": 0.08, "step": 0.005 }
+    ]
+  },
+  {
+    "affix_id": "affix.crit_rate",
+    "target_attr_id": "attr.crit_rate",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_CRIT_CHANCE",
+    "roll_weight": 75,
+    "allowed_slots": ["slot.hands", "slot.acc_1", "slot.acc_2", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.015, "max_value": 0.03, "step": 0.005 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.025, "max_value": 0.05, "step": 0.005 }
+    ]
+  },
+  {
+    "affix_id": "affix.crit_dmg",
+    "target_attr_id": "attr.crit_dmg",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_CRIT_MULT",
+    "roll_weight": 75,
+    "allowed_slots": ["slot.hands", "slot.acc_1", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.04, "max_value": 0.09, "step": 0.01 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.08, "max_value": 0.16, "step": 0.01 }
+    ]
+  },
+  {
+    "affix_id": "affix.energy_regen",
+    "target_attr_id": "attr.energy_regen",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_EN_REGEN",
+    "roll_weight": 100,
+    "allowed_slots": ["slot.head", "slot.body", "slot.legs", "slot.acc_2"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.4, "max_value": 1.0, "step": 0.2 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.8, "max_value": 2.2, "step": 0.2 }
+    ]
+  },
+  {
+    "affix_id": "affix.cdr",
+    "target_attr_id": "attr.cdr",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_CDR",
+    "roll_weight": 65,
+    "allowed_slots": ["slot.head", "slot.feet", "slot.acc_2", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.015, "max_value": 0.035, "step": 0.005 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.03, "max_value": 0.065, "step": 0.005 }
+    ]
+  },
+  {
+    "affix_id": "affix.form_efficiency",
+    "target_attr_id": "pot.form_efficiency",
+    "mod_op": "ADD_FLAT",
+    "exclusive_group": "GRP_FORM_EFF",
+    "roll_weight": 60,
+    "allowed_slots": ["slot.body", "slot.legs", "slot.feet", "slot.special"],
+    "tiers": [
+      { "tier": 1, "min_item_level": 1, "max_item_level": 10, "min_value": 0.02, "max_value": 0.05, "step": 0.005 },
+      { "tier": 2, "min_item_level": 11, "max_item_level": 20, "min_value": 0.045, "max_value": 0.09, "step": 0.005 }
+    ]
+  }
+]

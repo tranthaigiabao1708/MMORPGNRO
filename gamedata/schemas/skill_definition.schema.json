@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/skill_definition.schema.json",
+  "title": "SkillDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/SkillDefinition"
+  },
+  "$defs": {
+    "ResourceCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "energy_cost",
+        "energy_upkeep_per_sec",
+        "stamina_cost",
+        "energy_gain_on_hit"
+      ],
+      "properties": {
+        "energy_cost": { "type": "number", "minimum": 0 },
+        "energy_upkeep_per_sec": { "type": "number", "minimum": 0 },
+        "stamina_cost": { "type": "number", "minimum": 0 },
+        "energy_gain_on_hit": { "type": "number", "minimum": 0 }
+      }
+    },
+    "TimingSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cooldown_sec",
+        "cast_time_sec",
+        "active_duration_sec",
+        "max_charge_sec",
+        "cancel_window_start_sec",
+        "cancel_window_end_sec",
+        "iframe_duration_sec",
+        "grants_super_armor"
+      ],
+      "properties": {
+        "cooldown_sec": { "type": "number", "minimum": 0 },
+        "cast_time_sec": { "type": "number", "minimum": 0 },
+        "active_duration_sec": { "type": "number", "minimum": 0 },
+        "max_charge_sec": { "type": "number", "minimum": 0 },
+        "cancel_window_start_sec": { "type": "number", "minimum": 0 },
+        "cancel_window_end_sec": { "type": "number", "minimum": 0 },
+        "iframe_duration_sec": { "type": "number", "minimum": 0 },
+        "grants_super_armor": { "type": "boolean" }
+      }
+    },
+    "HitboxSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "max_range_cm",
+        "radius_cm",
+        "projectile_speed_cms"
+      ],
+      "properties": {
+        "shape": {
+          "type": "string",
+          "enum": [
+            "SELF",
+            "SPHERE",
+            "CAPSULE_BEAM",
+            "CONE",
+            "HOMING_PROJECTILE",
+            "DASH_SWEEP"
+          ]
+        },
+        "max_range_cm": { "type": "number", "minimum": 0 },
+        "radius_cm": { "type": "number", "minimum": 0 },
+        "projectile_speed_cms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "DamageProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alpha_phys",
+        "alpha_ki",
+        "skill_mult",
+        "charged_skill_mult_max",
+        "hit_count",
+        "poise_damage_total",
+        "hit_reaction",
+        "damage_taken_multiplier_while_active"
+      ],
+      "properties": {
+        "alpha_phys": { "type": "number", "minimum": 0 },
+        "alpha_ki": { "type": "number", "minimum": 0 },
+        "skill_mult": { "type": "number", "minimum": 0 },
+        "charged_skill_mult_max": { "type": "number", "minimum": 0 },
+        "hit_count": { "type": "integer", "minimum": 0 },
+        "poise_damage_total": { "type": "number", "minimum": 0 },
+        "hit_reaction": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "LIGHT_FLINCH",
+            "HEAVY_STAGGER",
+            "AIR_LAUNCH",
+            "RADIAL_KNOCKBACK",
+            "HEAVY_KNOCKBACK",
+            "MASSIVE_BLOWAWAY"
+          ]
+        },
+        "damage_taken_multiplier_while_active": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2.0
+        }
+      }
+    },
+    "SkillDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "ability_tag",
+        "category",
+        "allowed_races",
+        "unlock_level",
+        "mastery_point_cost",
+        "can_cast_in_air",
+        "can_cast_while_hitstunned",
+        "resource_cost",
+        "timing",
+        "targeting_and_hitbox",
+        "damage_profile"
+      ],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^skill\\.[a-z0-9_]+$"
+        },
+        "ability_tag": {
+          "type": "string",
+          "pattern": "^Ability\\.[A-Za-z0-9.]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "MELEE_COMBO",
+            "MELEE_RUSH",
+            "KI_PROJECTILE",
+            "KI_BEAM_CHARGED",
+            "KI_AOE_BURST",
+            "DEFENSE_EVADE",
+            "DEFENSE_SHIELD",
+            "ULTIMATE"
+          ]
+        },
+        "allowed_races": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(ALL|race\\.[a-z0-9_]+)$"
+          }
+        },
+        "unlock_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "mastery_point_cost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "can_cast_in_air": { "type": "boolean" },
+        "can_cast_while_hitstunned": { "type": "boolean" },
+        "resource_cost": { "$ref": "#/$defs/ResourceCost" },
+        "timing": { "$ref": "#/$defs/TimingSpec" },
+        "targeting_and_hitbox": { "$ref": "#/$defs/HitboxSpec" },
+        "damage_profile": { "$ref": "#/$defs/DamageProfile" }
+      }
+    }
+  }
+}

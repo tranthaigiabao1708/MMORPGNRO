@@ -31,6 +31,7 @@ public:
 private:
 	void TickSinglePlayerShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
 	void TickMultiplayerNetClient(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
+	void TickStep3PersistenceShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC);
 	void SteerPlayerToward(AIU_PlayerCharacter* Player, APlayerController* RawPC, const FVector& GoalPos, float StopDistCm, bool bSprint, bool b3DPitch = false);
 
 	AIU_EnemyCharacter* FindClosestLivingEnemy(const FVector& Origin) const;
@@ -46,6 +47,8 @@ private:
 	bool bSinglePlayerMode = false;
 	bool bServerTelemetryMode = false;
 	int32 NetDemoClientRole = 0; // 1 = Client 1 (Recorder / Hero), 2 = Client 2 (Co-op Ally & PvP Sparring Partner)
+	int32 Step3PersistencePhase = 0; // 1 = Login -> Raid -> LevelUp -> Save/Disconnect, 2 = Post-Server-Restart Relogin Proof
+	bool bSentCleanNetClose = false;
 
 	bool bRecordFrames = false;
 	FString DemoFramesSubdir = TEXT("DemoFrames");

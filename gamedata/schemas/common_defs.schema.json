@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/common_defs.schema.json",
+  "title": "CommonDefinitions",
+  "description": "Shared canonical ID patterns, attribute IDs, rarities, equipment slots, and stat modifiers for Infinite Universe.",
+  "$defs": {
+    "CanonicalId": {
+      "type": "string",
+      "pattern": "^(planet|zone|subzone|race|trait|skill|form|mob|boss|item|token|set|affix|loot|currency|effect|title|term)\\.[a-z0-9_]+$"
+    },
+    "AttrOrPotId": {
+      "type": "string",
+      "pattern": "^(attr|pot)\\.[a-z0-9_]+$"
+    },
+    "AllowedRaceEntry": {
+      "type": "string",
+      "pattern": "^(ALL|race\\.[a-z0-9_]+)$"
+    },
+    "EquipmentSlot": {
+      "type": "string",
+      "enum": [
+        "slot.head",
+        "slot.body",
+        "slot.hands",
+        "slot.legs",
+        "slot.feet",
+        "slot.acc_1",
+        "slot.acc_2",
+        "slot.special"
+      ]
+    },
+    "Rarity": {
+      "type": "string",
+      "enum": [
+        "rarity.common",
+        "rarity.uncommon",
+        "rarity.rare",
+        "rarity.epic",
+        "rarity.legendary",
+        "rarity.mythic"
+      ]
+    },
+    "StatModOp": {
+      "type": "string",
+      "enum": [
+        "ADD_FLAT",
+        "ADD_PCT",
+        "MULT"
+      ]
+    },
+    "StatModifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attr_id",
+        "op",
+        "value"
+      ],
+      "properties": {
+        "attr_id": {
+          "$ref": "#/$defs/AttrOrPotId"
+        },
+        "op": {
+          "$ref": "#/$defs/StatModOp"
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

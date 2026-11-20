@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/presentation_pack.schema.json",
+  "title": "PresentationPack",
+  "oneOf": [
+    { "$ref": "#/$defs/PackManifest" },
+    { "$ref": "#/$defs/LocalizationStringsFile" },
+    { "$ref": "#/$defs/AssetBindingsFile" }
+  ],
+  "$defs": {
+    "LinearColor": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["r", "g", "b", "a"],
+      "properties": {
+        "r": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "g": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "b": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "a": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      }
+    },
+    "PackManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pack_id",
+        "pack_name",
+        "pack_version",
+        "ip_mode",
+        "is_commercial_safe",
+        "supported_locales",
+        "asset_root_path",
+        "default_theme_tint_hex"
+      ],
+      "properties": {
+        "pack_id": {
+          "type": "string",
+          "pattern": "^Pack_[A-Za-z0-9_]+$"
+        },
+        "pack_name": { "type": "string", "minLength": 1 },
+        "pack_version": { "type": "string", "minLength": 1 },
+        "ip_mode": {
+          "type": "string",
+          "enum": ["REFERENCE_INTERNAL", "COMMERCIAL_ORIGINAL"]
+        },
+        "is_commercial_safe": { "type": "boolean" },
+        "supported_locales": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["vi", "en"]
+          }
+        },
+        "asset_root_path": {
+          "type": "string",
+          "pattern": "^/Game/PresentationPacks/[A-Za-z0-9_]+/?$"
+        },
+        "default_theme_tint_hex": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "description": { "type": "string" }
+      }
+    },
+    "LocalizedStringEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_id", "display_name"],
+      "properties": {
+        "canonical_id": {
+          "type": "string",
+          "pattern": "^(planet|zone|subzone|race|trait|skill|form|mob|boss|item|token|set|affix|loot|currency|effect|title|term|rarity|slot|attr|pot)\\.[a-z0-9_]+$"
+        },
+        "display_name": { "type": "string", "minLength": 1 },
+        "short_description": { "type": "string" },
+        "lore_flavor_text": { "type": "string" }
+      }
+    },
+    "LocalizationStringsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_id", "locale", "entries"],
+      "properties": {
+        "pack_id": {
+          "type": "string",
+          "pattern": "^Pack_[A-Za-z0-9_]+$"
+        },
+        "locale": {
+          "type": "string",
+          "enum": ["vi", "en"]
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/LocalizedStringEntry"
+          }
+        }
+      }
+    },
+    "AssetBindingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_id"],
+      "properties": {
+        "canonical_id": {
+          "type": "string",
+          "pattern": "^(planet|zone|subzone|race|trait|skill|form|mob|boss|item|token|set|affix|loot|currency|effect|title|term|rarity|slot|attr|pot)\\.[a-z0-9_]+$"
+        },
+        "icon_texture": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "primary_skeletal_mesh": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "primary_montage": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "primary_vfx": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "impact_vfx": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "cast_sfx": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "impact_sfx": {
+          "type": ["string", "null"],
+          "pattern": "^/Game/[A-Za-z0-9_./]+$"
+        },
+        "theme_tint_color": {
+          "$ref": "#/$defs/LinearColor"
+        }
+      }
+    },
+    "AssetBindingsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_id", "asset_pack_schema_version", "entries"],
+      "properties": {
+        "pack_id": {
+          "type": "string",
+          "pattern": "^Pack_[A-Za-z0-9_]+$"
+        },
+        "asset_pack_schema_version": { "type": "string", "minLength": 1 },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/AssetBindingEntry"
+          }
+        }
+      }
+    }
+  }
+}

@@ -32,6 +32,7 @@ public:
 
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void UnPossessed() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void Landed(const FHitResult& Hit) override;
@@ -101,6 +102,9 @@ public:
 	/** Restores full HP/Ki, movement, Idle combat state, and spawn transform after defeat. */
 	UFUNCTION(BlueprintCallable, Category = "IU|Lifecycle")
 	void ResetPlayerAtSpawn();
+
+	/** Server-only: teleports Pawn & synchronizes Client prediction to persisted world coordinates loaded from PostgreSQL. */
+	void TeleportToPersistedTransform(const FVector& TargetLocation, const FRotator& TargetRotation);
 
 	void UpdateSavedSpawnTransform(const FTransform& NewTransform);
 

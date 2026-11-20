@@ -1,0 +1,2 @@
+Name,FormId,StateTag,RequiredRaceId,PrerequisiteFormId,UnlockLevel,MasteryPointCost,MinEnergyToActivate,ActivationCastSec,ActivationKnockbackRadiusCm,ToggleOffIcdSec,ExhaustionPenaltySec,FormDamageMultiplier,BaseEnergyDrainPerSec,BaseHpDrainRatioPerSec,StatBonuses
+form.zenith_awaken_01,form.zenith_awaken_01,"(TagName=""State.Form.ZenithAwaken01"")",race.zenith_warrior,None,12,5,100,0.85,400,3,2,1.25,8,0,"((AttrId=""attr.move_speed"",Op=""ADD_PCT"",Value=0.15),(AttrId=""attr.crit_rate"",Op=""ADD_FLAT"",Value=0.1))"

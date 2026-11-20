@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/monster_boss_definition.schema.json",
+  "title": "MonsterAndBossDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/MonsterAndBossDefinition"
+  },
+  "$defs": {
+    "CombatStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_hp",
+        "phys_atk",
+        "ki_atk",
+        "defense",
+        "move_speed_cms",
+        "flight_speed_cms",
+        "dynamic_ccu_hp_scale_per_extra_player"
+      ],
+      "properties": {
+        "max_hp": { "type": "number", "minimum": 1 },
+        "phys_atk": { "type": "number", "minimum": 0 },
+        "ki_atk": { "type": "number", "minimum": 0 },
+        "defense": { "type": "number", "minimum": 0 },
+        "move_speed_cms": { "type": "number", "minimum": 0 },
+        "flight_speed_cms": { "type": "number", "minimum": 0 },
+        "dynamic_ccu_hp_scale_per_extra_player": { "type": "number", "minimum": 0, "maximum": 0.5 }
+      }
+    },
+    "PoiseSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_poise",
+        "has_super_armor_while_poise_positive",
+        "stagger_duration_sec",
+        "poise_recovery_immunity_sec"
+      ],
+      "properties": {
+        "max_poise": { "type": "number", "minimum": 0 },
+        "has_super_armor_while_poise_positive": { "type": "boolean" },
+        "stagger_duration_sec": { "type": "number", "minimum": 0 },
+        "poise_recovery_immunity_sec": { "type": "number", "minimum": 0 }
+      }
+    },
+    "AIPerception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aggro_radius_cm",
+        "leash_horizontal_cm",
+        "leash_vertical_cm",
+        "respawn_time_sec"
+      ],
+      "properties": {
+        "aggro_radius_cm": { "type": "number", "minimum": 100 },
+        "leash_horizontal_cm": { "type": "number", "minimum": 500 },
+        "leash_vertical_cm": { "type": "number", "minimum": 500 },
+        "respawn_time_sec": { "type": "number", "minimum": 1 }
+      }
+    },
+    "RewardSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_exp",
+        "coin_min",
+        "coin_max",
+        "loot_table_id",
+        "min_contribution_ratio",
+        "guaranteed_pity_token_id",
+        "guaranteed_pity_token_min",
+        "guaranteed_pity_token_max"
+      ],
+      "properties": {
+        "base_exp": { "type": "integer", "minimum": 0 },
+        "coin_min": { "type": "integer", "minimum": 0 },
+        "coin_max": { "type": "integer", "minimum": 0 },
+        "loot_table_id": {
+          "type": "string",
+          "pattern": "^loot\\.[a-z0-9_]+$"
+        },
+        "min_contribution_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "guaranteed_pity_token_id": {
+          "type": ["string", "null"],
+          "pattern": "^token\\.[a-z0-9_]+$"
+        },
+        "guaranteed_pity_token_min": { "type": "integer", "minimum": 0 },
+        "guaranteed_pity_token_max": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "PhaseAbility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "cooldown_sec",
+        "telegraph_sec",
+        "skill_mult",
+        "damage_type",
+        "range_cm",
+        "safe_altitude_z_cm",
+        "sweep_angle_deg"
+      ],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1 },
+        "cooldown_sec": { "type": "number", "minimum": 0 },
+        "telegraph_sec": { "type": "number", "minimum": 0 },
+        "skill_mult": { "type": "number", "minimum": 0 },
+        "damage_type": {
+          "type": "string",
+          "enum": ["PHYSICAL", "ENERGY", "HYBRID"]
+        },
+        "range_cm": { "type": "number", "minimum": 0 },
+        "safe_altitude_z_cm": { "type": "number", "minimum": 0 },
+        "sweep_angle_deg": { "type": "number", "minimum": 0, "maximum": 360 }
+      }
+    },
+    "BossPhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_index",
+        "enter_at_hp_ratio",
+        "damage_mult",
+        "atk_speed_mult",
+        "abilities"
+      ],
+      "properties": {
+        "phase_index": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "enter_at_hp_ratio": { "type": "number", "minimum": 0, "maximum": 1.0 },
+        "damage_mult": { "type": "number", "minimum": 0.5 },
+        "atk_speed_mult": { "type": "number", "minimum": 0.5 },
+        "abilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/PhaseAbility"
+          }
+        }
+      }
+    },
+    "MonsterAndBossDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_id",
+        "rank",
+        "archetype",
+        "level",
+        "can_fly_3d",
+        "combat_stats",
+        "poise_spec",
+        "ai_perception",
+        "rewards",
+        "phases"
+      ],
+      "properties": {
+        "entity_id": {
+          "type": "string",
+          "pattern": "^(mob|boss)\\.[a-z0-9_]+$"
+        },
+        "rank": {
+          "type": "string",
+          "enum": ["NORMAL", "ELITE", "REGIONAL_BOSS", "WORLD_RAID_BOSS"]
+        },
+        "archetype": {
+          "type": "string",
+          "enum": [
+            "MELEE_RUSHER",
+            "ENERGY_SNIPER",
+            "AERIAL_INTERCEPTOR",
+            "VOLATILE_DETONATOR",
+            "HEAVY_JUGGERNAUT",
+            "MULTI_PHASE_TITAN"
+          ]
+        },
+        "level": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "can_fly_3d": { "type": "boolean" },
+        "combat_stats": { "$ref": "#/$defs/CombatStats" },
+        "poise_spec": { "$ref": "#/$defs/PoiseSpec" },
+        "ai_perception": { "$ref": "#/$defs/AIPerception" },
+        "rewards": { "$ref": "#/$defs/RewardSpec" },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/BossPhase"
+          }
+        }
+      }
+    }
+  }
+}

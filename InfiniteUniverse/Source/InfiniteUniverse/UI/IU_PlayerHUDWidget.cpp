@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "UI/IU_PlayerHUDWidget.h"
+#include "Core/IU_PlayerState.h"
 #include "Attributes/IU_AttributeComponent.h"
 #include "Combat/IU_CombatComponent.h"
 #include "Movement/IU_FlightComponent.h"
@@ -24,8 +25,20 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		if (UCanvasPanelSlot* BoxSlot = RootCanvas->AddChildToCanvas(VitalsBox))
 		{
 			BoxSlot->SetAnchors(FAnchors(0.0f, 0.0f));
-			BoxSlot->SetPosition(FVector2D(36.0f, 32.0f));
-			BoxSlot->SetSize(FVector2D(360.0f, 150.0f));
+			BoxSlot->SetPosition(FVector2D(36.0f, 28.0f));
+			BoxSlot->SetSize(FVector2D(370.0f, 190.0f));
+		}
+
+		LevelEXPValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("LevelEXPValueText"));
+		LevelEXPValueText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.88f, 0.35f)));
+		LevelEXPValueText->SetText(FText::FromString(TEXT("LV. 1  |  EXP: 0 / 100")));
+		VitalsBox->AddChildToVerticalBox(LevelEXPValueText);
+
+		EXPProgressBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("EXPProgressBar"));
+		EXPProgressBar->SetFillColorAndOpacity(FLinearColor(0.95f, 0.75f, 0.15f, 1.0f));
+		if (UVerticalBoxSlot* EXPSlot = VitalsBox->AddChildToVerticalBox(EXPProgressBar))
+		{
+			EXPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
 		}
 
 		HealthValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HealthValueText"));
@@ -36,7 +49,7 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		HealthProgressBar->SetFillColorAndOpacity(FLinearColor(0.18f, 0.85f, 0.32f, 1.0f));
 		if (UVerticalBoxSlot* HPSlot = VitalsBox->AddChildToVerticalBox(HealthProgressBar))
 		{
-			HPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 10.0f));
+			HPSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
 		}
 
 		KiValueText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("KiValueText"));
@@ -47,7 +60,7 @@ TSharedRef<SWidget> UIU_PlayerHUDWidget::RebuildWidget()
 		KiProgressBar->SetFillColorAndOpacity(FLinearColor(0.10f, 0.68f, 1.0f, 1.0f));
 		if (UVerticalBoxSlot* KiSlot = VitalsBox->AddChildToVerticalBox(KiProgressBar))
 		{
-			KiSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 10.0f));
+			KiSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 8.0f));
 		}
 
 		StatusReadoutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatusReadoutText"));
@@ -106,7 +119,30 @@ void UIU_PlayerHUDWidget::BindToPlayerPawn(APawn* NewPawn)
 		bDisplayedFlying = Flight->IsFlying();
 	}
 
+	EnsurePlayerStateBound(NewPawn);
 	RefreshStatusText();
+}
+
+void UIU_PlayerHUDWidget::EnsurePlayerStateBound(APawn* CurrentPawn)
+{
+	if (!CurrentPawn)
+	{
+		return;
+	}
+	AIU_PlayerState* IUPS = CurrentPawn->GetPlayerState<AIU_PlayerState>();
+	if (!IUPS || BoundPlayerState.Get() == IUPS)
+	{
+		return;
+	}
+
+	if (AIU_PlayerState* OldPS = BoundPlayerState.Get())
+	{
+		OldPS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+	}
+
+	BoundPlayerState = IUPS;
+	IUPS->OnCharacterEXPChanged.AddUniqueDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+	HandleCharacterEXPChanged(IUPS->GetCurrentEXP(), IUPS->GetNextLevelEXP(), IUPS->GetCharacterLevel());
 }
 
 void UIU_PlayerHUDWidget::UnbindCurrentComponents()
@@ -126,10 +162,15 @@ void UIU_PlayerHUDWidget::UnbindCurrentComponents()
 	{
 		Flight->OnFlightStateChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleFlightStateChanged);
 	}
+	if (AIU_PlayerState* PS = BoundPlayerState.Get())
+	{
+		PS->OnCharacterEXPChanged.RemoveDynamic(this, &UIU_PlayerHUDWidget::HandleCharacterEXPChanged);
+	}
 
 	BoundAttributeComp.Reset();
 	BoundCombatComp.Reset();
 	BoundFlightComp.Reset();
+	BoundPlayerState.Reset();
 }
 
 void UIU_PlayerHUDWidget::HandleHPChanged(float CurrentHP, float MaxHP, float Delta)
@@ -153,6 +194,28 @@ void UIU_PlayerHUDWidget::HandleKiChanged(float CurrentKi, float MaxKi, float De
 	if (KiValueText)
 	{
 		KiValueText->SetText(FText::FromString(FString::Printf(TEXT("KI: %.0f / %.0f"), CurrentKi, MaxKi)));
+	}
+}
+
+void UIU_PlayerHUDWidget::HandleCharacterEXPChanged(int64 CurrentEXP, int64 NextLevelEXP, int32 CurrentLevel)
+{
+	if (EXPProgressBar)
+	{
+		const float Pct = NextLevelEXP > 0 ? FMath::Clamp(static_cast<float>(CurrentEXP) / static_cast<float>(NextLevelEXP), 0.0f, 1.0f) : 1.0f;
+		EXPProgressBar->SetPercent(Pct);
+	}
+	if (LevelEXPValueText)
+	{
+		FString NamePrefix;
+		if (const AIU_PlayerState* PS = BoundPlayerState.Get())
+		{
+			if (!PS->GetPersistedCharacterName().IsEmpty())
+			{
+				NamePrefix = FString::Printf(TEXT("[%s]  "), *PS->GetPersistedCharacterName());
+			}
+		}
+		LevelEXPValueText->SetText(FText::FromString(
+			FString::Printf(TEXT("%sLV. %d  |  EXP: %lld / %lld"), *NamePrefix, CurrentLevel, CurrentEXP, NextLevelEXP)));
 	}
 }
 

@@ -29,10 +29,10 @@ public:
 	// Tunable Attribute Parameters
 	// ========================================================================
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "1.0", ClampMax = "100000.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_MaxHP, Category = "IU|Attributes", meta = (ClampMin = "1.0", ClampMax = "100000.0"))
 	float MaxHP = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "10000.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_MaxKi, Category = "IU|Attributes", meta = (ClampMin = "0.0", ClampMax = "10000.0"))
 	float MaxKi = 100.0f;
 
 	/** Passive Ki regenerated per second when Ki < MaxKi. */
@@ -66,6 +66,10 @@ public:
 	/** Resets HP and Ki to maximum and clears dead flag (used on spawn and enemy reset). */
 	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
 	void ResetAttributesToFull();
+
+	/** Server-only: applies authoritative persisted MaxHP/HP, MaxKi/Ki, and AttackPowerMultiplier from Go Backend. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Attributes")
+	void ApplyPersistedVitals(float InMaxHP, float InCurrentHP, float InMaxKi, float InCurrentKi, float InAttackMultiplier);
 
 	// ========================================================================
 	// Pure Getters
@@ -114,6 +118,12 @@ public:
 private:
 	void UpdateKiRegenTimerState();
 	void OnKiRegenTimerTick();
+
+	UFUNCTION()
+	void OnRep_MaxHP(float OldMaxHP);
+
+	UFUNCTION()
+	void OnRep_MaxKi(float OldMaxKi);
 
 	UFUNCTION()
 	void OnRep_CurrentHP(float OldHP);

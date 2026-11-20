@@ -1,0 +1,151 @@
+[
+  {
+    "race_id": "race.zenith_warrior",
+    "gameplay_tag": "Character.Race.Zenith",
+    "scope_status": "VERTICAL_SLICE_FULL",
+    "base_stats_lv1": {
+      "max_hp": 650,
+      "max_energy": 220,
+      "max_stamina": 100,
+      "phys_atk": 48,
+      "ki_atk": 44,
+      "defense": 26,
+      "crit_rate": 0.06,
+      "crit_dmg": 0.5,
+      "energy_regen": 6.0,
+      "stamina_regen": 12.0
+    },
+    "growth_per_level": {
+      "max_hp": 115,
+      "max_energy": 14,
+      "max_stamina": 2,
+      "phys_atk": 9,
+      "ki_atk": 8,
+      "defense": 5
+    },
+    "tier_bonus_every_5_levels": {
+      "max_hp": 80,
+      "max_energy": 15,
+      "max_stamina": 5,
+      "phys_atk": 6,
+      "ki_atk": 6,
+      "defense": 4
+    },
+    "innate_passive": {
+      "passive_id": "trait.zenith_unyielding",
+      "trigger_hp_ratio": 0.35,
+      "duration_sec": 12.0,
+      "internal_cooldown_sec": 45.0,
+      "modifiers": [
+        { "attr_id": "attr.phys_dmg_pct", "op": "ADD_FLAT", "value": 0.12 },
+        { "attr_id": "attr.ki_dmg_pct", "op": "ADD_FLAT", "value": 0.12 },
+        { "attr_id": "attr.energy_regen", "op": "MULT", "value": 1.15 }
+      ]
+    },
+    "starter_skill_ids": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "unlockable_form_ids": [
+      "form.zenith_awaken_01"
+    ]
+  },
+  {
+    "race_id": "race.terran_adept",
+    "gameplay_tag": "Character.Race.Terran",
+    "scope_status": "MVP_STUB_IN_VS",
+    "base_stats_lv1": {
+      "max_hp": 690,
+      "max_energy": 250,
+      "max_stamina": 105,
+      "phys_atk": 44,
+      "ki_atk": 46,
+      "defense": 29,
+      "crit_rate": 0.05,
+      "crit_dmg": 0.5,
+      "energy_regen": 8.0,
+      "stamina_regen": 12.5
+    },
+    "growth_per_level": {
+      "max_hp": 120,
+      "max_energy": 16,
+      "max_stamina": 2,
+      "phys_atk": 8,
+      "ki_atk": 8.5,
+      "defense": 5.5
+    },
+    "tier_bonus_every_5_levels": {
+      "max_hp": 85,
+      "max_energy": 18,
+      "max_stamina": 5,
+      "phys_atk": 5,
+      "ki_atk": 6,
+      "defense": 4
+    },
+    "innate_passive": {
+      "passive_id": "trait.terran_harmony",
+      "trigger_hp_ratio": 0.0,
+      "duration_sec": 0.0,
+      "internal_cooldown_sec": 0.0,
+      "modifiers": [
+        { "attr_id": "pot.energy_control", "op": "ADD_FLAT", "value": 0.1 },
+        { "attr_id": "attr.cdr", "op": "ADD_FLAT", "value": 0.08 }
+      ]
+    },
+    "starter_skill_ids": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "unlockable_form_ids": []
+  },
+  {
+    "race_id": "race.mystic_elder",
+    "gameplay_tag": "Character.Race.Mystic",
+    "scope_status": "MVP_STUB_IN_VS",
+    "base_stats_lv1": {
+      "max_hp": 780,
+      "max_energy": 230,
+      "max_stamina": 100,
+      "phys_atk": 42,
+      "ki_atk": 43,
+      "defense": 34,
+      "crit_rate": 0.04,
+      "crit_dmg": 0.5,
+      "energy_regen": 6.5,
+      "stamina_regen": 12.0
+    },
+    "growth_per_level": {
+      "max_hp": 140,
+      "max_energy": 14,
+      "max_stamina": 2,
+      "phys_atk": 7.5,
+      "ki_atk": 8,
+      "defense": 7
+    },
+    "tier_bonus_every_5_levels": {
+      "max_hp": 110,
+      "max_energy": 15,
+      "max_stamina": 5,
+      "phys_atk": 5,
+      "ki_atk": 5,
+      "defense": 6
+    },
+    "innate_passive": {
+      "passive_id": "trait.mystic_regeneration",
+      "trigger_hp_ratio": 0.3,
+      "duration_sec": 8.0,
+      "internal_cooldown_sec": 60.0,
+      "modifiers": [
+        { "attr_id": "attr.max_hp", "op": "ADD_PCT", "value": 0.005 }
+      ]
+    },
+    "starter_skill_ids": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "unlockable_form_ids": []
+  }
+]

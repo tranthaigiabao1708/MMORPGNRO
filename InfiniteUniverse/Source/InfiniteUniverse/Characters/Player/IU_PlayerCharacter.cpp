@@ -1,6 +1,7 @@
 // Copyright InfiniteUniverse Dev. All Rights Reserved.
 
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "Core/IU_PlayerState.h"
 #include "Movement/IU_MovementComponent.h"
 #include "Movement/IU_FlightComponent.h"
 #include "Attributes/IU_AttributeComponent.h"
@@ -170,8 +171,33 @@ void AIU_PlayerCharacter::BeginPlay()
 	}
 }
 
+void AIU_PlayerCharacter::UnPossessed()
+{
+	if (HasAuthority())
+	{
+		if (AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>())
+		{
+			const float CurHP = AttributeComponent ? AttributeComponent->GetHP() : 100.0f;
+			const float CurKi = AttributeComponent ? AttributeComponent->GetKi() : 100.0f;
+			const bool bAlive = AttributeComponent ? !AttributeComponent->IsDead() : true;
+			IUPS->CachePawnWorldSnapshot(GetActorLocation(), GetActorRotation().Yaw, CurHP, CurKi, bAlive);
+		}
+	}
+	Super::UnPossessed();
+}
+
 void AIU_PlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (HasAuthority())
+	{
+		if (AIU_PlayerState* IUPS = GetPlayerState<AIU_PlayerState>())
+		{
+			const float CurHP = AttributeComponent ? AttributeComponent->GetHP() : 100.0f;
+			const float CurKi = AttributeComponent ? AttributeComponent->GetKi() : 100.0f;
+			const bool bAlive = AttributeComponent ? !AttributeComponent->IsDead() : true;
+			IUPS->CachePawnWorldSnapshot(GetActorLocation(), GetActorRotation().Yaw, CurHP, CurKi, bAlive);
+		}
+	}
 	if (UWorld* World = GetWorld())
 	{
 		FTimerManager& TM = World->GetTimerManager();
@@ -775,6 +801,35 @@ void AIU_PlayerCharacter::UpdateSavedSpawnTransform(const FTransform& NewTransfo
 {
 	InitialSpawnTransform = NewTransform;
 	bHasSavedInitialSpawn = true;
+}
+
+void AIU_PlayerCharacter::TeleportToPersistedTransform(const FVector& TargetLocation, const FRotator& TargetRotation)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (FlightComponent)
+	{
+		FlightComponent->SetMoveAxisInput(FVector2D::ZeroVector);
+		FlightComponent->HandleJumpOrAscendCompleted();
+		FlightComponent->HandleDescendCompleted();
+		FlightComponent->SetFlightDashActive(false);
+		FlightComponent->ExitFlight(false);
+	}
+
+	const FRotator CleanRot(0.0f, TargetRotation.Yaw, 0.0f);
+	UpdateSavedSpawnTransform(FTransform(CleanRot, TargetLocation));
+	TeleportTo(TargetLocation, CleanRot, false, true);
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetControlRotation(FRotator(-8.5f, CleanRot.Yaw, 0.0f));
+		PC->ClientSetRotation(FRotator(-8.5f, CleanRot.Yaw, 0.0f));
+	}
+
+	Multicast_OnPlayerRespawned(TargetLocation, CleanRot);
 }
 
 void AIU_PlayerCharacter::ResetPlayerAtSpawn()

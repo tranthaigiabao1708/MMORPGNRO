@@ -1,0 +1,11 @@
+{
+  "pack_id": "Pack_DB_Reference",
+  "pack_name": "Internal Reference Theme Pack",
+  "pack_version": "0.2.0-vs",
+  "ip_mode": "REFERENCE_INTERNAL",
+  "is_commercial_safe": false,
+  "supported_locales": ["vi", "en"],
+  "asset_root_path": "/Game/PresentationPacks/DB_Reference",
+  "default_theme_tint_hex": "#FF8C1A",
+  "description": "Internal reference presentation pack for milestone prototyping only; not cleared for commercial distribution."
+}

@@ -13,12 +13,15 @@ public class InfiniteUniverse : ModuleRules
 			"InfiniteUniverse"
 		});
 
-		// Step 1 Core Gameplay + Step 2 Native UE5 Replication & Dedicated Server Support
+		// Step 1 Core Gameplay + Step 2 Native UE5 Replication + Step 3 Backend HTTP/JSON Bridge
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
 			"Engine",
 			"NetCore",
+			"HTTP",
+			"Json",
+			"JsonUtilities",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",

@@ -1,0 +1,356 @@
+[
+  {
+    "AiPerception": {
+      "AggroRadiusCm": 2500,
+      "LeashHorizontalCm": 5200,
+      "LeashVerticalCm": 8000,
+      "RespawnTimeSec": 300
+    },
+    "Archetype": "MULTI_PHASE_TITAN",
+    "CombatStats": {
+      "Defense": 210,
+      "DynamicCcuHpScalePerExtraPlayer": 0.08,
+      "FlightSpeedCms": 2200,
+      "KiAtk": 310,
+      "MaxHp": 420000,
+      "MoveSpeedCms": 680,
+      "PhysAtk": 290
+    },
+    "EntityId": "boss.highland_titan_01",
+    "Level": 18,
+    "Name": "boss.highland_titan_01",
+    "Phases": [
+      {
+        "Abilities": [
+          {
+            "ActionId": "titan_crushing_fist",
+            "CooldownSec": 5,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 800,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.8,
+            "SweepAngleDeg": 120,
+            "TelegraphSec": 0.85
+          },
+          {
+            "ActionId": "titan_boulder_barrage",
+            "CooldownSec": 11,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 4500,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.95,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 1.1
+          },
+          {
+            "ActionId": "titan_ground_quake",
+            "CooldownSec": 22,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 4500,
+            "SafeAltitudeZCm": 450,
+            "SkillMult": 3.2,
+            "SweepAngleDeg": 360,
+            "TelegraphSec": 2.2
+          }
+        ],
+        "AtkSpeedMult": 1,
+        "DamageMult": 1,
+        "EnterAtHpRatio": 1,
+        "PhaseIndex": 1
+      },
+      {
+        "Abilities": [
+          {
+            "ActionId": "titan_crushing_fist",
+            "CooldownSec": 4.2,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 800,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.8,
+            "SweepAngleDeg": 120,
+            "TelegraphSec": 0.7
+          },
+          {
+            "ActionId": "titan_sweeping_beam",
+            "CooldownSec": 18,
+            "DamageType": "ENERGY",
+            "RangeCm": 4800,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 3.8,
+            "SweepAngleDeg": 180,
+            "TelegraphSec": 1.8
+          },
+          {
+            "ActionId": "titan_volcanic_quake",
+            "CooldownSec": 24,
+            "DamageType": "HYBRID",
+            "RangeCm": 4500,
+            "SafeAltitudeZCm": 450,
+            "SkillMult": 3.2,
+            "SweepAngleDeg": 360,
+            "TelegraphSec": 2
+          },
+          {
+            "ActionId": "titan_skyward_leap_slam",
+            "CooldownSec": 16,
+            "DamageType": "HYBRID",
+            "RangeCm": 3600,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 2.75,
+            "SweepAngleDeg": 360,
+            "TelegraphSec": 1.25
+          }
+        ],
+        "AtkSpeedMult": 1.2,
+        "DamageMult": 1.15,
+        "EnterAtHpRatio": 0.5,
+        "PhaseIndex": 2
+      }
+    ],
+    "PoiseSpec": {
+      "HasSuperArmorWhilePoisePositive": true,
+      "MaxPoise": 1200,
+      "PoiseRecoveryImmunitySec": 8,
+      "StaggerDurationSec": 6
+    },
+    "Rank": "REGIONAL_BOSS",
+    "Rewards": {
+      "BaseExp": 2200,
+      "CoinMax": 1200,
+      "CoinMin": 850,
+      "GuaranteedPityTokenId": "token.boss_highland_titan",
+      "GuaranteedPityTokenMax": 2,
+      "GuaranteedPityTokenMin": 1,
+      "LootTableId": "loot.boss_highland_titan",
+      "MinContributionRatio": 0.02
+    },
+    "bCanFly3D": false
+  },
+  {
+    "AiPerception": {
+      "AggroRadiusCm": 1600,
+      "LeashHorizontalCm": 5000,
+      "LeashVerticalCm": 4000,
+      "RespawnTimeSec": 60
+    },
+    "Archetype": "HEAVY_JUGGERNAUT",
+    "CombatStats": {
+      "Defense": 135,
+      "DynamicCcuHpScalePerExtraPlayer": 0,
+      "FlightSpeedCms": 1500,
+      "KiAtk": 170,
+      "MaxHp": 14500,
+      "MoveSpeedCms": 600,
+      "PhysAtk": 185
+    },
+    "EntityId": "mob.crimson_enforcer_elite",
+    "Level": 15,
+    "Name": "mob.crimson_enforcer_elite",
+    "Phases": [
+      {
+        "Abilities": [
+          {
+            "ActionId": "enforcer_heavy_cleave",
+            "CooldownSec": 4.5,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 420,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.65,
+            "SweepAngleDeg": 110,
+            "TelegraphSec": 0.65
+          },
+          {
+            "ActionId": "enforcer_crimson_wave",
+            "CooldownSec": 9,
+            "DamageType": "ENERGY",
+            "RangeCm": 1800,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 2.1,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 0.85
+          },
+          {
+            "ActionId": "enforcer_aerial_slam",
+            "CooldownSec": 11,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 1500,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.9,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 0.75
+          },
+          {
+            "ActionId": "enforcer_shield_charge",
+            "CooldownSec": 14,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 1200,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 2,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 0.8
+          }
+        ],
+        "AtkSpeedMult": 1,
+        "DamageMult": 1,
+        "EnterAtHpRatio": 1,
+        "PhaseIndex": 1
+      }
+    ],
+    "PoiseSpec": {
+      "HasSuperArmorWhilePoisePositive": true,
+      "MaxPoise": 220,
+      "PoiseRecoveryImmunitySec": 5,
+      "StaggerDurationSec": 4
+    },
+    "Rank": "ELITE",
+    "Rewards": {
+      "BaseExp": 460,
+      "CoinMax": 210,
+      "CoinMin": 140,
+      "GuaranteedPityTokenId": "None",
+      "GuaranteedPityTokenMax": 0,
+      "GuaranteedPityTokenMin": 0,
+      "LootTableId": "loot.elite_crimson_enforcer",
+      "MinContributionRatio": 0.05
+    },
+    "bCanFly3D": true
+  },
+  {
+    "AiPerception": {
+      "AggroRadiusCm": 1100,
+      "LeashHorizontalCm": 3500,
+      "LeashVerticalCm": 2000,
+      "RespawnTimeSec": 15
+    },
+    "Archetype": "MELEE_RUSHER",
+    "CombatStats": {
+      "Defense": 35,
+      "DynamicCcuHpScalePerExtraPlayer": 0,
+      "FlightSpeedCms": 0,
+      "KiAtk": 0,
+      "MaxHp": 1450,
+      "MoveSpeedCms": 580,
+      "PhysAtk": 68
+    },
+    "EntityId": "mob.highland_wolf_01",
+    "Level": 6,
+    "Name": "mob.highland_wolf_01",
+    "Phases": [
+      {
+        "Abilities": [
+          {
+            "ActionId": "wolf_double_bite",
+            "CooldownSec": 2.2,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 220,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 0.85,
+            "SweepAngleDeg": 90,
+            "TelegraphSec": 0.35
+          },
+          {
+            "ActionId": "wolf_crag_pounce",
+            "CooldownSec": 7,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 700,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.35,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 0.65
+          }
+        ],
+        "AtkSpeedMult": 1,
+        "DamageMult": 1,
+        "EnterAtHpRatio": 1,
+        "PhaseIndex": 1
+      }
+    ],
+    "PoiseSpec": {
+      "HasSuperArmorWhilePoisePositive": false,
+      "MaxPoise": 0,
+      "PoiseRecoveryImmunitySec": 0,
+      "StaggerDurationSec": 0
+    },
+    "Rank": "NORMAL",
+    "Rewards": {
+      "BaseExp": 55,
+      "CoinMax": 28,
+      "CoinMin": 18,
+      "GuaranteedPityTokenId": "None",
+      "GuaranteedPityTokenMax": 0,
+      "GuaranteedPityTokenMin": 0,
+      "LootTableId": "loot.mob_highland_wolf",
+      "MinContributionRatio": 0.01
+    },
+    "bCanFly3D": false
+  },
+  {
+    "AiPerception": {
+      "AggroRadiusCm": 1800,
+      "LeashHorizontalCm": 4500,
+      "LeashVerticalCm": 3000,
+      "RespawnTimeSec": 15
+    },
+    "Archetype": "ENERGY_SNIPER",
+    "CombatStats": {
+      "Defense": 62,
+      "DynamicCcuHpScalePerExtraPlayer": 0,
+      "FlightSpeedCms": 800,
+      "KiAtk": 105,
+      "MaxHp": 2900,
+      "MoveSpeedCms": 520,
+      "PhysAtk": 96
+    },
+    "EntityId": "mob.raider_scouter_01",
+    "Level": 10,
+    "Name": "mob.raider_scouter_01",
+    "Phases": [
+      {
+        "Abilities": [
+          {
+            "ActionId": "raider_arm_blaster_trio",
+            "CooldownSec": 4,
+            "DamageType": "ENERGY",
+            "RangeCm": 1800,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.65,
+            "SweepAngleDeg": 0,
+            "TelegraphSec": 0.45
+          },
+          {
+            "ActionId": "raider_slash_combo",
+            "CooldownSec": 3,
+            "DamageType": "PHYSICAL",
+            "RangeCm": 350,
+            "SafeAltitudeZCm": 0,
+            "SkillMult": 1.15,
+            "SweepAngleDeg": 110,
+            "TelegraphSec": 0.35
+          }
+        ],
+        "AtkSpeedMult": 1,
+        "DamageMult": 1,
+        "EnterAtHpRatio": 1,
+        "PhaseIndex": 1
+      }
+    ],
+    "PoiseSpec": {
+      "HasSuperArmorWhilePoisePositive": true,
+      "MaxPoise": 60,
+      "PoiseRecoveryImmunitySec": 4,
+      "StaggerDurationSec": 2.5
+    },
+    "Rank": "NORMAL",
+    "Rewards": {
+      "BaseExp": 115,
+      "CoinMax": 56,
+      "CoinMin": 38,
+      "GuaranteedPityTokenId": "None",
+      "GuaranteedPityTokenMax": 0,
+      "GuaranteedPityTokenMin": 0,
+      "LootTableId": "loot.mob_raider_scouter",
+      "MinContributionRatio": 0.01
+    },
+    "bCanFly3D": true
+  }
+]

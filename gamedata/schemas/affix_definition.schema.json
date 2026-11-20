@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/affix_definition.schema.json",
+  "title": "AffixDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/AffixDefinition"
+  },
+  "$defs": {
+    "AffixTier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tier",
+        "min_item_level",
+        "max_item_level",
+        "min_value",
+        "max_value",
+        "step"
+      ],
+      "properties": {
+        "tier": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "min_item_level": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_item_level": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "min_value": { "type": "number" },
+        "max_value": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "AffixDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "affix_id",
+        "target_attr_id",
+        "mod_op",
+        "exclusive_group",
+        "roll_weight",
+        "allowed_slots",
+        "tiers"
+      ],
+      "properties": {
+        "affix_id": {
+          "type": "string",
+          "pattern": "^affix\\.[a-z0-9_]+$"
+        },
+        "target_attr_id": {
+          "type": "string",
+          "pattern": "^(attr|pot)\\.[a-z0-9_]+$"
+        },
+        "mod_op": {
+          "type": "string",
+          "enum": ["ADD_FLAT", "ADD_PCT"]
+        },
+        "exclusive_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "roll_weight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "allowed_slots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "slot.head",
+              "slot.body",
+              "slot.hands",
+              "slot.legs",
+              "slot.feet",
+              "slot.acc_1",
+              "slot.acc_2",
+              "slot.special"
+            ]
+          }
+        },
+        "tiers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/AffixTier"
+          }
+        }
+      }
+    }
+  }
+}

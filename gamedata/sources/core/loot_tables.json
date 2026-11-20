@@ -1,0 +1,243 @@
+[
+  {
+    "loot_table_id": "loot.mob_highland_wolf",
+    "loot_distribution_mode": "PERSONAL_INSTANCED",
+    "roll_groups": [
+      {
+        "group_id": "consumables_and_mat",
+        "group_trigger_chance": 0.35,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.mat_crimson_ore_t1",
+            "weight": 600,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.consumable_verdant_elixir_s",
+            "weight": 400,
+            "min_qty": 1,
+            "max_qty": 1
+          }
+        ]
+      },
+      {
+        "group_id": "wolf_equipment",
+        "group_trigger_chance": 0.12,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.hands_wolfhide_wraps_05",
+            "weight": 500,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.legs_wolfhide_trousers_06",
+            "weight": 500,
+            "min_qty": 1,
+            "max_qty": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "loot_table_id": "loot.mob_raider_scouter",
+    "loot_distribution_mode": "PERSONAL_INSTANCED",
+    "roll_groups": [
+      {
+        "group_id": "consumables_and_mat",
+        "group_trigger_chance": 0.45,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.mat_crimson_ore_t1",
+            "weight": 650,
+            "min_qty": 1,
+            "max_qty": 2
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.consumable_verdant_elixir_s",
+            "weight": 350,
+            "min_qty": 1,
+            "max_qty": 1
+          }
+        ]
+      },
+      {
+        "group_id": "raider_equipment",
+        "group_trigger_chance": 0.1,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.feet_raider_thruster_09",
+            "weight": 520,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.acc2_scouter_charm_10",
+            "weight": 480,
+            "min_qty": 1,
+            "max_qty": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "loot_table_id": "loot.elite_crimson_enforcer",
+    "loot_distribution_mode": "PERSONAL_INSTANCED",
+    "roll_groups": [
+      {
+        "group_id": "elite_guaranteed_mat",
+        "group_trigger_chance": 1.0,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.mat_crimson_ore_t1",
+            "weight": 700,
+            "min_qty": 2,
+            "max_qty": 3
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.consumable_verdant_elixir_s",
+            "weight": 300,
+            "min_qty": 2,
+            "max_qty": 2
+          }
+        ]
+      },
+      {
+        "group_id": "elite_epic_and_set",
+        "group_trigger_chance": 0.4,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.head_vanguard_visor_15",
+            "weight": 320,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.hands_vanguard_gauntlets_15",
+            "weight": 320,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.legs_crimson_plates_14",
+            "weight": 260,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.body_vanguard_cuirass_15",
+            "weight": 100,
+            "min_qty": 1,
+            "max_qty": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "loot_table_id": "loot.boss_highland_titan",
+    "loot_distribution_mode": "PERSONAL_INSTANCED",
+    "roll_groups": [
+      {
+        "group_id": "guaranteed_materials",
+        "group_trigger_chance": 1.0,
+        "pick_count": 1,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.mat_crimson_ore_t1",
+            "weight": 600,
+            "min_qty": 3,
+            "max_qty": 6
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.consumable_verdant_elixir_s",
+            "weight": 400,
+            "min_qty": 2,
+            "max_qty": 4
+          }
+        ]
+      },
+      {
+        "group_id": "vanguard_set_and_legendaries",
+        "group_trigger_chance": 1.0,
+        "pick_count": 2,
+        "entries": [
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.head_vanguard_visor_15",
+            "weight": 2200,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.hands_vanguard_gauntlets_15",
+            "weight": 2200,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.body_vanguard_cuirass_15",
+            "weight": 1400,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.feet_vanguard_greaves_15",
+            "weight": 1400,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.acc1_titan_crest_ring_18",
+            "weight": 450,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "ITEM",
+            "ref_id": "item.special_titan_core_18",
+            "weight": 350,
+            "min_qty": 1,
+            "max_qty": 1
+          },
+          {
+            "entry_type": "NOTHING",
+            "ref_id": null,
+            "weight": 2000,
+            "min_qty": 0,
+            "max_qty": 0
+          }
+        ]
+      }
+    ]
+  }
+]

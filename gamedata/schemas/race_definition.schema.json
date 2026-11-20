@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/race_definition.schema.json",
+  "title": "RaceDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/RaceDefinition"
+  },
+  "$defs": {
+    "StatBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_hp",
+        "max_energy",
+        "max_stamina",
+        "phys_atk",
+        "ki_atk",
+        "defense",
+        "crit_rate",
+        "crit_dmg",
+        "energy_regen",
+        "stamina_regen"
+      ],
+      "properties": {
+        "max_hp": { "type": "number", "minimum": 1 },
+        "max_energy": { "type": "number", "minimum": 0 },
+        "max_stamina": { "type": "number", "minimum": 1 },
+        "phys_atk": { "type": "number", "minimum": 0 },
+        "ki_atk": { "type": "number", "minimum": 0 },
+        "defense": { "type": "number", "minimum": 0 },
+        "crit_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "crit_dmg": { "type": "number", "minimum": 0 },
+        "energy_regen": { "type": "number", "minimum": 0 },
+        "stamina_regen": { "type": "number", "minimum": 0 }
+      }
+    },
+    "StatGrowth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_hp",
+        "max_energy",
+        "max_stamina",
+        "phys_atk",
+        "ki_atk",
+        "defense"
+      ],
+      "properties": {
+        "max_hp": { "type": "number", "minimum": 0 },
+        "max_energy": { "type": "number", "minimum": 0 },
+        "max_stamina": { "type": "number", "minimum": 0 },
+        "phys_atk": { "type": "number", "minimum": 0 },
+        "ki_atk": { "type": "number", "minimum": 0 },
+        "defense": { "type": "number", "minimum": 0 }
+      }
+    },
+    "StatModifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attr_id",
+        "op",
+        "value"
+      ],
+      "properties": {
+        "attr_id": {
+          "type": "string",
+          "pattern": "^(attr|pot)\\.[a-z0-9_]+$"
+        },
+        "op": {
+          "type": "string",
+          "enum": ["ADD_FLAT", "ADD_PCT", "MULT"]
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    },
+    "InnatePassive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passive_id",
+        "trigger_hp_ratio",
+        "duration_sec",
+        "internal_cooldown_sec",
+        "modifiers"
+      ],
+      "properties": {
+        "passive_id": {
+          "type": "string",
+          "pattern": "^trait\\.[a-z0-9_]+$"
+        },
+        "trigger_hp_ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "duration_sec": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "internal_cooldown_sec": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatModifier"
+          }
+        }
+      }
+    },
+    "RaceDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "race_id",
+        "gameplay_tag",
+        "scope_status",
+        "base_stats_lv1",
+        "growth_per_level",
+        "tier_bonus_every_5_levels",
+        "innate_passive",
+        "starter_skill_ids",
+        "unlockable_form_ids"
+      ],
+      "properties": {
+        "race_id": {
+          "type": "string",
+          "pattern": "^race\\.[a-z0-9_]+$"
+        },
+        "gameplay_tag": {
+          "type": "string",
+          "pattern": "^Character\\.Race\\.[A-Za-z0-9]+$"
+        },
+        "scope_status": {
+          "type": "string",
+          "enum": ["VERTICAL_SLICE_FULL", "MVP_STUB_IN_VS", "POST_MVP"]
+        },
+        "base_stats_lv1": {
+          "$ref": "#/$defs/StatBlock"
+        },
+        "growth_per_level": {
+          "$ref": "#/$defs/StatGrowth"
+        },
+        "tier_bonus_every_5_levels": {
+          "$ref": "#/$defs/StatGrowth"
+        },
+        "innate_passive": {
+          "$ref": "#/$defs/InnatePassive"
+        },
+        "starter_skill_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^skill\\.[a-z0-9_]+$"
+          }
+        },
+        "unlockable_form_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^form\\.[a-z0-9_]+$"
+          }
+        }
+      }
+    }
+  }
+}

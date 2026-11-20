@@ -1,0 +1,65 @@
+[
+  {
+    "entry_id": "pity.head_vanguard_15",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 6,
+    "standard_coin_cost": 1200,
+    "reward_item_id": "item.head_vanguard_visor_15",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.hands_vanguard_15",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 6,
+    "standard_coin_cost": 1200,
+    "reward_item_id": "item.hands_vanguard_gauntlets_15",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.body_vanguard_15",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 12,
+    "standard_coin_cost": 2800,
+    "reward_item_id": "item.body_vanguard_cuirass_15",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.feet_vanguard_15",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 12,
+    "standard_coin_cost": 2800,
+    "reward_item_id": "item.feet_vanguard_greaves_15",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.acc1_titan_crest_ring_18",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 24,
+    "standard_coin_cost": 6500,
+    "reward_item_id": "item.acc1_titan_crest_ring_18",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.special_titan_core_18",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 28,
+    "standard_coin_cost": 8000,
+    "reward_item_id": "item.special_titan_core_18",
+    "reward_quantity": 1,
+    "daily_limit": null
+  },
+  {
+    "entry_id": "pity.mat_crimson_ore_t1",
+    "token_item_id": "token.boss_highland_titan",
+    "token_cost": 2,
+    "standard_coin_cost": 200,
+    "reward_item_id": "item.mat_crimson_ore_t1",
+    "reward_quantity": 5,
+    "daily_limit": 10
+  }
+]

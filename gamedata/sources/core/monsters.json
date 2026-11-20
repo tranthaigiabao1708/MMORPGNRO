@@ -1,0 +1,352 @@
+[
+  {
+    "entity_id": "mob.highland_wolf_01",
+    "rank": "NORMAL",
+    "archetype": "MELEE_RUSHER",
+    "level": 6,
+    "can_fly_3d": false,
+    "combat_stats": {
+      "max_hp": 1450.0,
+      "phys_atk": 68.0,
+      "ki_atk": 0.0,
+      "defense": 35.0,
+      "move_speed_cms": 580.0,
+      "flight_speed_cms": 0.0,
+      "dynamic_ccu_hp_scale_per_extra_player": 0.0
+    },
+    "poise_spec": {
+      "max_poise": 0.0,
+      "has_super_armor_while_poise_positive": false,
+      "stagger_duration_sec": 0.0,
+      "poise_recovery_immunity_sec": 0.0
+    },
+    "ai_perception": {
+      "aggro_radius_cm": 1100.0,
+      "leash_horizontal_cm": 3500.0,
+      "leash_vertical_cm": 2000.0,
+      "respawn_time_sec": 15.0
+    },
+    "rewards": {
+      "base_exp": 55,
+      "coin_min": 18,
+      "coin_max": 28,
+      "loot_table_id": "loot.mob_highland_wolf",
+      "min_contribution_ratio": 0.01,
+      "guaranteed_pity_token_id": null,
+      "guaranteed_pity_token_min": 0,
+      "guaranteed_pity_token_max": 0
+    },
+    "phases": [
+      {
+        "phase_index": 1,
+        "enter_at_hp_ratio": 1.0,
+        "damage_mult": 1.0,
+        "atk_speed_mult": 1.0,
+        "abilities": [
+          {
+            "action_id": "wolf_double_bite",
+            "cooldown_sec": 2.2,
+            "telegraph_sec": 0.35,
+            "skill_mult": 0.85,
+            "damage_type": "PHYSICAL",
+            "range_cm": 220.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 90.0
+          },
+          {
+            "action_id": "wolf_crag_pounce",
+            "cooldown_sec": 7.0,
+            "telegraph_sec": 0.65,
+            "skill_mult": 1.35,
+            "damage_type": "PHYSICAL",
+            "range_cm": 700.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "entity_id": "mob.raider_scouter_01",
+    "rank": "NORMAL",
+    "archetype": "ENERGY_SNIPER",
+    "level": 10,
+    "can_fly_3d": true,
+    "combat_stats": {
+      "max_hp": 2900.0,
+      "phys_atk": 96.0,
+      "ki_atk": 105.0,
+      "defense": 62.0,
+      "move_speed_cms": 520.0,
+      "flight_speed_cms": 800.0,
+      "dynamic_ccu_hp_scale_per_extra_player": 0.0
+    },
+    "poise_spec": {
+      "max_poise": 60.0,
+      "has_super_armor_while_poise_positive": true,
+      "stagger_duration_sec": 2.5,
+      "poise_recovery_immunity_sec": 4.0
+    },
+    "ai_perception": {
+      "aggro_radius_cm": 1800.0,
+      "leash_horizontal_cm": 4500.0,
+      "leash_vertical_cm": 3000.0,
+      "respawn_time_sec": 15.0
+    },
+    "rewards": {
+      "base_exp": 115,
+      "coin_min": 38,
+      "coin_max": 56,
+      "loot_table_id": "loot.mob_raider_scouter",
+      "min_contribution_ratio": 0.01,
+      "guaranteed_pity_token_id": null,
+      "guaranteed_pity_token_min": 0,
+      "guaranteed_pity_token_max": 0
+    },
+    "phases": [
+      {
+        "phase_index": 1,
+        "enter_at_hp_ratio": 1.0,
+        "damage_mult": 1.0,
+        "atk_speed_mult": 1.0,
+        "abilities": [
+          {
+            "action_id": "raider_arm_blaster_trio",
+            "cooldown_sec": 4.0,
+            "telegraph_sec": 0.45,
+            "skill_mult": 1.65,
+            "damage_type": "ENERGY",
+            "range_cm": 1800.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          },
+          {
+            "action_id": "raider_slash_combo",
+            "cooldown_sec": 3.0,
+            "telegraph_sec": 0.35,
+            "skill_mult": 1.15,
+            "damage_type": "PHYSICAL",
+            "range_cm": 350.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 110.0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "entity_id": "mob.crimson_enforcer_elite",
+    "rank": "ELITE",
+    "archetype": "HEAVY_JUGGERNAUT",
+    "level": 15,
+    "can_fly_3d": true,
+    "combat_stats": {
+      "max_hp": 14500.0,
+      "phys_atk": 185.0,
+      "ki_atk": 170.0,
+      "defense": 135.0,
+      "move_speed_cms": 600.0,
+      "flight_speed_cms": 1500.0,
+      "dynamic_ccu_hp_scale_per_extra_player": 0.0
+    },
+    "poise_spec": {
+      "max_poise": 220.0,
+      "has_super_armor_while_poise_positive": true,
+      "stagger_duration_sec": 4.0,
+      "poise_recovery_immunity_sec": 5.0
+    },
+    "ai_perception": {
+      "aggro_radius_cm": 1600.0,
+      "leash_horizontal_cm": 5000.0,
+      "leash_vertical_cm": 4000.0,
+      "respawn_time_sec": 60.0
+    },
+    "rewards": {
+      "base_exp": 460,
+      "coin_min": 140,
+      "coin_max": 210,
+      "loot_table_id": "loot.elite_crimson_enforcer",
+      "min_contribution_ratio": 0.05,
+      "guaranteed_pity_token_id": null,
+      "guaranteed_pity_token_min": 0,
+      "guaranteed_pity_token_max": 0
+    },
+    "phases": [
+      {
+        "phase_index": 1,
+        "enter_at_hp_ratio": 1.0,
+        "damage_mult": 1.0,
+        "atk_speed_mult": 1.0,
+        "abilities": [
+          {
+            "action_id": "enforcer_heavy_cleave",
+            "cooldown_sec": 4.5,
+            "telegraph_sec": 0.65,
+            "skill_mult": 1.65,
+            "damage_type": "PHYSICAL",
+            "range_cm": 420.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 110.0
+          },
+          {
+            "action_id": "enforcer_crimson_wave",
+            "cooldown_sec": 9.0,
+            "telegraph_sec": 0.85,
+            "skill_mult": 2.1,
+            "damage_type": "ENERGY",
+            "range_cm": 1800.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          },
+          {
+            "action_id": "enforcer_aerial_slam",
+            "cooldown_sec": 11.0,
+            "telegraph_sec": 0.75,
+            "skill_mult": 1.9,
+            "damage_type": "PHYSICAL",
+            "range_cm": 1500.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          },
+          {
+            "action_id": "enforcer_shield_charge",
+            "cooldown_sec": 14.0,
+            "telegraph_sec": 0.8,
+            "skill_mult": 2.0,
+            "damage_type": "PHYSICAL",
+            "range_cm": 1200.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "entity_id": "boss.highland_titan_01",
+    "rank": "REGIONAL_BOSS",
+    "archetype": "MULTI_PHASE_TITAN",
+    "level": 18,
+    "can_fly_3d": false,
+    "combat_stats": {
+      "max_hp": 420000.0,
+      "phys_atk": 290.0,
+      "ki_atk": 310.0,
+      "defense": 210.0,
+      "move_speed_cms": 680.0,
+      "flight_speed_cms": 2200.0,
+      "dynamic_ccu_hp_scale_per_extra_player": 0.08
+    },
+    "poise_spec": {
+      "max_poise": 1200.0,
+      "has_super_armor_while_poise_positive": true,
+      "stagger_duration_sec": 6.0,
+      "poise_recovery_immunity_sec": 8.0
+    },
+    "ai_perception": {
+      "aggro_radius_cm": 2500.0,
+      "leash_horizontal_cm": 5200.0,
+      "leash_vertical_cm": 8000.0,
+      "respawn_time_sec": 300.0
+    },
+    "rewards": {
+      "base_exp": 2200,
+      "coin_min": 850,
+      "coin_max": 1200,
+      "loot_table_id": "loot.boss_highland_titan",
+      "min_contribution_ratio": 0.02,
+      "guaranteed_pity_token_id": "token.boss_highland_titan",
+      "guaranteed_pity_token_min": 1,
+      "guaranteed_pity_token_max": 2
+    },
+    "phases": [
+      {
+        "phase_index": 1,
+        "enter_at_hp_ratio": 1.0,
+        "damage_mult": 1.0,
+        "atk_speed_mult": 1.0,
+        "abilities": [
+          {
+            "action_id": "titan_crushing_fist",
+            "cooldown_sec": 5.0,
+            "telegraph_sec": 0.85,
+            "skill_mult": 1.8,
+            "damage_type": "PHYSICAL",
+            "range_cm": 800.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 120.0
+          },
+          {
+            "action_id": "titan_boulder_barrage",
+            "cooldown_sec": 11.0,
+            "telegraph_sec": 1.1,
+            "skill_mult": 1.95,
+            "damage_type": "PHYSICAL",
+            "range_cm": 4500.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 0.0
+          },
+          {
+            "action_id": "titan_ground_quake",
+            "cooldown_sec": 22.0,
+            "telegraph_sec": 2.2,
+            "skill_mult": 3.2,
+            "damage_type": "PHYSICAL",
+            "range_cm": 4500.0,
+            "safe_altitude_z_cm": 450.0,
+            "sweep_angle_deg": 360.0
+          }
+        ]
+      },
+      {
+        "phase_index": 2,
+        "enter_at_hp_ratio": 0.5,
+        "damage_mult": 1.15,
+        "atk_speed_mult": 1.2,
+        "abilities": [
+          {
+            "action_id": "titan_crushing_fist",
+            "cooldown_sec": 4.2,
+            "telegraph_sec": 0.7,
+            "skill_mult": 1.8,
+            "damage_type": "PHYSICAL",
+            "range_cm": 800.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 120.0
+          },
+          {
+            "action_id": "titan_sweeping_beam",
+            "cooldown_sec": 18.0,
+            "telegraph_sec": 1.8,
+            "skill_mult": 3.8,
+            "damage_type": "ENERGY",
+            "range_cm": 4800.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 180.0
+          },
+          {
+            "action_id": "titan_volcanic_quake",
+            "cooldown_sec": 24.0,
+            "telegraph_sec": 2.0,
+            "skill_mult": 3.2,
+            "damage_type": "HYBRID",
+            "range_cm": 4500.0,
+            "safe_altitude_z_cm": 450.0,
+            "sweep_angle_deg": 360.0
+          },
+          {
+            "action_id": "titan_skyward_leap_slam",
+            "cooldown_sec": 16.0,
+            "telegraph_sec": 1.25,
+            "skill_mult": 2.75,
+            "damage_type": "HYBRID",
+            "range_cm": 3600.0,
+            "safe_altitude_z_cm": 0.0,
+            "sweep_angle_deg": 360.0
+          }
+        ]
+      }
+    ]
+  }
+]

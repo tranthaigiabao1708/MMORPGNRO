@@ -1,0 +1,16 @@
+{
+  "walk_speed_cms": 350.0,
+  "run_speed_cms": 650.0,
+  "hover_flight_speed_cms": 900.0,
+  "boost_flight_speed_cms": 1800.0,
+  "pursuit_dash_speed_cms": 2600.0,
+  "boost_flight_energy_per_sec": 4.0,
+  "defense_formula_level_factor": 100.0,
+  "defense_formula_flat_constant": 400.0,
+  "base_crit_rate": 0.05,
+  "base_crit_damage": 0.5,
+  "crit_rate_cap": 0.85,
+  "stagger_damage_multiplier": 1.25,
+  "max_level_vs": 20,
+  "boss_min_contribution_ratio": 0.02
+}

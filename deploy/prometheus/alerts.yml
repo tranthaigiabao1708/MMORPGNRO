@@ -1,0 +1,29 @@
+groups:
+  - name: infinite_universe_core_alerts
+    rules:
+      - alert: FencingEpochConflictDetected
+        expr: increase(iu_fencing_conflict_rejected_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Phat hien xung dot fencing_epoch tren Zone {{ $labels.zone_id }}"
+          description: "Mot Zombie/Stale UE5 Server vua co gang ghi checkpoint cu va da bi PostgreSQL chan dung."
+
+      - alert: ZoneServerTickOverBudget30Hz
+        expr: histogram_quantile(0.95, sum(rate(iu_zone_server_tick_ms_bucket[1m])) by (le, zone_id, channel_id)) > 30
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UE5 Dedicated Server {{ $labels.zone_id }} Ch-{{ $labels.channel_id }} sap vuot ngan sach 33.33ms"
+          description: "Tick time p95 vuot 30ms trong 2 phut lien tuc; kiem tra mat do AI hoac GAS GameplayEffect."
+
+      - alert: InternalGrpcHighLatencyOrErrors
+        expr: histogram_quantile(0.99, sum(rate(iu_grpc_request_duration_seconds_bucket[2m])) by (le, grpc_service, grpc_method)) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Do tre gRPC p99 cao (> 50ms) tai {{ $labels.grpc_service }}/{{ $labels.grpc_method }}"
+          description: "Kiem tra hang doi khoa FOR UPDATE tren PostgreSQL 16 hoac ket noi Redis."

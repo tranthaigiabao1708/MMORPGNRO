@@ -1,0 +1,477 @@
+[
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.phys_atk",
+          "Value": 42
+        },
+        {
+          "AttrId": "attr.ki_atk",
+          "Value": 42
+        },
+        {
+          "AttrId": "attr.crit_dmg",
+          "Value": 0.12
+        }
+      ],
+      "InnateEffectId": "effect.titan_might",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 4,
+      "SetId": "None",
+      "Slot": "slot.acc_1",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.acc1_titan_crest_ring_18",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.acc1_titan_crest_ring_18",
+    "Rarity": "rarity.legendary",
+    "RequiredLevel": 18,
+    "SellPriceCoin": 2200,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_energy",
+          "Value": 45
+        },
+        {
+          "AttrId": "attr.energy_regen",
+          "Value": 1.2
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 2,
+      "SetId": "None",
+      "Slot": "slot.acc_2",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.acc2_scouter_charm_10",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.acc2_scouter_charm_10",
+    "Rarity": "rarity.rare",
+    "RequiredLevel": 10,
+    "SellPriceCoin": 140,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_hp",
+          "Value": 80
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 8
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 0,
+      "SetId": "None",
+      "Slot": "slot.body",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.body_recruit_tunic_01",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.body_recruit_tunic_01",
+    "Rarity": "rarity.common",
+    "RequiredLevel": 1,
+    "SellPriceCoin": 15,
+    "bIsTradeable": false
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_hp",
+          "Value": 420
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 38
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 3,
+      "SetId": "set.highland_vanguard",
+      "Slot": "slot.body",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.body_vanguard_cuirass_15",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.body_vanguard_cuirass_15",
+    "Rarity": "rarity.epic",
+    "RequiredLevel": 15,
+    "SellPriceCoin": 680,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [],
+      "BaseStats": [],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 0,
+      "RandomAffixCount": 0,
+      "SetId": "None",
+      "Slot": "slot.body",
+      "bIsEquippable": false
+    },
+    "ItemId": "item.consumable_verdant_elixir_s",
+    "ItemType": "CONSUMABLE",
+    "MaxStack": 99,
+    "Name": "item.consumable_verdant_elixir_s",
+    "Rarity": "rarity.common",
+    "RequiredLevel": 1,
+    "SellPriceCoin": 15,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.def",
+          "Value": 16
+        },
+        {
+          "AttrId": "attr.max_stamina",
+          "Value": 12
+        },
+        {
+          "AttrId": "attr.move_speed",
+          "Value": 0.04
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 2,
+      "SetId": "None",
+      "Slot": "slot.feet",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.feet_raider_thruster_09",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.feet_raider_thruster_09",
+    "Rarity": "rarity.rare",
+    "RequiredLevel": 9,
+    "SellPriceCoin": 120,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_hp",
+          "Value": 220
+        },
+        {
+          "AttrId": "attr.max_stamina",
+          "Value": 18
+        },
+        {
+          "AttrId": "attr.move_speed",
+          "Value": 0.06
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 3,
+      "SetId": "set.highland_vanguard",
+      "Slot": "slot.feet",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.feet_vanguard_greaves_15",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.feet_vanguard_greaves_15",
+    "Rarity": "rarity.epic",
+    "RequiredLevel": 15,
+    "SellPriceCoin": 620,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.phys_atk",
+          "Value": 30
+        },
+        {
+          "AttrId": "attr.crit_rate",
+          "Value": 0.025
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 16
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 2,
+      "SetId": "set.highland_vanguard",
+      "Slot": "slot.hands",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.hands_vanguard_gauntlets_15",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.hands_vanguard_gauntlets_15",
+    "Rarity": "rarity.rare",
+    "RequiredLevel": 15,
+    "SellPriceCoin": 340,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.phys_atk",
+          "Value": 14
+        },
+        {
+          "AttrId": "attr.ki_atk",
+          "Value": 10
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 1,
+      "SetId": "None",
+      "Slot": "slot.hands",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.hands_wolfhide_wraps_05",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.hands_wolfhide_wraps_05",
+    "Rarity": "rarity.uncommon",
+    "RequiredLevel": 5,
+    "SellPriceCoin": 45,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.ki_atk",
+          "Value": 28
+        },
+        {
+          "AttrId": "attr.max_energy",
+          "Value": 55
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 18
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 2,
+      "SetId": "set.highland_vanguard",
+      "Slot": "slot.head",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.head_vanguard_visor_15",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.head_vanguard_visor_15",
+    "Rarity": "rarity.rare",
+    "RequiredLevel": 15,
+    "SellPriceCoin": 320,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_hp",
+          "Value": 310
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 32
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 3,
+      "SetId": "None",
+      "Slot": "slot.legs",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.legs_crimson_plates_14",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.legs_crimson_plates_14",
+    "Rarity": "rarity.epic",
+    "RequiredLevel": 14,
+    "SellPriceCoin": 420,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.max_hp",
+          "Value": 135
+        },
+        {
+          "AttrId": "attr.def",
+          "Value": 14
+        }
+      ],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 1,
+      "SetId": "None",
+      "Slot": "slot.legs",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.legs_wolfhide_trousers_06",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.legs_wolfhide_trousers_06",
+    "Rarity": "rarity.uncommon",
+    "RequiredLevel": 6,
+    "SellPriceCoin": 55,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [],
+      "BaseStats": [],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 0,
+      "RandomAffixCount": 0,
+      "SetId": "None",
+      "Slot": "slot.body",
+      "bIsEquippable": false
+    },
+    "ItemId": "item.mat_crimson_ore_t1",
+    "ItemType": "ENHANCE_MATERIAL",
+    "MaxStack": 999,
+    "Name": "item.mat_crimson_ore_t1",
+    "Rarity": "rarity.uncommon",
+    "RequiredLevel": 1,
+    "SellPriceCoin": 25,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 2,
+      "AllowedRaces": [
+        "ALL"
+      ],
+      "BaseStats": [
+        {
+          "AttrId": "attr.phys_atk",
+          "Value": 38
+        },
+        {
+          "AttrId": "attr.ki_atk",
+          "Value": 48
+        },
+        {
+          "AttrId": "attr.max_energy",
+          "Value": 80
+        },
+        {
+          "AttrId": "pot.form_efficiency",
+          "Value": 0.08
+        }
+      ],
+      "InnateEffectId": "effect.titan_overcharge",
+      "MaxEnhanceLevel": 10,
+      "RandomAffixCount": 4,
+      "SetId": "None",
+      "Slot": "slot.special",
+      "bIsEquippable": true
+    },
+    "ItemId": "item.special_titan_core_18",
+    "ItemType": "EQUIPMENT",
+    "MaxStack": 1,
+    "Name": "item.special_titan_core_18",
+    "Rarity": "rarity.legendary",
+    "RequiredLevel": 18,
+    "SellPriceCoin": 2500,
+    "bIsTradeable": true
+  },
+  {
+    "EquipSpec": {
+      "AffixTierPool": 1,
+      "AllowedRaces": [],
+      "BaseStats": [],
+      "InnateEffectId": "None",
+      "MaxEnhanceLevel": 0,
+      "RandomAffixCount": 0,
+      "SetId": "None",
+      "Slot": "slot.body",
+      "bIsEquippable": false
+    },
+    "ItemId": "token.boss_highland_titan",
+    "ItemType": "BOSS_TOKEN",
+    "MaxStack": 9999,
+    "Name": "token.boss_highland_titan",
+    "Rarity": "rarity.rare",
+    "RequiredLevel": 1,
+    "SellPriceCoin": 0,
+    "bIsTradeable": false
+  }
+]

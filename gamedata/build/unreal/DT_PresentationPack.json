@@ -1,0 +1,2122 @@
+[
+  {
+    "CanonicalId": "affix.cdr",
+    "CastSFX": "None",
+    "DisplayName": "+Giảm Hồi Chiêu",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixCDR",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.cdr",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm thời gian chờ kỹ năng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.crit_dmg",
+    "CastSFX": "None",
+    "DisplayName": "+Sát Thương Chí Mạng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixCritDmg",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.crit_dmg",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng hệ số sát thương chí mạng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.crit_rate",
+    "CastSFX": "None",
+    "DisplayName": "+Tỉ Lệ Chí Mạng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixCritRate",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.crit_rate",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng xác suất đánh chí mạng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.energy_regen",
+    "CastSFX": "None",
+    "DisplayName": "+Hồi Năng Lượng/Giây",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixEnergyRegen",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.energy_regen",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng tốc độ hồi năng lượng mỗi giây.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.flat_ki_atk",
+    "CastSFX": "None",
+    "DisplayName": "+Công Năng Lượng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixEnergyAtk",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.flat_ki_atk",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Cộng thẳng sát thương năng lượng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.flat_max_hp",
+    "CastSFX": "None",
+    "DisplayName": "+Sinh Lực Tối Đa",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixHP",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.flat_max_hp",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Cộng thẳng sinh lực tối đa.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.flat_phys_atk",
+    "CastSFX": "None",
+    "DisplayName": "+Công Vật Lý",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixPhysAtk",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.flat_phys_atk",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Cộng thẳng sát thương vật lý.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.form_efficiency",
+    "CastSFX": "None",
+    "DisplayName": "+Hiệu Suất Thức Tỉnh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixAwakenEff",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.form_efficiency",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm tiêu hao năng lượng khi duy trì thức tỉnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.ki_dmg_pct",
+    "CastSFX": "None",
+    "DisplayName": "+% Sát Thương Năng Lượng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixEnergyPct",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.ki_dmg_pct",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng phần trăm sát thương năng lượng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "affix.phys_dmg_pct",
+    "CastSFX": "None",
+    "DisplayName": "+% Sát Thương Vật Lý",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AffixPhysPct",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "affix.phys_dmg_pct",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng phần trăm sát thương vật lý.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.atk_speed",
+    "CastSFX": "None",
+    "DisplayName": "Tốc Độ Đánh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatAtkSpd",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.atk_speed",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tốc độ thi triển đòn đánh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.cdr",
+    "CastSFX": "None",
+    "DisplayName": "Giảm Hồi Chiêu",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatCDR",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.cdr",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Rút ngắn thời gian chờ kỹ năng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.crit_dmg",
+    "CastSFX": "None",
+    "DisplayName": "Sát Thương Chí Mạng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatCritDmg",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.crit_dmg",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Hệ số sát thương chí mạng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.crit_rate",
+    "CastSFX": "None",
+    "DisplayName": "Tỉ Lệ Chí Mạng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatCritRate",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.crit_rate",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Xác suất bạo kích.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.def",
+    "CastSFX": "None",
+    "DisplayName": "Phòng Thủ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatDef",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.def",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm sát thương nhận vào.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.energy",
+    "CastSFX": "None",
+    "DisplayName": "Nội Năng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatEnergy",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.energy",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Nội năng hiện tại.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.energy_regen",
+    "CastSFX": "None",
+    "DisplayName": "Hồi Năng Lượng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatEnergyRegen",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.energy_regen",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Nội năng hồi mỗi giây.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.hp",
+    "CastSFX": "None",
+    "DisplayName": "Sinh Lực",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatHP",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.hp",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Sinh lực hiện tại.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.ki_atk",
+    "CastSFX": "None",
+    "DisplayName": "Công Năng Lượng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatEnergyAtk",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.ki_atk",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Sức mạnh chiêu thức năng lượng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.ki_dmg_pct",
+    "CastSFX": "None",
+    "DisplayName": "% Sát Thương Năng Lượng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatEnergyPct",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.ki_dmg_pct",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Hệ số khuếch đại năng lượng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.max_energy",
+    "CastSFX": "None",
+    "DisplayName": "Nội Năng Tối Đa",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatEnergy",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.max_energy",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giới hạn nội năng tối đa.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.max_hp",
+    "CastSFX": "None",
+    "DisplayName": "Sinh Lực Tối Đa",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatHP",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.max_hp",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giới hạn sinh lực tối đa.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.max_stamina",
+    "CastSFX": "None",
+    "DisplayName": "Thể Lực Tối Đa",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatStamina",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.max_stamina",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giới hạn thể lực tối đa.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.move_speed",
+    "CastSFX": "None",
+    "DisplayName": "Tốc Độ Di Chuyển",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatMoveSpd",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.move_speed",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tốc độ chạy và ngự không.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.phys_atk",
+    "CastSFX": "None",
+    "DisplayName": "Công Vật Lý",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatPhysAtk",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.phys_atk",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Sức mạnh đòn đánh cận chiến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.phys_dmg_pct",
+    "CastSFX": "None",
+    "DisplayName": "% Sát Thương Vật Lý",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatPhysPct",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.phys_dmg_pct",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Hệ số khuếch đại cận chiến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.stamina",
+    "CastSFX": "None",
+    "DisplayName": "Thể Lực",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatStamina",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.stamina",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thể lực hiện tại.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "attr.stamina_regen",
+    "CastSFX": "None",
+    "DisplayName": "Hồi Thể Lực",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StatStamRegen",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "attr.stamina_regen",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thể lực hồi mỗi giây.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "boss.highland_titan_01",
+    "CastSFX": "None",
+    "DisplayName": "Cự Thần Đá Đỏ — Khổng Viên Cổ Đại",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Mobs/T_Orig_HighlandTitan",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "boss.highland_titan_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Boss/SKM_Orig_HighlandTitan",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thủ lĩnh khu vực 2 giai đoạn với sức mạnh địa chấn.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "currency.boss_pity_token",
+    "CastSFX": "None",
+    "DisplayName": "Ấn Chứng Chinh Phạt",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_SubjugationCrest",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "currency.boss_pity_token",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tín vật đổi trang bị bảo đảm.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "currency.mastery_point",
+    "CastSFX": "None",
+    "DisplayName": "Điểm Tinh Thông Võ Đạo",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_MasteryPt",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "currency.mastery_point",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Điểm dùng mở khóa kỹ năng và thức tỉnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "currency.standard_coin",
+    "CastSFX": "None",
+    "DisplayName": "Tinh Tệ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_StarCredit",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "currency.standard_coin",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tiền tệ giao thương phổ thông của Tinh Hệ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "effect.titan_might",
+    "CastSFX": "None",
+    "DisplayName": "Uy Lực Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Effects/T_Orig_TitanMight",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "effect.titan_might",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng 8% sát thương phá thế trước Tinh Anh và Thủ Lĩnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "effect.titan_overcharge",
+    "CastSFX": "None",
+    "DisplayName": "Quá Tải Tinh Tú",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Effects/T_Orig_AstralOvercharge",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "effect.titan_overcharge",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng 8% sát thương tuyệt kỹ khi đang thức tỉnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "effect.vanguard_momentum",
+    "CastSFX": "None",
+    "DisplayName": "Khí Thế Tiên Phong",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Effects/T_Orig_VanguardMomentum",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "effect.vanguard_momentum",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm 20% tiêu hao năng lượng cho chiêu tụ lực và đột kích.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "form.zenith_awaken_01",
+    "CastSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_AwakenPulse",
+    "DisplayName": "Thiên Vũ Thức Tỉnh — Bậc I",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Forms/T_Orig_SolarAwaken1",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "form.zenith_awaken_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_SolarAwaken",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_StarlightAura",
+    "ShortDescription": "Trạng thái quang huy tăng 25% sát thương và tốc độ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.35,
+      "G": 0.82,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.acc1_titan_crest_ring_18",
+    "CastSFX": "None",
+    "DisplayName": "Nhẫn Ấn Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_TitanRing",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.acc1_titan_crest_ring_18",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Nhẫn truyền thuyết khắc cổ văn Cự Thần.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.acc2_scouter_charm_10",
+    "CastSFX": "None",
+    "DisplayName": "Thị Kính Chiến Thuật",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_ResonanceVisor",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.acc2_scouter_charm_10",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phụ kiện cảm biến cộng hưởng năng lượng gắn tai.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.body_recruit_tunic_01",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Bào Tân Binh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_RecruitTunic",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.body_recruit_tunic_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Trang phục huấn luyện cơ bản của tiền đồn.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.body_vanguard_cuirass_15",
+    "CastSFX": "None",
+    "DisplayName": "Giáp Ngực Tiên Phong Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_VanguardCuirass",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.body_vanguard_cuirass_15",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Áo giáp thuộc bộ Chiến Giáp Tiên Phong.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.consumable_verdant_elixir_s",
+    "CastSFX": "None",
+    "DisplayName": "Linh Dịch Thanh Thảo (S)",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_VerdantElixir",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.consumable_verdant_elixir_s",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Hồi phục nhanh 35% sinh lực và năng lượng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.feet_raider_thruster_09",
+    "CastSFX": "None",
+    "DisplayName": "Ủng Phản Lực Tiên Phong",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_ThrusterBoots",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.feet_raider_thruster_09",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giày trợ lực gia tăng tốc độ di chuyển.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.feet_vanguard_greaves_15",
+    "CastSFX": "None",
+    "DisplayName": "Ủng Chiến Tiên Phong Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_VanguardGreaves",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.feet_vanguard_greaves_15",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ủng giáp thuộc bộ Chiến Giáp Tiên Phong.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.hands_vanguard_gauntlets_15",
+    "CastSFX": "None",
+    "DisplayName": "Găng Tay Tiên Phong Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_VanguardGauntlets",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.hands_vanguard_gauntlets_15",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Găng tay thuộc bộ Chiến Giáp Tiên Phong.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.hands_wolfhide_wraps_05",
+    "CastSFX": "None",
+    "DisplayName": "Băng Tay Da Lang Nha",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_CragfangWraps",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.hands_wolfhide_wraps_05",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Găng tay nhẹ tăng công kích cận chiến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.head_vanguard_visor_15",
+    "CastSFX": "None",
+    "DisplayName": "Mũ Kính Tiên Phong Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_VanguardVisor",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.head_vanguard_visor_15",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Mũ giáp thuộc bộ Chiến Giáp Tiên Phong.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.legs_crimson_plates_14",
+    "CastSFX": "None",
+    "DisplayName": "Giáp Chân Huyết Thạch",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_CrimsonPlates",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.legs_crimson_plates_14",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giáp chân rèn từ hợp kim đỏ cường lực.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.legs_wolfhide_trousers_06",
+    "CastSFX": "None",
+    "DisplayName": "Quần Da Lang Nha",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_CragfangTrousers",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.legs_wolfhide_trousers_06",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Quần chiến đấu dẻo dai vùng cao nguyên.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.mat_crimson_ore_t1",
+    "CastSFX": "None",
+    "DisplayName": "Quặng Đá Đỏ Cấp 1",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_CrimsonOre",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.mat_crimson_ore_t1",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Nguyên liệu cường hóa trang bị từ +1 đến +10.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "item.special_titan_core_18",
+    "CastSFX": "None",
+    "DisplayName": "Hạch Tâm Cộng Hưởng Cổ Đại",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_ResonanceCore",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "item.special_titan_core_18",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Pháp bảo tinh tú khuếch đại hiệu suất thức tỉnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "loot.boss_highland_titan",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Lợi Phẩm Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_TitanChest",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "loot.boss_highland_titan",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bảng rơi đồ từ Cự Thần Đá Đỏ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "loot.elite_crimson_enforcer",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Lợi Phẩm Thiết Vệ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_LootChest",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "loot.elite_crimson_enforcer",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bảng rơi đồ từ Thiết Vệ Huyết Giáp.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "loot.mob_highland_wolf",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Lợi Phẩm Lang Nha",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_LootPouch",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "loot.mob_highland_wolf",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bảng rơi đồ từ Lang Nha Đá Đỏ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "loot.mob_raider_scouter",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Lợi Phẩm Trinh Sát",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_LootPouch",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "loot.mob_raider_scouter",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bảng rơi đồ từ Trinh Sát Quân Đoàn.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "mob.crimson_enforcer_elite",
+    "CastSFX": "None",
+    "DisplayName": "Thiết Vệ Huyết Giáp",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Mobs/T_Orig_CrimsonEnforcer",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "mob.crimson_enforcer_elite",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Mobs/SKM_Orig_CrimsonEnforcer",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Đội trưởng giáp đỏ trấn giữ hẻm núi.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "mob.highland_wolf_01",
+    "CastSFX": "None",
+    "DisplayName": "Lang Nha Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Mobs/T_Orig_CragfangWolf",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "mob.highland_wolf_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Mobs/SKM_Orig_CragfangWolf",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thú săn mồi hung dữ vùng bình nguyên.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "mob.raider_scouter_01",
+    "CastSFX": "None",
+    "DisplayName": "Trinh Sát Quân Đoàn Tinh Hệ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Mobs/T_Orig_VanguardRaider",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "mob.raider_scouter_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Mobs/SKM_Orig_VanguardRaider",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Lính trinh sát trang bị pháo tay và thị kính chiến thuật.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "planet.p01_terra",
+    "CastSFX": "None",
+    "DisplayName": "Hành Tinh Terra",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_PlanetTerra",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "Hành tinh xanh yên bình trước ngày quân đoàn viễn chinh đổ bộ.",
+    "Name": "planet.p01_terra",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thế giới khởi đầu của các chiến binh tinh hệ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.95,
+      "G": 0.7,
+      "R": 0.15
+    }
+  },
+  {
+    "CanonicalId": "pot.all_resist",
+    "CastSFX": "None",
+    "DisplayName": "Kháng Toàn Diện",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PotResist",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "pot.all_resist",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm mọi loại sát thương nhận vào.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "pot.energy_capacity",
+    "CastSFX": "None",
+    "DisplayName": "Dung Lượng Tinh Tú",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PotCapacity",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "pot.energy_capacity",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Mở rộng giới hạn nội năng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "pot.energy_control",
+    "CastSFX": "None",
+    "DisplayName": "Điều Tiết Nguyên Lực",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PotControl",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "pot.energy_control",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm tiêu hao khi dùng kỹ năng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "pot.flight_efficiency",
+    "CastSFX": "None",
+    "DisplayName": "Ngự Không Thuật",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PotFlight",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "pot.flight_efficiency",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm tiêu hao khi phi hành tốc độ cao.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "pot.form_efficiency",
+    "CastSFX": "None",
+    "DisplayName": "Hiệu Suất Thức Tỉnh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PotAwaken",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "pot.form_efficiency",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm tiêu hao khi duy trì trạng thái thức tỉnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "race.mystic_elder",
+    "CastSFX": "None",
+    "DisplayName": "Tộc Linh Mộc",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Races/T_Orig_Mystic",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "race.mystic_elder",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Mystic/SKM_Orig_MysticElder",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Chủng tộc cổ xưa sở hữu khả năng tái tạo sinh mệnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "race.terran_adept",
+    "CastSFX": "None",
+    "DisplayName": "Võ Giả Nhân Giới",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Races/T_Orig_Terran",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "race.terran_adept",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Terran/SKM_Orig_TerranAdept",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bậc thầy võ học tinh thông điều hòa nguyên lực.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "race.zenith_warrior",
+    "CastSFX": "None",
+    "DisplayName": "Chiến Binh Thiên Vũ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Races/T_Orig_Zenith",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "Hậu duệ của những người gác đền tinh tú, càng giao chiến càng rực sáng.",
+    "Name": "race.zenith_warrior",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "/Game/PresentationPacks/Original_Commercial/Characters/Zenith/SKM_Orig_ZenithWarrior",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Chiến binh mang dòng máu sao băng với bùng nổ cận chiến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 0.65,
+      "R": 0.25
+    }
+  },
+  {
+    "CanonicalId": "rarity.common",
+    "CastSFX": "None",
+    "DisplayName": "Thường",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.common",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất cơ bản.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.75,
+      "G": 0.75,
+      "R": 0.75
+    }
+  },
+  {
+    "CanonicalId": "rarity.epic",
+    "CastSFX": "None",
+    "DisplayName": "Sử Thi",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.epic",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất sử thi.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.95,
+      "G": 0.25,
+      "R": 0.7
+    }
+  },
+  {
+    "CanonicalId": "rarity.legendary",
+    "CastSFX": "None",
+    "DisplayName": "Truyền Thuyết",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.legendary",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất truyền thuyết.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.1,
+      "G": 0.6,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "rarity.mythic",
+    "CastSFX": "None",
+    "DisplayName": "Thần Thoại",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.mythic",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất thần thoại.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.25,
+      "G": 0.2,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "rarity.rare",
+    "CastSFX": "None",
+    "DisplayName": "Quý Hiếm",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.rare",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất quý hiếm.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 0.55,
+      "R": 0.2
+    }
+  },
+  {
+    "CanonicalId": "rarity.uncommon",
+    "CastSFX": "None",
+    "DisplayName": "Tinh Xảo",
+    "IconTexture": "None",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "rarity.uncommon",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Phẩm chất tinh xảo.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.35,
+      "G": 0.85,
+      "R": 0.25
+    }
+  },
+  {
+    "CanonicalId": "set.highland_vanguard",
+    "CastSFX": "None",
+    "DisplayName": "Bộ Chiến Giáp Tiên Phong Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Sets/T_Orig_VanguardSet",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "set.highland_vanguard",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Bộ trang bị 4 món cấp 15 vùng cao nguyên.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.aoe_burst_01",
+    "CastSFX": "None",
+    "DisplayName": "Chấn Động Tinh Vân",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_NebulaShockwave",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "skill.aoe_burst_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_NebulaBurst",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_RadialWave",
+    "ShortDescription": "Giải phóng xung lực đẩy lùi mọi kẻ địch xung quanh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.beam_charged_01",
+    "CastSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_CannonCharge",
+    "DisplayName": "Thiên Ngân Xung Pháo",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_AstralCannon",
+    "ImpactSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_CannonBlast",
+    "ImpactVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_AstralLanceImpact",
+    "LoreFlavorText": "",
+    "Name": "skill.beam_charged_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_TwinPalmArcaneCannon",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_AstralLance_01",
+    "ShortDescription": "Tụ lực khai hỏa chùm tia tinh tú xuyên phá chiến trường.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 0.85,
+      "R": 0.25
+    }
+  },
+  {
+    "CanonicalId": "skill.def_vanish_step",
+    "CastSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_BlinkSnap",
+    "DisplayName": "Ảo Ảnh Bộ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_PhantomStep",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "skill.def_vanish_step",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_PhantomStep",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_PhantomBlur",
+    "ShortDescription": "Thoát thân tức thời và né tránh sát thương.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.guard_shield_01",
+    "CastSFX": "None",
+    "DisplayName": "Kết Giới Hộ Thể",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_AegisWard",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "skill.guard_shield_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_WardStance",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_AegisDome",
+    "ShortDescription": "Dựng vòng sáng giảm 65% sát thương nhận vào.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.ki_volley_01",
+    "CastSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_BoltFire",
+    "DisplayName": "Liên Hoàn Tinh Quang",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_AstralBarrage",
+    "ImpactSFX": "None",
+    "ImpactVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_AstralSpark",
+    "LoreFlavorText": "",
+    "Name": "skill.ki_volley_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_AstralBarrage",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_AstralBolt_01",
+    "ShortDescription": "Phóng 6 luồng tinh quang truy đuổi mục tiêu.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.melee_basic_combo",
+    "CastSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_StrikeWhoosh",
+    "DisplayName": "Liên Kích Võ Đạo",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_MartialCombo",
+    "ImpactSFX": "/Game/PresentationPacks/Original_Commercial/Audio/SFX_Orig_HeavyImpact",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "skill.melee_basic_combo",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_MartialCombo",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_MeleeTrail",
+    "ShortDescription": "Chuỗi 6 đòn cận chiến kết thúc bằng hất tung và truy kích.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.rush_strike_01",
+    "CastSFX": "None",
+    "DisplayName": "Lưu Tinh Đột Kích",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_MeteorRush",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "skill.rush_strike_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_MeteorRush",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_RushStream",
+    "ShortDescription": "Lao vút tới tung 4 đòn liên hoàn tốc độ cao.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "skill.ult_supernova_01",
+    "CastSFX": "None",
+    "DisplayName": "Siêu Tân Tinh Hủy Diệt",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Skills/T_Orig_SolarCataclysm",
+    "ImpactSFX": "None",
+    "ImpactVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_SolarNova",
+    "LoreFlavorText": "",
+    "Name": "skill.ult_supernova_01",
+    "PrimaryMontage": "/Game/PresentationPacks/Original_Commercial/Animations/AM_Orig_StarSphereCast",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "/Game/PresentationPacks/Original_Commercial/VFX/NS_Orig_SolarOrb",
+    "ShortDescription": "Tuyệt kỹ hội tụ lõi sao khổng lồ giáng xuống mục tiêu.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.acc_1",
+    "CastSFX": "None",
+    "DisplayName": "Trang Sức 1",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotAcc1",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.acc_1",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô nhẫn/bùa hộ mệnh.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.acc_2",
+    "CastSFX": "None",
+    "DisplayName": "Trang Sức 2",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotAcc2",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.acc_2",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô thị kính/cảm biến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.body",
+    "CastSFX": "None",
+    "DisplayName": "Thân",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotBody",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.body",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô trang bị giáp ngực.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.feet",
+    "CastSFX": "None",
+    "DisplayName": "Giày",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotFeet",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.feet",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô trang bị ủng chiến.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.hands",
+    "CastSFX": "None",
+    "DisplayName": "Tay",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotHands",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.hands",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô trang bị găng tay.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.head",
+    "CastSFX": "None",
+    "DisplayName": "Đầu",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotHead",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.head",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô trang bị mũ/thị kính.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.legs",
+    "CastSFX": "None",
+    "DisplayName": "Chân",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotLegs",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.legs",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô trang bị quần giáp.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "slot.special",
+    "CastSFX": "None",
+    "DisplayName": "Đặc Biệt",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Slots/T_Orig_SlotSpecial",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "slot.special",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Ô hạch tâm cộng hưởng.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "subzone.crimson_gorge",
+    "CastSFX": "None",
+    "DisplayName": "Hẻm Núi Huyết Thạch",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_CrimsonGorge",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "subzone.crimson_gorge",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Khu vực tinh anh cấp 14-16.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "subzone.highland_outpost",
+    "CastSFX": "None",
+    "DisplayName": "Tiền Đồn Cao Nguyên",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_Outpost",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "subzone.highland_outpost",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Khu vực an toàn có sư phụ và hình nhân luyện tập.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "subzone.raider_camp",
+    "CastSFX": "None",
+    "DisplayName": "Trại Tiên Phong Viễn Chinh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_RaiderCamp",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "subzone.raider_camp",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Khu vực đóng quân cấp 8-12.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "subzone.titan_summit_arena",
+    "CastSFX": "None",
+    "DisplayName": "Đỉnh Đài Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_TitanArena",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "subzone.titan_summit_arena",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Đấu trường thủ lĩnh cấp 18-20.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "subzone.wolf_plateau",
+    "CastSFX": "None",
+    "DisplayName": "Bình Nguyên Lang Nha",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_Plateau",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "subzone.wolf_plateau",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Khu vực săn thú cấp 5-8.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.aura_charge",
+    "CastSFX": "None",
+    "DisplayName": "Tụ Quang",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_AstralFocus",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.aura_charge",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Hồi phục nội năng bằng cách ngưng tụ hào quang.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.healing_herb",
+    "CastSFX": "None",
+    "DisplayName": "Linh Dược Thanh Thảo",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_VerdantHerb",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.healing_herb",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Dược thảo hồi phục sinh lực tức thời.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.project_title",
+    "CastSFX": "None",
+    "DisplayName": "Vũ Trụ Vô Hạn (Infinite Universe)",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_Logo",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.project_title",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tựa game hành động trực tuyến thế giới mở.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.scanner_device",
+    "CastSFX": "None",
+    "DisplayName": "Thị Kính Cộng Hưởng",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_ResonanceVisorIcon",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.scanner_device",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thiết bị phân tích chiến lực mục tiêu.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.storage_pod",
+    "CastSFX": "None",
+    "DisplayName": "Hộp Không Gian",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_SpatialVault",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.storage_pod",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Thiết bị lưu trữ vật phẩm thu nhỏ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "term.vanish_mechanic",
+    "CastSFX": "None",
+    "DisplayName": "Ảo Ảnh Bộ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_PhantomStep",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "term.vanish_mechanic",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Kỹ thuật né tránh dịch chuyển tức thời.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "title.titan_slayer_01",
+    "CastSFX": "None",
+    "DisplayName": "Kẻ Chinh Phục Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/UI/T_Orig_TitleTitan",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "title.titan_slayer_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Danh hiệu đánh bại Cự Thần Đá Đỏ.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "token.boss_highland_titan",
+    "CastSFX": "None",
+    "DisplayName": "Ấn Chứng Cự Thần",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Items/T_Orig_TitanCrest",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "token.boss_highland_titan",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tín vật đổi trang bị bảo đảm tại thương nhân.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "trait.mystic_regeneration",
+    "CastSFX": "None",
+    "DisplayName": "Sinh Mệnh Tái Sinh",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Traits/T_Orig_VerdantRenewal",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "trait.mystic_regeneration",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tự hồi phục sinh lực và dựng lá chắn khi nguy cấp.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "trait.terran_harmony",
+    "CastSFX": "None",
+    "DisplayName": "Hòa Hợp Nguyên Lực",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Traits/T_Orig_AetherHarmony",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "trait.terran_harmony",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Giảm tiêu hao năng lượng và hồi chiêu khi nội năng dồi dào.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "trait.zenith_unyielding",
+    "CastSFX": "None",
+    "DisplayName": "Bất Khuất Thiên Vũ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/Traits/T_Orig_Starfire",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "",
+    "Name": "trait.zenith_unyielding",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Tăng sát thương và hồi năng lượng khi sinh lực thấp.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 1,
+      "G": 1,
+      "R": 1
+    }
+  },
+  {
+    "CanonicalId": "zone.p01_highland_01",
+    "CastSFX": "None",
+    "DisplayName": "Cao Nguyên Đá Đỏ",
+    "IconTexture": "/Game/PresentationPacks/Original_Commercial/Icons/World/T_Orig_CrimsonMesa",
+    "ImpactSFX": "None",
+    "ImpactVFX": "None",
+    "LoreFlavorText": "Vùng núi đá đỏ khắc nghiệt nơi tàn tích cổ đại thức giấc.",
+    "Name": "zone.p01_highland_01",
+    "PrimaryMontage": "None",
+    "PrimarySkeletalMesh": "None",
+    "PrimaryVFX": "None",
+    "ShortDescription": "Khu vực khám phá cấp 5-20 trên hành tinh Terra.",
+    "ThemeTintColor": {
+      "A": 1,
+      "B": 0.2,
+      "G": 0.3,
+      "R": 0.85
+    }
+  }
+]

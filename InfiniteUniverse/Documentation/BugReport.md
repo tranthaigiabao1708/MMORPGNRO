@@ -1,7 +1,7 @@
-# Bug Report & Defect Resolution Log (`InfiniteUniverse` — Step 1 & Step 2)
+# Bug Report & Defect Resolution Log (`InfiniteUniverse` — Step 1, Step 2 & Step 3)
 
-**Baseline Engine:** Unreal Engine `5.8.4` (`Win64 Development` + `NM_DedicatedServer`)  
-**Last Verified:** `2026-11-19`
+**Baseline Engine & Stack:** Unreal Engine `5.8.4` (`Win64 Development` + `NM_DedicatedServer`) + Go `1.27.3` + PostgreSQL `18`  
+**Last Verified:** `2026-11-20`
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Severity | Discovered | Resolved & Regression-Tested | Open / Blocking |
 | :--- | :---: | :---: | :---: |
-| **Critical / Gameplay or Net-Blocking (`S1`)** | 7 | 7 | **0** |
-| **Major (`S2`)** | 7 | 7 | **0** |
-| **Minor / UI / Tooling (`S3`)** | 3 | 3 | **0** |
+| **Critical / Gameplay, Net or Persistence-Blocking (`S1`)** | 10 | 10 | **0** |
+| **Major (`S2`)** | 8 | 8 | **0** |
+| **Minor / UI / Tooling (`S3`)** | 4 | 4 | **0** |
 
 ---
 
@@ -33,7 +33,7 @@
 
 ---
 
-## 3. Step 2 Multiplayer Resolved Defects Ledger (`BUG-12` → `BUG-15`)
+## 3. Step 2 Multiplayer Resolved Defects Ledger (`BUG-12` → `BUG-15`, `SEC-01` → `SEC-02`)
 
 | Bug ID | Severity | Subsystem | Root Cause | Resolution Implemented | Verification Proof |
 | :---: | :---: | :--- | :--- | :--- | :--- |
@@ -46,9 +46,21 @@
 
 ---
 
-## 4. Open Defects
+## 4. Step 3 Backend Persistence & Progression Resolved Defects Ledger (`BUG-16` → `BUG-19`)
+
+| Bug ID | Severity | Subsystem | Root Cause | Resolution Implemented | Verification Proof |
+| :---: | :---: | :--- | :--- | :--- | :--- |
+| `BUG-16` | `S1` | `backend/internal/modules/character` (`GrantEXPFenced`) | Two concurrent goroutines submitting the identical `idempotency_key` in the same microsecond could both pass a simple map check before the first PostgreSQL transaction committed, granting duplicate EXP. | Implemented per-key in-flight channel serialization (`inFlightKill map[string]chan struct{}`) so concurrent duplicate `idempotency_key` submissions block on the first in-flight commit and return the cached idempotent result with zero duplicate DB mutations. | `TestStep3PersistenceAcrossRestartAndConcurrent50Goroutines` (`go test -race PASS`) |
+| `BUG-17` | `S1` | `Core/IU_GameMode` (`PreLogin`) | Calling `Super::PreLogin` on a manually spawned test `AIU_GameMode` (where `World->GetAuthGameMode()` was not set) triggered `check(GameMode)` inside `AGameSession::ApproveLogin`. | Executed the zero-allocation `?Ticket=` security gate *ahead* of `Super::PreLogin` and guarded `Super::PreLogin` with `GameSession && GetWorld()->GetAuthGameMode() == this`. | `PreLoginTicketGateAndAuthWidget` (`34/34 UE5 Tests PASS`) |
+| `BUG-18` | `S2` | `Core/IU_AutoDemoSubsystem` (Client Logout Sequencing) | Closing `ND->ServerConnection` `0.45s` ahead of `RequestExit` caused UE `5.8` `HandleDisconnect` to tear down the `NM_Client` world and browse to `/Game/Maps/...?closed` before `RequestExit` fired. | Moved `ServerConnection->Close()` + `FlushNet(true)` into the exact `TargetDurationSeconds` exit block immediately preceding `WritePerformanceReportCSV()` and `RequestExit(false)`. | `LaunchStep3FullStackTest.ps1` (`PASS`) |
+| `BUG-19` | `S3` | `UI/IU_HUDManager` (`960×540` HUD + EXP Bar) | Adding the new `LV. X | EXP` bar increased `VitalsBox` height, causing `BannerTopY = 148` on `960×540` split windows to touch `[GROUND | EARTH DASH]` and reach the `F3` panel edge; unfocused windows also throttled FPS. | Shifted `< 1200px` `BannerTopY` to `194px` (`BannerW <= 480px`) and disabled `t.IdleWhenNotForeground` / `t.UnfocusedFrameRateLimit` during automated multi-window runs. | Step 3 Live D3D12 Frame Inspection (`PASS`) |
+| `BUG-20` | `S1` | `Core/IU_GameMode` & `AIU_PlayerCharacter` (`Logout` Position Save) | During UDP `UNetConnection::Close()`, `APlayerController::Destroyed()` unpossesses `Pawn` *before* invoking `AGameModeBase::Logout(Exiting)`, so `Exiting->GetPawn()` was already `nullptr` and `ReleaseCharacterLease` omitted `final_save` (`LOGOUT` coordinates). | Cached live `(Position, Yaw, HP, Ki, bIsAlive)` onto `AIU_PlayerState::CachePawnWorldSnapshot()` inside `AIU_PlayerCharacter::UnPossessed()` / `EndPlay()`, and made `BuildCharacterSavePayload` read that cached snapshot whenever `Controller->GetPawn()` is `nullptr`. | SQL `character_save_snapshots` (`LOGOUT` row verified) & Phase 2 West Overlook Restoration (`PASS`) |
+
+---
+
+## 5. Open Defects & Deferred Scope Notes
 
 - **Critical (`S1`) / Major (`S2`):** **None (`0`)**.
-- **Minor Deferred Polish Notes (`S4` — Non-Blocking for Step 2):**
-  1. Direct `UAnimSequence` state playback via `UIU_SkeletalAnimDirectorComponent` will transition to full `UAnimMontage` root-motion/inertial blend-spaces when GAS ability montages are introduced in future steps.
-  2. Linux/Container standalone `InfiniteUniverseServer` binary compilation requires a Source-built UE `5.8` toolchain (`Source/InfiniteUniverseServer.Target.cs` is already authored and included in `Source/`).
+- **Deferred Architecture Notes (`Step 4+` by Design):**
+  1. `Inventory`, `Equipment`, `CSPRNG Personal/Boss Loot`, `Currency Ledger / Enhance`, `Party / Guild`, and `Multi-Zone Transfer` tables exist in `000001_init_core_schema.up.sql` and are intentionally locked for Step 4+ milestones.
+  2. When running without Docker/Redis (`IU_ALLOW_OPTIONAL_DEPS=true`), `world.Coordinator` enforces single-instance in-memory mutex lease tables backed by hard PostgreSQL `WHERE fencing_epoch = $2` SQL fencing; horizontal multi-gateway deployments enable Redis 7 Lua lease scripts (`IU_REDIS_ADDR=127.0.0.1:6379`) with zero code changes.

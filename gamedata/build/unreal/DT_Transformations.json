@@ -1,0 +1,33 @@
+[
+  {
+    "ActivationCastSec": 0.85,
+    "ActivationKnockbackRadiusCm": 400,
+    "BaseEnergyDrainPerSec": 8,
+    "BaseHpDrainRatioPerSec": 0,
+    "ExhaustionPenaltySec": 2,
+    "FormDamageMultiplier": 1.25,
+    "FormId": "form.zenith_awaken_01",
+    "MasteryPointCost": 5,
+    "MinEnergyToActivate": 100,
+    "Name": "form.zenith_awaken_01",
+    "PrerequisiteFormId": "None",
+    "RequiredRaceId": "race.zenith_warrior",
+    "StatBonuses": [
+      {
+        "AttrId": "attr.move_speed",
+        "Op": "ADD_PCT",
+        "Value": 0.15
+      },
+      {
+        "AttrId": "attr.crit_rate",
+        "Op": "ADD_FLAT",
+        "Value": 0.1
+      }
+    ],
+    "StateTag": {
+      "TagName": "State.Form.ZenithAwaken01"
+    },
+    "ToggleOffIcdSec": 3,
+    "UnlockLevel": 12
+  }
+]

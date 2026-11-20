@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/transformation_definition.schema.json",
+  "title": "TransformationDefinitions",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/TransformationDefinition"
+  },
+  "$defs": {
+    "StatModifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attr_id", "op", "value"],
+      "properties": {
+        "attr_id": {
+          "type": "string",
+          "pattern": "^(attr|pot)\\.[a-z0-9_]+$"
+        },
+        "op": {
+          "type": "string",
+          "enum": ["ADD_FLAT", "ADD_PCT", "MULT"]
+        },
+        "value": { "type": "number" }
+      }
+    },
+    "TransformationDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "form_id",
+        "state_tag",
+        "required_race_id",
+        "prerequisite_form_id",
+        "unlock_level",
+        "mastery_point_cost",
+        "min_energy_to_activate",
+        "activation_cast_sec",
+        "activation_knockback_radius_cm",
+        "toggle_off_icd_sec",
+        "exhaustion_penalty_sec",
+        "form_damage_multiplier",
+        "base_energy_drain_per_sec",
+        "base_hp_drain_ratio_per_sec",
+        "stat_bonuses"
+      ],
+      "properties": {
+        "form_id": {
+          "type": "string",
+          "pattern": "^form\\.[a-z0-9_]+$"
+        },
+        "state_tag": {
+          "type": "string",
+          "pattern": "^State\\.Form\\.[A-Za-z0-9]+$"
+        },
+        "required_race_id": {
+          "type": "string",
+          "pattern": "^race\\.[a-z0-9_]+$"
+        },
+        "prerequisite_form_id": {
+          "type": ["string", "null"],
+          "pattern": "^form\\.[a-z0-9_]+$"
+        },
+        "unlock_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "mastery_point_cost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_energy_to_activate": { "type": "number", "minimum": 0 },
+        "activation_cast_sec": { "type": "number", "minimum": 0 },
+        "activation_knockback_radius_cm": { "type": "number", "minimum": 0 },
+        "toggle_off_icd_sec": { "type": "number", "minimum": 0 },
+        "exhaustion_penalty_sec": { "type": "number", "minimum": 0 },
+        "form_damage_multiplier": { "type": "number", "minimum": 1.0, "maximum": 3.0 },
+        "base_energy_drain_per_sec": { "type": "number", "minimum": 0 },
+        "base_hp_drain_ratio_per_sec": { "type": "number", "minimum": 0, "maximum": 0.2 },
+        "stat_bonuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatModifier"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "set_id": "set.highland_vanguard",
+    "required_level": 15,
+    "piece_item_ids": [
+      "item.head_vanguard_visor_15",
+      "item.hands_vanguard_gauntlets_15",
+      "item.body_vanguard_cuirass_15",
+      "item.feet_vanguard_greaves_15"
+    ],
+    "bonuses": [
+      {
+        "required_pieces": 2,
+        "stat_modifiers": [
+          { "attr_id": "attr.phys_dmg_pct", "op": "ADD_FLAT", "value": 0.08 },
+          { "attr_id": "attr.ki_dmg_pct", "op": "ADD_FLAT", "value": 0.08 }
+        ],
+        "effect_id": null
+      },
+      {
+        "required_pieces": 4,
+        "stat_modifiers": [
+          { "attr_id": "attr.max_energy", "op": "ADD_PCT", "value": 0.12 }
+        ],
+        "effect_id": "effect.vanguard_momentum"
+      }
+    ]
+  }
+]

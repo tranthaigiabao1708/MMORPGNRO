@@ -1,0 +1,22 @@
+[
+  { "level": 1, "exp_to_next": 120, "cumulative_exp": 0, "mastery_reward": 0 },
+  { "level": 2, "exp_to_next": 180, "cumulative_exp": 120, "mastery_reward": 1 },
+  { "level": 3, "exp_to_next": 260, "cumulative_exp": 300, "mastery_reward": 1 },
+  { "level": 4, "exp_to_next": 360, "cumulative_exp": 560, "mastery_reward": 1 },
+  { "level": 5, "exp_to_next": 500, "cumulative_exp": 920, "mastery_reward": 2 },
+  { "level": 6, "exp_to_next": 680, "cumulative_exp": 1420, "mastery_reward": 1 },
+  { "level": 7, "exp_to_next": 900, "cumulative_exp": 2100, "mastery_reward": 1 },
+  { "level": 8, "exp_to_next": 1180, "cumulative_exp": 3000, "mastery_reward": 1 },
+  { "level": 9, "exp_to_next": 1520, "cumulative_exp": 4180, "mastery_reward": 1 },
+  { "level": 10, "exp_to_next": 1950, "cumulative_exp": 5700, "mastery_reward": 2 },
+  { "level": 11, "exp_to_next": 2450, "cumulative_exp": 7650, "mastery_reward": 1 },
+  { "level": 12, "exp_to_next": 3050, "cumulative_exp": 10100, "mastery_reward": 2 },
+  { "level": 13, "exp_to_next": 3750, "cumulative_exp": 13150, "mastery_reward": 1 },
+  { "level": 14, "exp_to_next": 4600, "cumulative_exp": 16900, "mastery_reward": 1 },
+  { "level": 15, "exp_to_next": 5600, "cumulative_exp": 21500, "mastery_reward": 3 },
+  { "level": 16, "exp_to_next": 6800, "cumulative_exp": 27100, "mastery_reward": 1 },
+  { "level": 17, "exp_to_next": 8200, "cumulative_exp": 33900, "mastery_reward": 1 },
+  { "level": 18, "exp_to_next": 9900, "cumulative_exp": 42100, "mastery_reward": 2 },
+  { "level": 19, "exp_to_next": 12000, "cumulative_exp": 52000, "mastery_reward": 1 },
+  { "level": 20, "exp_to_next": 0, "cumulative_exp": 64000, "mastery_reward": 3 }
+]

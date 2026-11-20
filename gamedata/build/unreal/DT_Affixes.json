@@ -1,0 +1,321 @@
+[
+  {
+    "AffixId": "affix.cdr",
+    "AllowedSlots": [
+      "slot.head",
+      "slot.feet",
+      "slot.acc_2",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_CDR",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.cdr",
+    "RollWeight": 65,
+    "TargetAttrId": "attr.cdr",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.035,
+        "MinItemLevel": 1,
+        "MinValue": 0.015,
+        "Step": 0.005,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.065,
+        "MinItemLevel": 11,
+        "MinValue": 0.03,
+        "Step": 0.005,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.crit_dmg",
+    "AllowedSlots": [
+      "slot.hands",
+      "slot.acc_1",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_CRIT_MULT",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.crit_dmg",
+    "RollWeight": 75,
+    "TargetAttrId": "attr.crit_dmg",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.09,
+        "MinItemLevel": 1,
+        "MinValue": 0.04,
+        "Step": 0.01,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.16,
+        "MinItemLevel": 11,
+        "MinValue": 0.08,
+        "Step": 0.01,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.crit_rate",
+    "AllowedSlots": [
+      "slot.hands",
+      "slot.acc_1",
+      "slot.acc_2",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_CRIT_CHANCE",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.crit_rate",
+    "RollWeight": 75,
+    "TargetAttrId": "attr.crit_rate",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.03,
+        "MinItemLevel": 1,
+        "MinValue": 0.015,
+        "Step": 0.005,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.05,
+        "MinItemLevel": 11,
+        "MinValue": 0.025,
+        "Step": 0.005,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.energy_regen",
+    "AllowedSlots": [
+      "slot.head",
+      "slot.body",
+      "slot.legs",
+      "slot.acc_2"
+    ],
+    "ExclusiveGroup": "GRP_EN_REGEN",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.energy_regen",
+    "RollWeight": 100,
+    "TargetAttrId": "attr.energy_regen",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 1,
+        "MinItemLevel": 1,
+        "MinValue": 0.4,
+        "Step": 0.2,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 2.2,
+        "MinItemLevel": 11,
+        "MinValue": 0.8,
+        "Step": 0.2,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.flat_ki_atk",
+    "AllowedSlots": [
+      "slot.head",
+      "slot.hands",
+      "slot.acc_1",
+      "slot.acc_2",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_FLAT_KATK",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.flat_ki_atk",
+    "RollWeight": 120,
+    "TargetAttrId": "attr.ki_atk",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 14,
+        "MinItemLevel": 1,
+        "MinValue": 5,
+        "Step": 1,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 28,
+        "MinItemLevel": 11,
+        "MinValue": 12,
+        "Step": 2,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.flat_max_hp",
+    "AllowedSlots": [
+      "slot.head",
+      "slot.body",
+      "slot.legs",
+      "slot.feet",
+      "slot.acc_2"
+    ],
+    "ExclusiveGroup": "GRP_HP",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.flat_max_hp",
+    "RollWeight": 150,
+    "TargetAttrId": "attr.max_hp",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 110,
+        "MinItemLevel": 1,
+        "MinValue": 40,
+        "Step": 10,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 240,
+        "MinItemLevel": 11,
+        "MinValue": 100,
+        "Step": 10,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.flat_phys_atk",
+    "AllowedSlots": [
+      "slot.hands",
+      "slot.acc_1",
+      "slot.acc_2",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_FLAT_PATK",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.flat_phys_atk",
+    "RollWeight": 120,
+    "TargetAttrId": "attr.phys_atk",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 14,
+        "MinItemLevel": 1,
+        "MinValue": 5,
+        "Step": 1,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 28,
+        "MinItemLevel": 11,
+        "MinValue": 12,
+        "Step": 2,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.form_efficiency",
+    "AllowedSlots": [
+      "slot.body",
+      "slot.legs",
+      "slot.feet",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_FORM_EFF",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.form_efficiency",
+    "RollWeight": 60,
+    "TargetAttrId": "pot.form_efficiency",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.05,
+        "MinItemLevel": 1,
+        "MinValue": 0.02,
+        "Step": 0.005,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.09,
+        "MinItemLevel": 11,
+        "MinValue": 0.045,
+        "Step": 0.005,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.ki_dmg_pct",
+    "AllowedSlots": [
+      "slot.head",
+      "slot.acc_1",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_DMG_PCT",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.ki_dmg_pct",
+    "RollWeight": 85,
+    "TargetAttrId": "attr.ki_dmg_pct",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.045,
+        "MinItemLevel": 1,
+        "MinValue": 0.02,
+        "Step": 0.005,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.08,
+        "MinItemLevel": 11,
+        "MinValue": 0.04,
+        "Step": 0.005,
+        "Tier": 2
+      }
+    ]
+  },
+  {
+    "AffixId": "affix.phys_dmg_pct",
+    "AllowedSlots": [
+      "slot.hands",
+      "slot.acc_1",
+      "slot.special"
+    ],
+    "ExclusiveGroup": "GRP_DMG_PCT",
+    "ModOp": "ADD_FLAT",
+    "Name": "affix.phys_dmg_pct",
+    "RollWeight": 85,
+    "TargetAttrId": "attr.phys_dmg_pct",
+    "Tiers": [
+      {
+        "MaxItemLevel": 10,
+        "MaxValue": 0.045,
+        "MinItemLevel": 1,
+        "MinValue": 0.02,
+        "Step": 0.005,
+        "Tier": 1
+      },
+      {
+        "MaxItemLevel": 20,
+        "MaxValue": 0.08,
+        "MinItemLevel": 11,
+        "MinValue": 0.04,
+        "Step": 0.005,
+        "Tier": 2
+      }
+    ]
+  }
+]

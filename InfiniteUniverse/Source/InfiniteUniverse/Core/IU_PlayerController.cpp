@@ -3,7 +3,10 @@
 #include "Core/IU_PlayerController.h"
 #include "Core/IU_GameState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
+#include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_HUDManager.h"
+#include "UI/IU_LoginCharacterWidget.h"
+#include "Engine/GameInstance.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/LocalPlayer.h"
 #include "EnhancedInputComponent.h"
@@ -163,6 +166,19 @@ void AIU_PlayerController::BeginPlay()
 				InputSubsystem->AddMappingContext(DefaultMappingContext, 0);
 			}
 		}
+
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UIU_BackendSubsystem* Backend = GI->GetSubsystem<UIU_BackendSubsystem>())
+			{
+				Backend->TryTriggerCommandLineAutoAuth(this);
+			}
+		}
+
+		if (FParse::Param(FCommandLine::Get(), TEXT("ShowLoginUI")) && GetNetMode() != NM_Client)
+		{
+			HandleToggleAuthPanel();
+		}
 	}
 }
 
@@ -304,6 +320,7 @@ void AIU_PlayerController::SetupInputComponent()
 	{
 		InputComponent->BindKey(EKeys::F3, IE_Pressed, this, &AIU_PlayerController::HandleToggleDebugHUD);
 		InputComponent->BindKey(EKeys::F4, IE_Pressed, this, &AIU_PlayerController::HandleToggleGlobalPvP);
+		InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &AIU_PlayerController::HandleToggleAuthPanel);
 	}
 }
 
@@ -468,6 +485,42 @@ void AIU_PlayerController::HandleToggleDebugHUD()
 void AIU_PlayerController::HandleToggleGlobalPvP()
 {
 	Server_ToggleGlobalPvPSparring();
+}
+
+void AIU_PlayerController::HandleToggleAuthPanel()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (!ActiveAuthWidget)
+	{
+		ActiveAuthWidget = CreateWidget<UIU_LoginCharacterWidget>(this, UIU_LoginCharacterWidget::StaticClass());
+		if (ActiveAuthWidget)
+		{
+			ActiveAuthWidget->AddToViewport(10);
+			ActiveAuthWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	if (!ActiveAuthWidget)
+	{
+		return;
+	}
+
+	const bool bOpening = (ActiveAuthWidget->GetVisibility() != ESlateVisibility::Visible);
+	ActiveAuthWidget->SetVisibility(bOpening ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	bShowMouseCursor = bOpening;
+	if (bOpening)
+	{
+		FInputModeGameAndUI UIInput;
+		UIInput.SetWidgetToFocus(ActiveAuthWidget->TakeWidget());
+		SetInputMode(UIInput);
+	}
+	else
+	{
+		FInputModeGameOnly GameInput;
+		SetInputMode(GameInput);
+	}
 }
 
 void AIU_PlayerController::Server_ToggleGlobalPvPSparring_Implementation()

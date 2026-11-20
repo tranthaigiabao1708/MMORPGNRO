@@ -1,0 +1,11 @@
+{
+  "pack_id": "Pack_Original_Commercial",
+  "pack_name": "Infinite Universe Original Commercial Theme Pack",
+  "pack_version": "0.2.0-vs",
+  "ip_mode": "COMMERCIAL_ORIGINAL",
+  "is_commercial_safe": true,
+  "supported_locales": ["vi", "en"],
+  "asset_root_path": "/Game/PresentationPacks/Original_Commercial",
+  "default_theme_tint_hex": "#3399FF",
+  "description": "Original IP presentation pack cleared for commercial release across all regions."
+}

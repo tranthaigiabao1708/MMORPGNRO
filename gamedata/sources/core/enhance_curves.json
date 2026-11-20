@@ -1,0 +1,122 @@
+[
+  {
+    "target_level": 1,
+    "cumulative_stat_bonus_pct": 0.05,
+    "success_rate_bp": 10000,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 100,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 1,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 2,
+    "cumulative_stat_bonus_pct": 0.1,
+    "success_rate_bp": 10000,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 150,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 1,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 3,
+    "cumulative_stat_bonus_pct": 0.16,
+    "success_rate_bp": 10000,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 220,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 2,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 4,
+    "cumulative_stat_bonus_pct": 0.22,
+    "success_rate_bp": 8500,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 320,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 2,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 5,
+    "cumulative_stat_bonus_pct": 0.3,
+    "success_rate_bp": 7500,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 450,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 3,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 6,
+    "cumulative_stat_bonus_pct": 0.39,
+    "success_rate_bp": 6000,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 650,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 4,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 0
+  },
+  {
+    "target_level": 7,
+    "cumulative_stat_bonus_pct": 0.49,
+    "success_rate_bp": 5000,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 900,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 5,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 7
+  },
+  {
+    "target_level": 8,
+    "cumulative_stat_bonus_pct": 0.6,
+    "success_rate_bp": 3800,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 1250,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 7,
+    "downgrade_on_fail": 1,
+    "downgrade_floor_level": 7
+  },
+  {
+    "target_level": 9,
+    "cumulative_stat_bonus_pct": 0.73,
+    "success_rate_bp": 2800,
+    "bonus_bp_per_pity": 0,
+    "hard_pity_threshold": 0,
+    "standard_coin_cost": 1700,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 9,
+    "downgrade_on_fail": 1,
+    "downgrade_floor_level": 7
+  },
+  {
+    "target_level": 10,
+    "cumulative_stat_bonus_pct": 0.88,
+    "success_rate_bp": 2000,
+    "bonus_bp_per_pity": 500,
+    "hard_pity_threshold": 5,
+    "standard_coin_cost": 2400,
+    "material_item_id": "item.mat_crimson_ore_t1",
+    "material_count": 12,
+    "downgrade_on_fail": 0,
+    "downgrade_floor_level": 7
+  }
+]

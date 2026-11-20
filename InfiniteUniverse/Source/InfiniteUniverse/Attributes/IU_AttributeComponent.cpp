@@ -146,6 +146,35 @@ void UIU_AttributeComponent::ResetAttributesToFull()
 	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
 }
 
+void UIU_AttributeComponent::ApplyPersistedVitals(
+	float InMaxHP,
+	float InCurrentHP,
+	float InMaxKi,
+	float InCurrentKi,
+	float InAttackMultiplier)
+{
+	if (GetOwner() && !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+	if (!FMath::IsFinite(InMaxHP) || !FMath::IsFinite(InCurrentHP) ||
+		!FMath::IsFinite(InMaxKi) || !FMath::IsFinite(InCurrentKi) || !FMath::IsFinite(InAttackMultiplier))
+	{
+		return;
+	}
+
+	MaxHP = FMath::Clamp(InMaxHP, 1.0f, 100000.0f);
+	MaxKi = FMath::Clamp(InMaxKi, 0.0f, 10000.0f);
+	CurrentHP = FMath::Clamp(InCurrentHP, 1.0f, MaxHP);
+	CurrentKi = FMath::Clamp(InCurrentKi, 0.0f, MaxKi);
+	AttackPowerMultiplier = FMath::Clamp(InAttackMultiplier, 0.1f, 100.0f);
+	bIsDead = false;
+
+	UpdateKiRegenTimerState();
+	OnHPChanged.Broadcast(CurrentHP, MaxHP, 0.0f);
+	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
+}
+
 void UIU_AttributeComponent::UpdateKiRegenTimerState()
 {
 	if (GetOwner() && !GetOwner()->HasAuthority())
@@ -196,6 +225,16 @@ void UIU_AttributeComponent::SetAttackPowerMultiplier(float NewMultiplier)
 		return;
 	}
 	AttackPowerMultiplier = FMath::Clamp(NewMultiplier, 0.1f, 100.0f);
+}
+
+void UIU_AttributeComponent::OnRep_MaxHP(float OldMaxHP)
+{
+	OnHPChanged.Broadcast(CurrentHP, MaxHP, 0.0f);
+}
+
+void UIU_AttributeComponent::OnRep_MaxKi(float OldMaxKi)
+{
+	OnKiChanged.Broadcast(CurrentKi, MaxKi, 0.0f);
 }
 
 void UIU_AttributeComponent::OnRep_CurrentHP(float OldHP)

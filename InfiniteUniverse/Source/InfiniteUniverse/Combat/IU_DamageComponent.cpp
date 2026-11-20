@@ -6,10 +6,13 @@
 #include "Characters/Enemy/IU_EnemyCharacter.h"
 #include "Core/IU_GameState.h"
 #include "Core/IU_PlayerState.h"
+#include "Network/IU_BackendSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "InfiniteUniverse.h"
 
 UIU_DamageComponent::UIU_DamageComponent()
 {
@@ -145,6 +148,78 @@ bool UIU_DamageComponent::ApplyDamageSpec(const FIU_DamageSpec& Spec)
 				else if (Owner->IsA<AIU_EnemyCharacter>())
 				{
 					KillerPS->AddEnemyKill();
+
+					// Step 3 Authoritative Progression: award 55 EXP via fenced Go Backend when player holds an active DB lease!
+					if (KillerPS->HasValidBackendLease())
+					{
+						if (UWorld* World = GetWorld())
+						{
+							if (UGameInstance* GI = World->GetGameInstance())
+							{
+								if (UIU_BackendSubsystem* Backend = GI->GetSubsystem<UIU_BackendSubsystem>())
+								{
+									const FString IdemKey = FString::Printf(
+										TEXT("kill_%s_ep%lld_t%.3f"),
+										*Owner->GetName(),
+										KillerPS->GetActiveFencingEpoch(),
+										World->GetTimeSeconds());
+
+									TWeakObjectPtr<APawn> WeakKillerPawn(KillerPawn);
+									TWeakObjectPtr<AIU_PlayerState> WeakKillerPS(KillerPS);
+
+									Backend->GrantCharacterEXP(
+										KillerPS->GetPersistedCharacterUUID(),
+										KillerPS->GetActiveFencingEpoch(),
+										55,
+										IdemKey,
+										[WeakKillerPawn, WeakKillerPS](bool bSuccess, const FIU_BackendCharacterSummary& Updated, const FString& ErrMsg)
+										{
+											if (!bSuccess)
+											{
+												UE_LOG(LogInfiniteUniverse, Warning, TEXT("[Progression] GrantCharacterEXP failed: %s"), *ErrMsg);
+												return;
+											}
+
+											if (AIU_PlayerState* KPS = WeakKillerPS.Get())
+											{
+												KPS->ApplyAuthoritativeEXPUpdate(
+													Updated.Level,
+													Updated.CurrentExp,
+													Updated.NextLevelExp,
+													Updated.EnemyKills,
+													Updated.bLeveledUp);
+											}
+
+											if (APawn* KPawn = WeakKillerPawn.Get())
+											{
+												if (UIU_AttributeComponent* KAttr = KPawn->FindComponentByClass<UIU_AttributeComponent>())
+												{
+													const float TargetHP = Updated.bLeveledUp ? Updated.MaxHP : KAttr->GetHP();
+													const float TargetKi = Updated.bLeveledUp ? Updated.MaxEnergy : KAttr->GetKi();
+													KAttr->ApplyPersistedVitals(
+														Updated.MaxHP,
+														TargetHP,
+														Updated.MaxEnergy,
+														TargetKi,
+														Updated.AttackPowerMultiplier);
+												}
+											}
+
+											UE_LOG(LogInfiniteUniverse, Log,
+												TEXT("[Progression] Character '%s' gained +%lld EXP -> Lv.%d (%lld/%lld EXP, MaxHP=%.0f, AtkMul=x%.2f, LeveledUp=%d)"),
+												*Updated.CharacterName,
+												Updated.ExpGranted,
+												Updated.Level,
+												Updated.CurrentExp,
+												Updated.NextLevelExp,
+												Updated.MaxHP,
+												Updated.AttackPowerMultiplier,
+												Updated.bLeveledUp ? 1 : 0);
+										});
+								}
+							}
+						}
+					}
 				}
 			}
 		}

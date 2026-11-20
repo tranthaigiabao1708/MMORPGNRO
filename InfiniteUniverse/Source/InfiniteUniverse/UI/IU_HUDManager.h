@@ -11,6 +11,7 @@ class UIU_PlayerHUDWidget;
 class UIU_DamageComponent;
 class UIU_CombatComponent;
 class UIU_AttributeComponent;
+class AIU_PlayerState;
 
 struct FIU_FloatingCombatText
 {
@@ -77,10 +78,14 @@ private:
 	UFUNCTION()
 	void HandlePlayerCombatStateChanged(EIU_CombatState PreviousState, EIU_CombatState NewState);
 
+	UFUNCTION()
+	void HandleLocalCharacterLevelUp(int32 OldLevel, int32 NewLevel);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UIU_PlayerHUDWidget> ActiveHUDWidget;
 
 	TWeakObjectPtr<APawn> BoundHUDWidgetPawn;
+	TWeakObjectPtr<AIU_PlayerState> ObservedLocalPlayerState;
 	TSet<TWeakObjectPtr<UIU_DamageComponent>> ObservedDamageComponents;
 	TSet<TWeakObjectPtr<UIU_AttributeComponent>> ObservedAttributeComponents;
 	TWeakObjectPtr<UIU_CombatComponent> ObservedPlayerCombat;

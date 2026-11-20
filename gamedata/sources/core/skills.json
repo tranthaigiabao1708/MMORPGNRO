@@ -1,0 +1,338 @@
+[
+  {
+    "skill_id": "skill.melee_basic_combo",
+    "ability_tag": "Ability.Melee.BasicCombo",
+    "category": "MELEE_COMBO",
+    "allowed_races": ["ALL"],
+    "unlock_level": 1,
+    "mastery_point_cost": 0,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 0,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 6
+    },
+    "timing": {
+      "cooldown_sec": 0.0,
+      "cast_time_sec": 0.12,
+      "active_duration_sec": 2.35,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.18,
+      "cancel_window_end_sec": 0.42,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": false
+    },
+    "targeting_and_hitbox": {
+      "shape": "DASH_SWEEP",
+      "max_range_cm": 280,
+      "radius_cm": 120,
+      "projectile_speed_cms": 2600
+    },
+    "damage_profile": {
+      "alpha_phys": 1.0,
+      "alpha_ki": 0.0,
+      "skill_mult": 5.8,
+      "charged_skill_mult_max": 5.8,
+      "hit_count": 6,
+      "poise_damage_total": 65,
+      "hit_reaction": "AIR_LAUNCH",
+      "damage_taken_multiplier_while_active": 1.0
+    }
+  },
+  {
+    "skill_id": "skill.def_vanish_step",
+    "ability_tag": "Ability.Defense.VanishStep",
+    "category": "DEFENSE_EVADE",
+    "allowed_races": ["ALL"],
+    "unlock_level": 1,
+    "mastery_point_cost": 0,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": true,
+    "resource_cost": {
+      "energy_cost": 0,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 35,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 2.0,
+      "cast_time_sec": 0.08,
+      "active_duration_sec": 0.35,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.2,
+      "cancel_window_end_sec": 0.35,
+      "iframe_duration_sec": 0.28,
+      "grants_super_armor": false
+    },
+    "targeting_and_hitbox": {
+      "shape": "SELF",
+      "max_range_cm": 1800,
+      "radius_cm": 220,
+      "projectile_speed_cms": 0
+    },
+    "damage_profile": {
+      "alpha_phys": 0.0,
+      "alpha_ki": 0.0,
+      "skill_mult": 0.0,
+      "charged_skill_mult_max": 0.0,
+      "hit_count": 0,
+      "poise_damage_total": 0,
+      "hit_reaction": "NONE",
+      "damage_taken_multiplier_while_active": 0.0
+    }
+  },
+  {
+    "skill_id": "skill.ki_volley_01",
+    "ability_tag": "Ability.Ki.Volley01",
+    "category": "KI_PROJECTILE",
+    "allowed_races": ["ALL"],
+    "unlock_level": 1,
+    "mastery_point_cost": 0,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 35,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 5.0,
+      "cast_time_sec": 0.2,
+      "active_duration_sec": 0.9,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.0,
+      "cancel_window_end_sec": 0.9,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": false
+    },
+    "targeting_and_hitbox": {
+      "shape": "HOMING_PROJECTILE",
+      "max_range_cm": 2500,
+      "radius_cm": 45,
+      "projectile_speed_cms": 3200
+    },
+    "damage_profile": {
+      "alpha_phys": 0.0,
+      "alpha_ki": 1.0,
+      "skill_mult": 2.52,
+      "charged_skill_mult_max": 2.52,
+      "hit_count": 6,
+      "poise_damage_total": 30,
+      "hit_reaction": "LIGHT_FLINCH",
+      "damage_taken_multiplier_while_active": 1.0
+    }
+  },
+  {
+    "skill_id": "skill.beam_charged_01",
+    "ability_tag": "Ability.Ki.BeamCharged01",
+    "category": "KI_BEAM_CHARGED",
+    "allowed_races": ["ALL"],
+    "unlock_level": 3,
+    "mastery_point_cost": 1,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 65,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 10.0,
+      "cast_time_sec": 0.45,
+      "active_duration_sec": 0.75,
+      "max_charge_sec": 1.8,
+      "cancel_window_start_sec": 0.15,
+      "cancel_window_end_sec": 1.8,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": false
+    },
+    "targeting_and_hitbox": {
+      "shape": "CAPSULE_BEAM",
+      "max_range_cm": 3800,
+      "radius_cm": 140,
+      "projectile_speed_cms": 0
+    },
+    "damage_profile": {
+      "alpha_phys": 0.0,
+      "alpha_ki": 1.0,
+      "skill_mult": 2.4,
+      "charged_skill_mult_max": 4.2,
+      "hit_count": 5,
+      "poise_damage_total": 75,
+      "hit_reaction": "HEAVY_KNOCKBACK",
+      "damage_taken_multiplier_while_active": 1.0
+    }
+  },
+  {
+    "skill_id": "skill.rush_strike_01",
+    "ability_tag": "Ability.Melee.RushStrike01",
+    "category": "MELEE_RUSH",
+    "allowed_races": ["ALL"],
+    "unlock_level": 5,
+    "mastery_point_cost": 2,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 40,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 15,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 8.0,
+      "cast_time_sec": 0.18,
+      "active_duration_sec": 0.85,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.65,
+      "cancel_window_end_sec": 0.85,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": false
+    },
+    "targeting_and_hitbox": {
+      "shape": "DASH_SWEEP",
+      "max_range_cm": 2200,
+      "radius_cm": 110,
+      "projectile_speed_cms": 2600
+    },
+    "damage_profile": {
+      "alpha_phys": 1.0,
+      "alpha_ki": 0.2,
+      "skill_mult": 2.85,
+      "charged_skill_mult_max": 2.85,
+      "hit_count": 4,
+      "poise_damage_total": 45,
+      "hit_reaction": "AIR_LAUNCH",
+      "damage_taken_multiplier_while_active": 1.0
+    }
+  },
+  {
+    "skill_id": "skill.guard_shield_01",
+    "ability_tag": "Ability.Defense.EnergyShield01",
+    "category": "DEFENSE_SHIELD",
+    "allowed_races": ["ALL"],
+    "unlock_level": 8,
+    "mastery_point_cost": 2,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 20,
+      "energy_upkeep_per_sec": 12,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 12.0,
+      "cast_time_sec": 0.1,
+      "active_duration_sec": 3.5,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.25,
+      "cancel_window_end_sec": 3.5,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": true
+    },
+    "targeting_and_hitbox": {
+      "shape": "SELF",
+      "max_range_cm": 160,
+      "radius_cm": 160,
+      "projectile_speed_cms": 0
+    },
+    "damage_profile": {
+      "alpha_phys": 0.0,
+      "alpha_ki": 0.0,
+      "skill_mult": 0.0,
+      "charged_skill_mult_max": 0.0,
+      "hit_count": 0,
+      "poise_damage_total": 0,
+      "hit_reaction": "NONE",
+      "damage_taken_multiplier_while_active": 0.35
+    }
+  },
+  {
+    "skill_id": "skill.aoe_burst_01",
+    "ability_tag": "Ability.Ki.AoeBurst01",
+    "category": "KI_AOE_BURST",
+    "allowed_races": ["ALL"],
+    "unlock_level": 10,
+    "mastery_point_cost": 3,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 55,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 14.0,
+      "cast_time_sec": 0.3,
+      "active_duration_sec": 0.35,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 0.45,
+      "cancel_window_end_sec": 0.65,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": true
+    },
+    "targeting_and_hitbox": {
+      "shape": "SPHERE",
+      "max_range_cm": 650,
+      "radius_cm": 650,
+      "projectile_speed_cms": 0
+    },
+    "damage_profile": {
+      "alpha_phys": 0.2,
+      "alpha_ki": 1.0,
+      "skill_mult": 2.6,
+      "charged_skill_mult_max": 2.6,
+      "hit_count": 1,
+      "poise_damage_total": 50,
+      "hit_reaction": "RADIAL_KNOCKBACK",
+      "damage_taken_multiplier_while_active": 1.0
+    }
+  },
+  {
+    "skill_id": "skill.ult_supernova_01",
+    "ability_tag": "Ability.Ultimate.Supernova01",
+    "category": "ULTIMATE",
+    "allowed_races": ["ALL"],
+    "unlock_level": 15,
+    "mastery_point_cost": 5,
+    "can_cast_in_air": true,
+    "can_cast_while_hitstunned": false,
+    "resource_cost": {
+      "energy_cost": 140,
+      "energy_upkeep_per_sec": 0,
+      "stamina_cost": 0,
+      "energy_gain_on_hit": 0
+    },
+    "timing": {
+      "cooldown_sec": 45.0,
+      "cast_time_sec": 1.35,
+      "active_duration_sec": 1.5,
+      "max_charge_sec": 0.0,
+      "cancel_window_start_sec": 1.6,
+      "cancel_window_end_sec": 2.0,
+      "iframe_duration_sec": 0.0,
+      "grants_super_armor": true
+    },
+    "targeting_and_hitbox": {
+      "shape": "HOMING_PROJECTILE",
+      "max_range_cm": 3200,
+      "radius_cm": 900,
+      "projectile_speed_cms": 2000
+    },
+    "damage_profile": {
+      "alpha_phys": 0.0,
+      "alpha_ki": 1.0,
+      "skill_mult": 6.8,
+      "charged_skill_mult_max": 6.8,
+      "hit_count": 8,
+      "poise_damage_total": 120,
+      "hit_reaction": "MASSIVE_BLOWAWAY",
+      "damage_taken_multiplier_while_active": 0.6
+    }
+  }
+]

@@ -1,0 +1,378 @@
+[
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Ki.AoeBurst01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "KI_AOE_BURST",
+    "DamageProfile": {
+      "AlphaKi": 1,
+      "AlphaPhys": 0.2,
+      "ChargedSkillMultMax": 2.6,
+      "DamageTakenMultiplierWhileActive": 1,
+      "HitCount": 1,
+      "HitReaction": "RADIAL_KNOCKBACK",
+      "PoiseDamageTotal": 50,
+      "SkillMult": 2.6
+    },
+    "MasteryPointCost": 3,
+    "Name": "skill.aoe_burst_01",
+    "ResourceCost": {
+      "EnergyCost": 55,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.aoe_burst_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 650,
+      "ProjectileSpeedCms": 0,
+      "RadiusCm": 650,
+      "Shape": "SPHERE"
+    },
+    "Timing": {
+      "ActiveDurationSec": 0.35,
+      "CancelWindowEndSec": 0.65,
+      "CancelWindowStartSec": 0.45,
+      "CastTimeSec": 0.3,
+      "CooldownSec": 14,
+      "GrantsSuperArmor": true,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 10,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Ki.BeamCharged01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "KI_BEAM_CHARGED",
+    "DamageProfile": {
+      "AlphaKi": 1,
+      "AlphaPhys": 0,
+      "ChargedSkillMultMax": 4.2,
+      "DamageTakenMultiplierWhileActive": 1,
+      "HitCount": 5,
+      "HitReaction": "HEAVY_KNOCKBACK",
+      "PoiseDamageTotal": 75,
+      "SkillMult": 2.4
+    },
+    "MasteryPointCost": 1,
+    "Name": "skill.beam_charged_01",
+    "ResourceCost": {
+      "EnergyCost": 65,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.beam_charged_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 3800,
+      "ProjectileSpeedCms": 0,
+      "RadiusCm": 140,
+      "Shape": "CAPSULE_BEAM"
+    },
+    "Timing": {
+      "ActiveDurationSec": 0.75,
+      "CancelWindowEndSec": 1.8,
+      "CancelWindowStartSec": 0.15,
+      "CastTimeSec": 0.45,
+      "CooldownSec": 10,
+      "GrantsSuperArmor": false,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 1.8
+    },
+    "UnlockLevel": 3,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Defense.VanishStep"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "DEFENSE_EVADE",
+    "DamageProfile": {
+      "AlphaKi": 0,
+      "AlphaPhys": 0,
+      "ChargedSkillMultMax": 0,
+      "DamageTakenMultiplierWhileActive": 0,
+      "HitCount": 0,
+      "HitReaction": "NONE",
+      "PoiseDamageTotal": 0,
+      "SkillMult": 0
+    },
+    "MasteryPointCost": 0,
+    "Name": "skill.def_vanish_step",
+    "ResourceCost": {
+      "EnergyCost": 0,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 35
+    },
+    "SkillId": "skill.def_vanish_step",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 1800,
+      "ProjectileSpeedCms": 0,
+      "RadiusCm": 220,
+      "Shape": "SELF"
+    },
+    "Timing": {
+      "ActiveDurationSec": 0.35,
+      "CancelWindowEndSec": 0.35,
+      "CancelWindowStartSec": 0.2,
+      "CastTimeSec": 0.08,
+      "CooldownSec": 2,
+      "GrantsSuperArmor": false,
+      "IframeDurationSec": 0.28,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 1,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": true
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Defense.EnergyShield01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "DEFENSE_SHIELD",
+    "DamageProfile": {
+      "AlphaKi": 0,
+      "AlphaPhys": 0,
+      "ChargedSkillMultMax": 0,
+      "DamageTakenMultiplierWhileActive": 0.35,
+      "HitCount": 0,
+      "HitReaction": "NONE",
+      "PoiseDamageTotal": 0,
+      "SkillMult": 0
+    },
+    "MasteryPointCost": 2,
+    "Name": "skill.guard_shield_01",
+    "ResourceCost": {
+      "EnergyCost": 20,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 12,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.guard_shield_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 160,
+      "ProjectileSpeedCms": 0,
+      "RadiusCm": 160,
+      "Shape": "SELF"
+    },
+    "Timing": {
+      "ActiveDurationSec": 3.5,
+      "CancelWindowEndSec": 3.5,
+      "CancelWindowStartSec": 0.25,
+      "CastTimeSec": 0.1,
+      "CooldownSec": 12,
+      "GrantsSuperArmor": true,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 8,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Ki.Volley01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "KI_PROJECTILE",
+    "DamageProfile": {
+      "AlphaKi": 1,
+      "AlphaPhys": 0,
+      "ChargedSkillMultMax": 2.52,
+      "DamageTakenMultiplierWhileActive": 1,
+      "HitCount": 6,
+      "HitReaction": "LIGHT_FLINCH",
+      "PoiseDamageTotal": 30,
+      "SkillMult": 2.52
+    },
+    "MasteryPointCost": 0,
+    "Name": "skill.ki_volley_01",
+    "ResourceCost": {
+      "EnergyCost": 35,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.ki_volley_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 2500,
+      "ProjectileSpeedCms": 3200,
+      "RadiusCm": 45,
+      "Shape": "HOMING_PROJECTILE"
+    },
+    "Timing": {
+      "ActiveDurationSec": 0.9,
+      "CancelWindowEndSec": 0.9,
+      "CancelWindowStartSec": 0,
+      "CastTimeSec": 0.2,
+      "CooldownSec": 5,
+      "GrantsSuperArmor": false,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 1,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Melee.BasicCombo"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "MELEE_COMBO",
+    "DamageProfile": {
+      "AlphaKi": 0,
+      "AlphaPhys": 1,
+      "ChargedSkillMultMax": 5.8,
+      "DamageTakenMultiplierWhileActive": 1,
+      "HitCount": 6,
+      "HitReaction": "AIR_LAUNCH",
+      "PoiseDamageTotal": 65,
+      "SkillMult": 5.8
+    },
+    "MasteryPointCost": 0,
+    "Name": "skill.melee_basic_combo",
+    "ResourceCost": {
+      "EnergyCost": 0,
+      "EnergyGainOnHit": 6,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.melee_basic_combo",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 280,
+      "ProjectileSpeedCms": 2600,
+      "RadiusCm": 120,
+      "Shape": "DASH_SWEEP"
+    },
+    "Timing": {
+      "ActiveDurationSec": 2.35,
+      "CancelWindowEndSec": 0.42,
+      "CancelWindowStartSec": 0.18,
+      "CastTimeSec": 0.12,
+      "CooldownSec": 0,
+      "GrantsSuperArmor": false,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 1,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Melee.RushStrike01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "MELEE_RUSH",
+    "DamageProfile": {
+      "AlphaKi": 0.2,
+      "AlphaPhys": 1,
+      "ChargedSkillMultMax": 2.85,
+      "DamageTakenMultiplierWhileActive": 1,
+      "HitCount": 4,
+      "HitReaction": "AIR_LAUNCH",
+      "PoiseDamageTotal": 45,
+      "SkillMult": 2.85
+    },
+    "MasteryPointCost": 2,
+    "Name": "skill.rush_strike_01",
+    "ResourceCost": {
+      "EnergyCost": 40,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 15
+    },
+    "SkillId": "skill.rush_strike_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 2200,
+      "ProjectileSpeedCms": 2600,
+      "RadiusCm": 110,
+      "Shape": "DASH_SWEEP"
+    },
+    "Timing": {
+      "ActiveDurationSec": 0.85,
+      "CancelWindowEndSec": 0.85,
+      "CancelWindowStartSec": 0.65,
+      "CastTimeSec": 0.18,
+      "CooldownSec": 8,
+      "GrantsSuperArmor": false,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 5,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  },
+  {
+    "AbilityTag": {
+      "TagName": "Ability.Ultimate.Supernova01"
+    },
+    "AllowedRaces": [
+      "ALL"
+    ],
+    "Category": "ULTIMATE",
+    "DamageProfile": {
+      "AlphaKi": 1,
+      "AlphaPhys": 0,
+      "ChargedSkillMultMax": 6.8,
+      "DamageTakenMultiplierWhileActive": 0.6,
+      "HitCount": 8,
+      "HitReaction": "MASSIVE_BLOWAWAY",
+      "PoiseDamageTotal": 120,
+      "SkillMult": 6.8
+    },
+    "MasteryPointCost": 5,
+    "Name": "skill.ult_supernova_01",
+    "ResourceCost": {
+      "EnergyCost": 140,
+      "EnergyGainOnHit": 0,
+      "EnergyUpkeepPerSec": 0,
+      "StaminaCost": 0
+    },
+    "SkillId": "skill.ult_supernova_01",
+    "TargetingAndHitbox": {
+      "MaxRangeCm": 3200,
+      "ProjectileSpeedCms": 2000,
+      "RadiusCm": 900,
+      "Shape": "HOMING_PROJECTILE"
+    },
+    "Timing": {
+      "ActiveDurationSec": 1.5,
+      "CancelWindowEndSec": 2,
+      "CancelWindowStartSec": 1.6,
+      "CastTimeSec": 1.35,
+      "CooldownSec": 45,
+      "GrantsSuperArmor": true,
+      "IframeDurationSec": 0,
+      "MaxChargeSec": 0
+    },
+    "UnlockLevel": 15,
+    "bCanCastInAir": true,
+    "bCanCastWhileHitstunned": false
+  }
+]

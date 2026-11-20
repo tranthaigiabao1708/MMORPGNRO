@@ -10,6 +10,7 @@
 class UInputMappingContext;
 class UInputAction;
 class AIU_PlayerCharacter;
+class UIU_LoginCharacterWidget;
 
 /**
  * Enhanced Input PlayerController decoupling hardware key bindings from character movement execution.
@@ -145,4 +146,8 @@ private:
 	void HandleToggleMobilityStyle(const FInputActionValue& Value);
 	void HandleToggleDebugHUD();
 	void HandleToggleGlobalPvP();
+	void HandleToggleAuthPanel();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UIU_LoginCharacterWidget> ActiveAuthWidget;
 };

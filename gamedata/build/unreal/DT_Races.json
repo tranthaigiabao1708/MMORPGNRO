@@ -1,0 +1,184 @@
+[
+  {
+    "BaseStatsLv1": {
+      "CritDmg": 0.5,
+      "CritRate": 0.04,
+      "Defense": 34,
+      "EnergyRegen": 6.5,
+      "KiAtk": 43,
+      "MaxEnergy": 230,
+      "MaxHp": 780,
+      "MaxStamina": 100,
+      "PhysAtk": 42,
+      "StaminaRegen": 12
+    },
+    "GameplayTag": {
+      "TagName": "Character.Race.Mystic"
+    },
+    "GrowthPerLevel": {
+      "Defense": 7,
+      "KiAtk": 8,
+      "MaxEnergy": 14,
+      "MaxHp": 140,
+      "MaxStamina": 2,
+      "PhysAtk": 7.5
+    },
+    "InnatePassive": {
+      "DurationSec": 8,
+      "InternalCooldownSec": 60,
+      "Modifiers": [
+        {
+          "AttrId": "attr.max_hp",
+          "Op": "ADD_PCT",
+          "Value": 0.005
+        }
+      ],
+      "PassiveId": "trait.mystic_regeneration",
+      "TriggerHpRatio": 0.3
+    },
+    "Name": "race.mystic_elder",
+    "RaceId": "race.mystic_elder",
+    "ScopeStatus": "MVP_STUB_IN_VS",
+    "StarterSkillIds": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "TierBonusEvery5Levels": {
+      "Defense": 6,
+      "KiAtk": 5,
+      "MaxEnergy": 15,
+      "MaxHp": 110,
+      "MaxStamina": 5,
+      "PhysAtk": 5
+    },
+    "UnlockableFormIds": []
+  },
+  {
+    "BaseStatsLv1": {
+      "CritDmg": 0.5,
+      "CritRate": 0.05,
+      "Defense": 29,
+      "EnergyRegen": 8,
+      "KiAtk": 46,
+      "MaxEnergy": 250,
+      "MaxHp": 690,
+      "MaxStamina": 105,
+      "PhysAtk": 44,
+      "StaminaRegen": 12.5
+    },
+    "GameplayTag": {
+      "TagName": "Character.Race.Terran"
+    },
+    "GrowthPerLevel": {
+      "Defense": 5.5,
+      "KiAtk": 8.5,
+      "MaxEnergy": 16,
+      "MaxHp": 120,
+      "MaxStamina": 2,
+      "PhysAtk": 8
+    },
+    "InnatePassive": {
+      "DurationSec": 0,
+      "InternalCooldownSec": 0,
+      "Modifiers": [
+        {
+          "AttrId": "pot.energy_control",
+          "Op": "ADD_FLAT",
+          "Value": 0.1
+        },
+        {
+          "AttrId": "attr.cdr",
+          "Op": "ADD_FLAT",
+          "Value": 0.08
+        }
+      ],
+      "PassiveId": "trait.terran_harmony",
+      "TriggerHpRatio": 0
+    },
+    "Name": "race.terran_adept",
+    "RaceId": "race.terran_adept",
+    "ScopeStatus": "MVP_STUB_IN_VS",
+    "StarterSkillIds": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "TierBonusEvery5Levels": {
+      "Defense": 4,
+      "KiAtk": 6,
+      "MaxEnergy": 18,
+      "MaxHp": 85,
+      "MaxStamina": 5,
+      "PhysAtk": 5
+    },
+    "UnlockableFormIds": []
+  },
+  {
+    "BaseStatsLv1": {
+      "CritDmg": 0.5,
+      "CritRate": 0.06,
+      "Defense": 26,
+      "EnergyRegen": 6,
+      "KiAtk": 44,
+      "MaxEnergy": 220,
+      "MaxHp": 650,
+      "MaxStamina": 100,
+      "PhysAtk": 48,
+      "StaminaRegen": 12
+    },
+    "GameplayTag": {
+      "TagName": "Character.Race.Zenith"
+    },
+    "GrowthPerLevel": {
+      "Defense": 5,
+      "KiAtk": 8,
+      "MaxEnergy": 14,
+      "MaxHp": 115,
+      "MaxStamina": 2,
+      "PhysAtk": 9
+    },
+    "InnatePassive": {
+      "DurationSec": 12,
+      "InternalCooldownSec": 45,
+      "Modifiers": [
+        {
+          "AttrId": "attr.phys_dmg_pct",
+          "Op": "ADD_FLAT",
+          "Value": 0.12
+        },
+        {
+          "AttrId": "attr.ki_dmg_pct",
+          "Op": "ADD_FLAT",
+          "Value": 0.12
+        },
+        {
+          "AttrId": "attr.energy_regen",
+          "Op": "MULT",
+          "Value": 1.15
+        }
+      ],
+      "PassiveId": "trait.zenith_unyielding",
+      "TriggerHpRatio": 0.35
+    },
+    "Name": "race.zenith_warrior",
+    "RaceId": "race.zenith_warrior",
+    "ScopeStatus": "VERTICAL_SLICE_FULL",
+    "StarterSkillIds": [
+      "skill.melee_basic_combo",
+      "skill.def_vanish_step",
+      "skill.ki_volley_01"
+    ],
+    "TierBonusEvery5Levels": {
+      "Defense": 4,
+      "KiAtk": 6,
+      "MaxEnergy": 15,
+      "MaxHp": 80,
+      "MaxStamina": 5,
+      "PhysAtk": 6
+    },
+    "UnlockableFormIds": [
+      "form.zenith_awaken_01"
+    ]
+  }
+]

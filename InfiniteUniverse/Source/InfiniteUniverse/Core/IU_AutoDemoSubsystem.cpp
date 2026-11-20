@@ -3,6 +3,7 @@
 #include "Core/IU_AutoDemoSubsystem.h"
 #include "Core/IU_PlayerController.h"
 #include "Core/IU_GameState.h"
+#include "Core/IU_PlayerState.h"
 #include "Characters/Player/IU_PlayerCharacter.h"
 #include "Characters/Enemy/IU_EnemyCharacter.h"
 #include "AI/IU_EnemySpawner.h"
@@ -25,6 +26,7 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformMemory.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "UnrealClient.h"
 #include "InfiniteUniverse.h"
 
@@ -42,9 +44,22 @@ bool UIU_AutoDemoSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 
 	const TCHAR* Cmd = FCommandLine::Get();
 	int32 ParsedNetRole = 0;
+	int32 ParsedStep3Phase = 0;
+	FParse::Value(Cmd, TEXT("AutoNetDemo="), ParsedNetRole);
+	FParse::Value(Cmd, TEXT("AutoStep3Phase="), ParsedStep3Phase);
+
+	FString AutoAuthUser;
+	FParse::Value(Cmd, TEXT("AutoAuthUser="), AutoAuthUser);
+	// When client boots onto temporary local map while awaiting AutoAuth -> ClientTravel(?Ticket=...), wait for NM_Client world!
+	if (!AutoAuthUser.IsEmpty() && (ParsedNetRole > 0 || ParsedStep3Phase > 0) && World->GetNetMode() != NM_Client)
+	{
+		return false;
+	}
+
 	return FParse::Param(Cmd, TEXT("AutoDemoShowcase")) ||
 		FParse::Param(Cmd, TEXT("AutoServerTelemetry")) ||
-		(FParse::Value(Cmd, TEXT("AutoNetDemo="), ParsedNetRole) && ParsedNetRole > 0);
+		ParsedNetRole > 0 ||
+		ParsedStep3Phase > 0;
 }
 
 TStatId UIU_AutoDemoSubsystem::GetStatId() const
@@ -60,9 +75,20 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	bSinglePlayerMode = FParse::Param(Cmd, TEXT("AutoDemoShowcase"));
 	bServerTelemetryMode = FParse::Param(Cmd, TEXT("AutoServerTelemetry"));
 	FParse::Value(Cmd, TEXT("AutoNetDemo="), NetDemoClientRole);
+	FParse::Value(Cmd, TEXT("AutoStep3Phase="), Step3PersistencePhase);
+	if (Step3PersistencePhase > 0 && NetDemoClientRole == 0)
+	{
+		NetDemoClientRole = 1;
+	}
 
 	bRecordFrames = FParse::Param(Cmd, TEXT("RecordDemoFrames"));
-	if (NetDemoClientRole > 0)
+	if (Step3PersistencePhase > 0)
+	{
+		TargetDurationSeconds = (Step3PersistencePhase == 1) ? 19.5 : 8.5;
+		DemoFramesSubdir = FString::Printf(TEXT("Step3Frames_Phase%d_Client%d"), Step3PersistencePhase, NetDemoClientRole);
+		CSVOutputFilename = FString::Printf(TEXT("Step3_Phase%d_Client%dProfile.csv"), Step3PersistencePhase, NetDemoClientRole);
+	}
+	else if (NetDemoClientRole > 0)
 	{
 		TargetDurationSeconds = 27.5;
 		DemoFramesSubdir = FString::Printf(TEXT("Step2Frames_Client%d"), NetDemoClientRole);
@@ -111,6 +137,15 @@ void UIU_AutoDemoSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 				Spawner->RespawnDelaySeconds = 2.0f;
 			}
 		}
+	}
+
+	if (IConsoleVariable* IdleCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("t.IdleWhenNotForeground")))
+	{
+		IdleCVar->Set(0, ECVF_SetByCode);
+	}
+	if (IConsoleVariable* UnfocusedCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("t.UnfocusedFrameRateLimit")))
+	{
+		UnfocusedCVar->Set(0.0f, ECVF_SetByCode);
 	}
 
 	UE_LOG(LogInfiniteUniverse, Display,
@@ -300,6 +335,11 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 	{
 		TickSinglePlayerShowcase(World, Player, RawPC);
 	}
+	else if (Step3PersistencePhase > 0 && Player && RawPC)
+	{
+		ConnectedPlaySeconds += ClampedDt;
+		TickStep3PersistenceShowcase(World, Player, RawPC);
+	}
 	else if (NetDemoClientRole > 0 && Player && RawPC)
 	{
 		ConnectedPlaySeconds += ClampedDt;
@@ -318,6 +358,18 @@ void UIU_AutoDemoSubsystem::Tick(float DeltaTime)
 
 	if (ElapsedSeconds >= TargetDurationSeconds)
 	{
+		if (!bSentCleanNetClose && World->GetNetMode() == NM_Client)
+		{
+			bSentCleanNetClose = true;
+			if (UNetDriver* ND = World->GetNetDriver())
+			{
+				if (ND->ServerConnection)
+				{
+					ND->ServerConnection->Close();
+					ND->ServerConnection->FlushNet(true);
+				}
+			}
+		}
 		WritePerformanceReportCSV();
 		FGenericPlatformMisc::RequestExit(false);
 	}
@@ -775,6 +827,203 @@ void UIU_AutoDemoSubsystem::TickSinglePlayerShowcase(UWorld* World, AIU_PlayerCh
 			Player->GetTargetingComponent()->SetLockedTarget(NearestEnemy);
 		}
 		Player->ApplyLookInput(FVector2D(0.55f, 0.0f));
+	}
+}
+
+void UIU_AutoDemoSubsystem::TickStep3PersistenceShowcase(UWorld* World, AIU_PlayerCharacter* Player, APlayerController* RawPC)
+{
+	AIU_HUDManager* HUD = Cast<AIU_HUDManager>(RawPC->GetHUD());
+	auto SetBanner = [HUD](const FString& Text)
+	{
+		if (HUD)
+		{
+			HUD->SetShowcaseStepBanner(Text);
+		}
+	};
+
+	const AIU_PlayerState* IUPS = Player->GetPlayerState<AIU_PlayerState>();
+	const int32 CurLv = IUPS ? IUPS->GetCharacterLevel() : 1;
+	const FString CharName = (IUPS && !IUPS->GetPersistedCharacterName().IsEmpty()) ? IUPS->GetPersistedCharacterName() : TEXT("Hero");
+	const int64 CurEpoch = IUPS ? IUPS->GetActiveFencingEpoch() : 0;
+
+	if (Step3PersistencePhase == 2)
+	{
+		// Phase 2: Post-Dedicated-Server-Restart State Restoration Verification!
+		if (LastTriggeredStage != 302)
+		{
+			LastTriggeredStage = 302;
+			Player->StopSprintInput();
+			Player->StopJumpInput();
+			Player->StopDescendInput();
+		}
+		const FVector Loc = Player->GetActorLocation();
+		SetBanner(FString::Printf(
+			TEXT("STEP 3 [RESTORED AFTER SERVER RESTART]: %s Lv.%d | HP %.0f/%.0f | Pos(%.0f,%.0f) | Epoch #%lld"),
+			*CharName,
+			CurLv,
+			Player->GetAttributeComponent()->GetHP(),
+			Player->GetAttributeComponent()->GetMaxHP(),
+			Loc.X,
+			Loc.Y,
+			CurEpoch));
+
+		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
+		{
+			const FVector ToAlly = Ally->GetActorLocation() - Loc;
+			if (!ToAlly.IsNearlyZero(10.0f))
+			{
+				RawPC->SetControlRotation(FRotator(-9.0f, ToAlly.Rotation().Yaw, 0.0f));
+			}
+		}
+		else
+		{
+			Player->ApplyLookInput(FVector2D(0.75f, 0.0f));
+		}
+		return;
+	}
+
+	// Phase 1: Register/Login -> 3D Flight to West Arena -> Defeat Raiders -> Level Up (Lv.1->Lv.2) -> Checkpoint Logout!
+	const double T = ConnectedPlaySeconds;
+	const float LaneY = (NetDemoClientRole == 1) ? -220.0f : 320.0f;
+	const FVector RaidAnchor = (NetDemoClientRole == 1)
+		? FVector(-1850.0f, -200.0f, 95.0f)
+		: FVector(-2950.0f, 350.0f, 95.0f);
+
+	if (T < 2.4)
+	{
+		if (LastTriggeredStage != 201)
+		{
+			LastTriggeredStage = 201;
+			SetBanner(FString::Printf(TEXT("STEP 3 [1/4]: JWT + Ticket Auth -> Claimed PostgreSQL Lease (Epoch #%lld)"), CurEpoch));
+		}
+		if (AIU_PlayerCharacter* Ally = FindOtherPlayerCharacter(Player))
+		{
+			SteerPlayerToward(Player, RawPC, Ally->GetActorLocation(), 210.0f, false, false);
+		}
+		else
+		{
+			Player->ApplyLookInput(FVector2D(0.85f, 0.0f));
+		}
+	}
+	else if (T < 7.2)
+	{
+		if (LastTriggeredStage != 202)
+		{
+			LastTriggeredStage = 202;
+			SetBanner(TEXT("STEP 3 [2/4]: 3D Flight -> West Martial Arena Raid Zone"));
+			Player->StartJumpInput();
+		}
+
+		const FVector SkyTarget(-1820.0f, LaneY, 410.0f);
+		if (T < 2.65)
+		{
+			Player->StartJumpInput();
+		}
+		else if (T < 2.85)
+		{
+			Player->StopJumpInput();
+		}
+		else if (T < 5.6)
+		{
+			if (!Player->GetFlightComponent()->IsFlying())
+			{
+				Player->StartJumpInput();
+			}
+			else
+			{
+				if (Player->GetActorLocation().Z > 400.0f) { Player->StopJumpInput(); }
+				SteerPlayerToward(Player, RawPC, SkyTarget, 120.0f, true, true);
+			}
+		}
+		else
+		{
+			Player->StopJumpInput();
+			Player->StopSprintInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->StartDescendInput();
+				SteerPlayerToward(Player, RawPC, RaidAnchor, 90.0f, false, false);
+			}
+			else
+			{
+				Player->StopDescendInput();
+			}
+		}
+	}
+	else if (T < 16.4 && CurLv < 2)
+	{
+		if (LastTriggeredStage != 203)
+		{
+			LastTriggeredStage = 203;
+			Player->StopDescendInput();
+			Player->StopJumpInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+			SetBanner(TEXT("STEP 3 [3/4]: Defeat Raiders (+55 EXP) -> Authoritative LEVEL UP!"));
+		}
+
+		AIU_EnemyCharacter* TargetEnemy = FindClosestLivingEnemy(RaidAnchor);
+		if (!TargetEnemy)
+		{
+			TargetEnemy = FindClosestLivingEnemy(Player->GetActorLocation());
+		}
+
+		if (TargetEnemy && !TargetEnemy->IsDead())
+		{
+			if (Player->GetTargetingComponent()->GetLockedTarget() != TargetEnemy)
+			{
+				Player->GetTargetingComponent()->SetLockedTarget(TargetEnemy);
+			}
+			SteerPlayerToward(Player, RawPC, TargetEnemy->GetActorLocation(), 140.0f, true, false);
+			if (ElapsedSeconds >= NextActionCooldownTime)
+			{
+				const float DistE = FVector::Dist2D(Player->GetActorLocation(), TargetEnemy->GetActorLocation());
+				if (DistE > 220.0f)
+				{
+					Player->KiBlastInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.55;
+				}
+				else
+				{
+					Player->MeleeAttackInput();
+					NextActionCooldownTime = ElapsedSeconds + 0.22;
+				}
+			}
+		}
+		else
+		{
+			SteerPlayerToward(Player, RawPC, RaidAnchor, 80.0f, true, false);
+		}
+	}
+	else
+	{
+		// Move to safe West Overlook Checkpoint (-920, +/-180) outside Raider melee aggro & PvP Arena so LOGOUT saves clean Lv.2 + full HP!
+		if (LastTriggeredStage != 204)
+		{
+			LastTriggeredStage = 204;
+			Player->StopDescendInput();
+			Player->StopJumpInput();
+			if (Player->GetFlightComponent()->IsFlying())
+			{
+				Player->ToggleFlightInput();
+			}
+		}
+		const FVector CheckpointSpot(-920.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
+		if (FVector::Dist2D(Player->GetActorLocation(), CheckpointSpot) > 110.0f)
+		{
+			SteerPlayerToward(Player, RawPC, CheckpointSpot, 85.0f, true, false);
+		}
+		else
+		{
+			Player->StopSprintInput();
+			Player->ApplyMovementInput(FVector2D::ZeroVector);
+			Player->ApplyLookInput(FVector2D(0.65f, 0.0f));
+		}
+		SetBanner(FString::Printf(
+			TEXT("STEP 3 [4/4]: %s Lv.%d (MaxHP %.0f) -> Saving LOGOUT Snapshot!"),
+			*CharName, CurLv, Player->GetAttributeComponent()->GetMaxHP()));
 	}
 }
 

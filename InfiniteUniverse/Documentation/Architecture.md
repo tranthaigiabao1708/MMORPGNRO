@@ -1,58 +1,75 @@
-# Step 1 & Step 2 Architecture Specification (`InfiniteUniverse` — UE `5.8.4`)
+# Step 1, Step 2 & Step 3 Architecture Specification (`InfiniteUniverse` — UE `5.8.4` + Go `1.27` + PostgreSQL `18`)
 
-**Scope:** C++ Core Gameplay + **Dedicated Server (`NM_DedicatedServer`) & Client-Predicted 3D Action Multiplayer (`Step2_Stable`)**
+**Scope:**
+- **Step 1 (`Step1_Stable`):** C++ Core 3D Action Gameplay, 2-Stage Momentum Flight, Combo/Ki/Mirage Evade Combat & Enemy AI
+- **Step 2 (`Step2_Stable`):** Dedicated Server (`NM_DedicatedServer`), `FSavedMove` 6-DOF Flight Prediction & Multi-Client Replication
+- **Step 3 (`Step3_Stable`):** Go Modular Backend (`Argon2id` + `Ed25519 JWT`), One-Time World Connect Tickets, Lease-Fenced PostgreSQL Persistence (`fencing_epoch`), and Authoritative `Level / EXP` Progression
 
 ---
 
-## 1. Client–Dedicated Server Authority & Replication Diagram
+## 1. End-to-End Step 3 Full-Stack Topology
 
 ```mermaid
-flowchart TD
-    subgraph ClientA["Client 1 & Client 2 (NM_Client — Cooked D3D12)"]
-        Input["Enhanced Input (IMC_Player / IA_*)"] --> PC["AIU_PlayerController"]
-        PC -->|"FSavedMove_IUCharacter (FLAG_Custom_0..3 + 3D Accel)"| MovePred["UIU_MovementComponent & UIU_FlightComponent"]
-        PC -->|"Server_RequestMelee / KiBlast / Dodge"| CombatRPC["UIU_CombatComponent (Client Proxy)"]
-        HUD["AIU_HUDManager + UIU_PlayerHUDWidget"]
+flowchart LR
+    subgraph Client["UE 5.8 Cooked Client (NM_Client — D3D12)"]
+        AuthUI["UIU_LoginCharacterWidget (F5 / -AutoAuthUser)"]
+        GameHUD["UIU_PlayerHUDWidget (LV/EXP/HP/Ki) + AIU_HUDManager"]
+        PredMove["FSavedMove_IUCharacter + Combat Server RPCs"]
     end
 
-    subgraph DedServer["Headless Dedicated Server (:7777 — NM_DedicatedServer)"]
-        GM["AIU_GameMode (Non-Overlapping Ring Spawn)"]
-        GS["AIU_GameState (Co-op PvE vs West Martial Arena PvP)"]
-        PS["AIU_PlayerState (EnemyKills, PvPKills, Deaths, Ping)"]
-        AuthMove["Server PhysCustom_FreeFlight + Anti-Speedhack Clamp"]
-        AuthCombat["Server UIU_CombatComponent + ThreatSubsystem (<=120ms Ping Comp)"]
-        AuthDmg["Server UIU_DamageComponent + UIU_AttributeComponent"]
-        AI["Server-Only AIU_EnemySpawner + AIU_EnemyAIController"]
+    subgraph DedSrv["UE 5.8 Dedicated Server (:7777 — NM_DedicatedServer)"]
+        GM["AIU_GameMode (PreLogin Ticket Gate, PostLogin Lease Claim, 12s Renew, 25s Save, Logout Release)"]
+        PS["AIU_PlayerState (PersistedCharacterName, Level, EXP, Epoch)"]
+        Dmg["UIU_DamageComponent + UIU_AttributeComponent"]
+        Sub["UIU_BackendSubsystem (Async FHttpModule + HMAC-SHA256)"]
     end
 
-    MovePred ==>|"UDP ServerMove"| AuthMove
-    CombatRPC ==>|"Reliable Server RPC"| AuthCombat
-    AuthCombat --> AuthDmg
-    AuthDmg --> GS
-    AuthDmg --> PS
-    AI -->|"Multi-Player Closest Aggro & Failover"| AuthDmg
-    AuthDmg -.->|"DOREPLIFETIME (HP, Ki, bIsDead) + Multicast Damage/Afterimage"| HUD
+    subgraph GoBackend["Go 1.27 Edge & Persistence Backend (:8080)"]
+        Edge["httpapi.Handler (/v1/auth/*, /v1/characters, /v1/world/enter + Per-IP Rate Limit)"]
+        Bridge["Internal Bridge (/internal/v1/lease/*, /internal/v1/character/* + X-IU-Server-HMAC)"]
+        Coord["world.Coordinator (One-Time GETDEL Ticket + Duplicate-Login Lease Eviction)"]
+        CharSvc["character.Service + progression (Level 1..200 Curve & Stat Compiler)"]
+    end
+
+    subgraph Storage["Stateful Persistence Layer"]
+        PG[("PostgreSQL 18 (:5433)\naccounts, characters (fencing_epoch),\ncharacter_attributes, character_save_snapshots")]
+        Redis[("Optional Redis 7 (:6379)\nLua Lease & Session Store")]
+    end
+
+    AuthUI -->|"1. HTTPS/HTTP JSON (Argon2id + Ed25519 JWT)"| Edge
+    Edge --> Coord & CharSvc
+    PredMove ==>|"2. UDP :7777?Ticket=tkt_..."| GM
+    GM --> Sub
+    Dmg -->|"Mob Defeat (+55 EXP)"| Sub
+    Sub ==>|"3. Keep-Alive HTTP + HMAC-SHA256 (p50 ~1.5ms)"| Bridge
+    Bridge --> Coord & CharSvc
+    Coord <--> Redis
+    CharSvc <-->|"ACID Tx: WHERE id=$1 AND fencing_epoch=$2"| PG
+    PS -.->|"DOREPLIFETIME (Lv, EXP, MaxHP, Name)"| GameHUD
 ```
 
 ---
 
-## 2. Class Responsibility, Replication & Authority Matrix
+## 2. Go Backend Module Matrix (`c:\MMORPGNRO\backend\`)
 
-| C++ Class & Header Path | Net Role / Replication | Core Responsibility |
+| Go Package | Tables / Keys Owned | Core Responsibility |
 | :--- | :--- | :--- |
-| `InfiniteUniverseServerTarget`<br>`Source/InfiniteUniverseServer.Target.cs` | Dedicated Server Build Target | Configures headless `TargetType.Server` for CI/Linux/Cloud source engine deployments alongside `UnrealEditor.exe -server` on Launcher Installed Builds. |
-| `AIU_GameMode`<br>`Core/IU_GameMode.h` | **Server-Only** | Assigns `AIU_GameState`, `AIU_PlayerState`, `AIU_PlayerCharacter`, `AIU_PlayerController`, `AIU_HUDManager`; distributes connecting players on a non-overlapping `180 cm` ring (`AllocateMultiplayerSpawnTransform`). |
-| `AIU_GameState`<br>`Core/IU_GameState.h` | **`bReplicates = true`** | Replicates `bAllowGlobalPvPSparring` (`F4`) and defines `MartialSparringArenaBox` (`36m × 36m` West Arena) via `ArePlayersAllowedToSpar()` — blocking friendly fire in Co-op PvE sectors while enabling live 1v1 PvP sparring inside the Arena. |
-| `AIU_PlayerState`<br>`Core/IU_PlayerState.h` | **`bReplicates = true`** | Replicates authoritative `EnemyKills`, `PvPKills`, `Deaths`, and provides `GetPingInMilliseconds()` for HUD telemetry & server ping compensation. |
-| `UIU_MovementComponent` & `FSavedMove_IUCharacter`<br>`Movement/IU_MovementComponent.h` | **Client Prediction + Server Authority** | Packs `FLAG_Custom_0` (Sprint/FlightBoost), `FLAG_Custom_1` (`CMOVE_FreeFlight`), `FLAG_Custom_2` (`Ascend`), `FLAG_Custom_3` (`Descend`) into `FSavedMove_Character`; enforces pre-move 3D speedhack clamp on Server. |
-| `UIU_FlightComponent`<br>`Movement/IU_FlightComponent.h` | **`SetIsReplicatedByDefault(true)`** | Preserves Step 1's 2-stage momentum flight curve, recovers 3D directional intent on Server via `GetCurrentAcceleration()`, and replicates `bReplicatedFlightDashing` (`COND_SkipOwner`) + visual lean to `SimulatedProxy` peers. |
-| `UIU_AttributeComponent`<br>`Attributes/IU_AttributeComponent.h` | **`SetIsReplicatedByDefault(true)`** | Guards `ModifyHP`, `TryConsumeKi`, `RestoreKi` with `HasAuthority()`; replicates `CurrentHP`, `CurrentKi`, `MaxHP`, `MaxKi`, `AttackPowerMultiplier`, and `bIsDead` (`OnRep_*` drives client HUD & respawn collision recovery). |
-| `UIU_DamageComponent`<br>`Combat/IU_DamageComponent.h` | **`SetIsReplicatedByDefault(true)`** | Authoritative damage gatekeeper: enforces `IsDead()`, `i-frames`, and `AIU_GameState::ArePlayersAllowedToSpar()`, updates `AIU_PlayerState` kill/death counters, and broadcasts `Multicast_NotifyDamageApplied` for floating numbers & hit reactions. |
-| `UIU_CombatComponent`, `AIU_KiProjectile` & `AIU_AfterimageGhost`<br>`Combat/` | **Server RPC + Replicated Actors + Multicast Cosmetics** | Validates `1-2-3` melee combos, `Ki` deduction, replicated `AIU_KiProjectile` (`ReplicatedLaunchVelocity`), and bounded `<= 120 ms` ping-compensated **Mirage Perfect Evade** spawning `UPoseableMeshComponent` `AIU_AfterimageGhost` at Origin `A` across all Clients. |
-| `AIU_EnemySpawner`, `AIU_EnemyCharacter` & `AIU_EnemyAIController`<br>`AI/`, `Characters/Enemy/` | **Server-Only Spawner/AI + Replicated Character** | `AIU_EnemySpawner` (`bNetLoadOnClient=false`) and `AIU_EnemyAIController` execute strictly on Server with multi-player closest-target aggro & failover; `AIU_EnemyCharacter` replicates movement, `ReplicatedAIState`, `bWindingUpAttack` (`[ ! RMB EVADE ]`), and `Multicast_OnEnemyReset`. |
-| `AIU_HUDManager` & `UIU_PlayerHUDWidget`<br>`UI/` | **Client-Local HUD** | Handles delayed multiplayer `Pawn` replication binding, renders `[CO-OP ALLY]` / `[SPAR RIVAL]` overhead bars, floating damage numbers, kill/defeat banners, and `F3` Live Multiplayer Telemetry (`NetMode`, `Ping`, `Online`, `Zone`, `FPS`, `RAM`). |
+| `internal/modules/account` | `accounts` (`CITEXT` username/email) | Hashes passwords with `Argon2id` (`m=64MB, t=2, p=2, salt=16B`), verifies credentials in constant time (`subtle.ConstantTimeCompare`), and records `last_login_at` / `last_login_ip`. |
+| `internal/modules/auth` | `sess:acc:*`, `sess:rt:*` | Signs & verifies `Ed25519` (`EdDSA`) Access JWTs, rotates one-time Refresh Tokens, enforces **Single-Active-Session** superseding (`ERR_SESSION_SUPERSEDED`), and verifies `X-IU-Server-HMAC` (`HMAC-SHA256`). |
+| `internal/modules/world` | `sess:ticket:*`, `char:lease:*` | Issues `30s` one-time connect tickets (`GETDEL` semantics — replay rejected `401`), revokes stale leases on duplicate login, and processes `12s` server lease renewals (`TTL=45s`) via Redis Lua scripts or in-memory mutex table. |
+| `internal/modules/progression` | Pure deterministic math | Defines `ExpRequiredForNextLevel(L) = 100*L + 25*(L-1)^2` (`Lv.1->2 = 100 EXP`, `Lv.2->3 = 225 EXP`) and `CompileCharacterStats(raceID, level)` (`Lv.1 = 100 HP / 100 Ki / 1.0x Atk` matching Step 1–2 baseline). |
+| `internal/modules/character` | `characters`, `character_attributes`, `character_potential`, `character_save_snapshots` | Enforces 4-slot cap & `CITEXT` name uniqueness, atomically increments `fencing_epoch` on `AdvanceEpochAndLoad`, fences all writes with `WHERE id = $1 AND fencing_epoch = $2`, deduplicates concurrent `idempotency_key` mob kills via `inFlightKill`, and records `SHA-256` audit snapshots. |
+| `internal/httpapi` | `/v1/*` & `/internal/v1/*` | Mounts token-bucket rate-limited public client endpoints and HMAC-authenticated internal Dedicated Server endpoints on `cmd/gateway`. |
 
 ---
 
-## 3. Locked Boundary for Step 3+ Transition
-With `Step2_Stable` proving deterministic 6-DOF flight prediction, server-authoritative Co-op/PvP combat, and multi-player AI synchronization over real UDP with `~7.8 KB/s` per client, Step 3 can cleanly introduce Backend Persistence (Go / PostgreSQL / Redis), Authentication, Character Progression, and Inventory without altering the core UE `5.8` movement or combat replication foundation.
+## 3. UE `5.8.4` C++ Class Responsibility Matrix (`InfiniteUniverse`)
+
+| C++ Class & Header Path | Net Role / Replication | Core Responsibility |
+| :--- | :--- | :--- |
+| `UIU_BackendSubsystem`<br>`Network/IU_BackendSubsystem.h` | `UGameInstanceSubsystem` | Implements dependency-free FIPS 180-4 `SHA-256` & RFC 2104 `HMAC-SHA256`, async `FHttpModule` client auth (`Register`, `Login`, `CreateCharacter`, `EnterWorld` -> `ClientTravel`), `-AutoAuthUser=` CLI automation, and Dedicated Server bridge (`ClaimLease`, `RenewLeases`, `SaveCheckpoint`, `GrantEXP`, `ReleaseLease`). Inactive when `-UseBackend` is omitted so all offline tests run unchanged. |
+| `AIU_GameMode`<br>`Core/IU_GameMode.h` | **Server-Only** | Rejects unauthenticated UDP joins in `PreLogin` (`-RequireBackendTicket`), claims character lease in `PostLogin`, restores saved transform & vitals, runs `12s` lease renewal (evicting superseded duplicate logins *without* DB writes) & `25s` periodic checkpoints, and flushes final `LOGOUT` snapshot on `Logout` / `EndPlay`. |
+| `AIU_PlayerState`<br>`Core/IU_PlayerState.h` | **`bReplicates = true`** | Replicates `PersistedCharacterName`, `CharacterRaceID`, `CharacterLevel`, `CurrentEXP`, `NextLevelEXP`, `EnemyKills`, `PvPKills`, `Deaths`, and owner-only `ActiveFencingEpoch`; broadcasts `OnCharacterEXPChanged` & `OnCharacterLevelUp`. |
+| `UIU_AttributeComponent`<br>`Attributes/IU_AttributeComponent.h` | **`SetIsReplicatedByDefault(true)`** | Replicates `MaxHP`, `MaxKi`, `CurrentHP`, `CurrentKi`, `AttackPowerMultiplier`, and `bIsDead`; applies scaled level vitals via Server-only `ApplyPersistedVitals()`. |
+| `UIU_DamageComponent`<br>`Combat/IU_DamageComponent.h` | **`SetIsReplicatedByDefault(true)`** | Enforces Co-op PvE vs West Arena PvP rules and, upon `AIU_EnemyCharacter` defeat by a leased player, dispatches idempotent `GrantCharacterEXP(55)` to the Go Backend to award EXP & trigger Level-Up stat upgrades. |
+| `UIU_LoginCharacterWidget`, `UIU_PlayerHUDWidget` & `AIU_HUDManager`<br>`UI/` | **Client-Local UMG / Canvas HUD** | Provides programmatic UMG Login/Register/Character modal (`F5` / `-ShowLoginUI`), reactive `LV. X | EXP` progress bar, `[Lv.X Name]` overhead nameplates, gold `[ LEVEL UP! ]` banners, and `DB: ... | Epoch #N` telemetry. |

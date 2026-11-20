@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://infinite-universe.dev/schemas/global_constants.schema.json",
+  "title": "GlobalCombatConstants",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "walk_speed_cms",
+    "run_speed_cms",
+    "hover_flight_speed_cms",
+    "boost_flight_speed_cms",
+    "pursuit_dash_speed_cms",
+    "boost_flight_energy_per_sec",
+    "defense_formula_level_factor",
+    "defense_formula_flat_constant",
+    "base_crit_rate",
+    "base_crit_damage",
+    "crit_rate_cap",
+    "stagger_damage_multiplier",
+    "max_level_vs",
+    "boss_min_contribution_ratio"
+  ],
+  "properties": {
+    "walk_speed_cms": { "type": "number", "exclusiveMinimum": 0 },
+    "run_speed_cms": { "type": "number", "exclusiveMinimum": 0 },
+    "hover_flight_speed_cms": { "type": "number", "exclusiveMinimum": 0 },
+    "boost_flight_speed_cms": { "type": "number", "exclusiveMinimum": 0 },
+    "pursuit_dash_speed_cms": { "type": "number", "exclusiveMinimum": 0 },
+    "boost_flight_energy_per_sec": { "type": "number", "minimum": 0 },
+    "defense_formula_level_factor": { "type": "number", "minimum": 0 },
+    "defense_formula_flat_constant": { "type": "number", "minimum": 0 },
+    "base_crit_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "base_crit_damage": { "type": "number", "minimum": 0 },
+    "crit_rate_cap": { "type": "number", "minimum": 0, "maximum": 1 },
+    "stagger_damage_multiplier": { "type": "number", "minimum": 1.0 },
+    "max_level_vs": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "boss_min_contribution_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}
