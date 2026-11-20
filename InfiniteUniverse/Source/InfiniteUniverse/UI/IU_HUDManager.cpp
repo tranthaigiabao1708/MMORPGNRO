@@ -317,7 +317,7 @@ void AIU_HUDManager::HandleLocalCharacterLevelUp(int32 OldLevel, int32 NewLevel)
 	}
 
 	const double Now = World->GetTimeSeconds();
-	ActiveCenterToastText = FString::Printf(TEXT("[ LEVEL UP!  LV. %d -> LV. %d ]  Spend Potential (P / 1,2,3) to Upgrade Stats!"), OldLevel, NewLevel);
+	ActiveCenterToastText = FString::Printf(TEXT("[ LEVEL UP!  LV. %d -> LV. %d ]  Bam TAB -> Ky Nang de cong Tiem Nang!"), OldLevel, NewLevel);
 	ActiveCenterToastColor = FLinearColor(1.0f, 0.88f, 0.22f, 1.0f);
 	CenterToastExpireTime = Now + 4.0;
 
@@ -774,21 +774,6 @@ void AIU_HUDManager::DrawHUD()
 		DrawText(FString::Printf(TEXT("Pos: (%.0f, %.0f, %.0f) | Spd2D: %.0f | Spd3D: %.0f cm/s"), PlayerPos.X, PlayerPos.Y, PlayerPos.Z, Vel.Size2D(), Vel.Size()), LineCol, PX + 10.0f, PY + 54.0f, HUDFont, 0.80f);
 		DrawText(FString::Printf(TEXT("Cfg: Atk %.0f (x%.2f) | Giap %.0f | Equip %d/8 | Fly %.0f"), FlatAtk, AtkMul, FlatDef, EqCount, FlyCfg), LineCol, PX + 10.0f, PY + 77.0f, HUDFont, 0.78f);
 		DrawText(FString::Printf(TEXT("AI: %d/%d Alive | PvE Kills: %d | PvP Kills: %d | Deaths: %d"), LivingEnemyCount, TotalEnemyActors, RepEnemyKills, RepPvPKills, RepDeaths), LineCol, PX + 10.0f, PY + 100.0f, HUDFont, 0.80f);
-		DrawText(FString::Printf(TEXT("DB: %s Lv.%d | TN:%lld | Vang:%lld | Ep#%lld (I/P/4)"), *CharDisplayName, CharLv, PoolTN, CoinBal, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.76f);
-	}
-
-	// 7. Compact Bottom-Left Controls Quick-Bar
-	if (bShowControlsLegend && Canvas->ClipY > 360.0f)
-	{
-		const float LegendX = 36.0f;
-		const float LegendY = Canvas->ClipY - 52.0f;
-		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, 0.62f), LegendX - 10.0f, LegendY - 6.0f, FMath::Min(1080.0f, Canvas->ClipX - 52.0f), 30.0f);
-		DrawText(
-			TEXT("WASD: Move | Space x2: Fly | LMB/Q: Attack | RMB: Evade | I: Bag/Equip | 4: DauThan | P/1,2,3: +Stats | F3: Debug"),
-			FLinearColor(0.86f, 0.93f, 1.0f, 0.90f),
-			LegendX,
-			LegendY,
-			HUDFont,
-			0.78f);
+		DrawText(FString::Printf(TEXT("DB: %s Lv.%d | TN:%lld | Vang:%lld | Ep#%lld [TAB:HoSo]"), *CharDisplayName, CharLv, PoolTN, CoinBal, EpochNum), FLinearColor(1.0f, 0.88f, 0.42f, 0.95f), PX + 10.0f, PY + 123.0f, HUDFont, 0.76f);
 	}
 }

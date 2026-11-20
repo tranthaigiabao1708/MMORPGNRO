@@ -7,6 +7,7 @@
 #include "Attributes/IU_AttributeComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_HUDManager.h"
+#include "UI/IU_PlayerHUDWidget.h"
 #include "UI/IU_LoginCharacterWidget.h"
 #include "UI/IU_PotentialUpgradeWidget.h"
 #include "UI/IU_InventoryEquipmentWidget.h"
@@ -104,7 +105,8 @@ void AIU_PlayerController::ConfigureStandardPlayerMappings(
 	}
 	if (InToggleRot)
 	{
-		TargetIMC->MapKey(InToggleRot, EKeys::Tab);
+		// R: Toggle Camera Rotation Mode (Tab is reserved for NRO Character Profile Window!)
+		TargetIMC->MapKey(InToggleRot, EKeys::R);
 	}
 	if (InDescend)
 	{
@@ -159,6 +161,21 @@ void AIU_PlayerController::BeginPlay()
 	if (!DefaultMappingContext)
 	{
 		DefaultMappingContext = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Input/IMC_Player.IMC_Player"));
+	}
+
+	// Ensure Tab is freed from legacy IMC_Player.uasset ToggleRotationMode so Tab opens the NRO Character Profile cleanly!
+	if (DefaultMappingContext)
+	{
+		if (!ToggleRotationModeAction)
+		{
+			ToggleRotationModeAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_ToggleRotationMode.IA_ToggleRotationMode"));
+		}
+		if (ToggleRotationModeAction)
+		{
+			DefaultMappingContext->UnmapKey(ToggleRotationModeAction, EKeys::Tab);
+			DefaultMappingContext->UnmapKey(ToggleRotationModeAction, EKeys::R);
+			DefaultMappingContext->MapKey(ToggleRotationModeAction, EKeys::R);
+		}
 	}
 
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
@@ -325,16 +342,20 @@ void AIU_PlayerController::SetupInputComponent()
 
 	if (InputComponent)
 	{
+		InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AIU_PlayerController::HandleToggleCharacterProfileTab);
 		InputComponent->BindKey(EKeys::F3, IE_Pressed, this, &AIU_PlayerController::HandleToggleDebugHUD);
 		InputComponent->BindKey(EKeys::F4, IE_Pressed, this, &AIU_PlayerController::HandleToggleGlobalPvP);
 		InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &AIU_PlayerController::HandleToggleAuthPanel);
 		InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AIU_PlayerController::HandleTogglePotentialPanel);
 		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AIU_PlayerController::HandleToggleInventoryPanel);
 		InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AIU_PlayerController::HandleToggleInventoryPanel);
-		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeHP);
-		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeKi);
-		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AIU_PlayerController::HandleQuickUpgradeAtk);
-		InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AIU_PlayerController::HandleQuickUseElixir);
+		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar1);
+		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar2);
+		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar3);
+		InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar4);
+		InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar5);
+		InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &AIU_PlayerController::HandleSkillHotbar6);
+		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &AIU_PlayerController::HandleQuickUseElixir);
 	}
 }
 
@@ -614,25 +635,76 @@ void AIU_PlayerController::SetPotentialUpgradePanelVisible(bool bVisible, bool b
 	}
 }
 
+void AIU_PlayerController::OpenLoginCharacterModal()
+{
+	HandleToggleAuthPanel();
+}
+
+void AIU_PlayerController::HandleToggleCharacterProfileTab()
+{
+	SetInventoryPanelVisible(!IsInventoryPanelVisible(), true);
+}
+
 void AIU_PlayerController::HandleTogglePotentialPanel()
 {
-	SetPotentialUpgradePanelVisible(!IsPotentialUpgradePanelVisible(), true);
+	if (IsInventoryPanelVisible() && ActiveInventoryWidget && ActiveInventoryWidget->GetActiveProfileTab() == EIU_CharacterProfileTab::KyNang)
+	{
+		SetInventoryPanelVisible(false, true);
+	}
+	else
+	{
+		OpenCharacterProfileOnTab(EIU_CharacterProfileTab::KyNang, true);
+	}
 }
 
-void AIU_PlayerController::HandleQuickUpgradeHP()
+void AIU_PlayerController::ExecuteHubSkillSlot(int32 SlotNumber)
 {
-	Server_RequestAllocatePotential(EIU_PotentialStatType::MaxHP);
+	const int32 ClampedSlot = FMath::Clamp(SlotNumber, 1, 6);
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			HUDWidget->SetActiveSkillSlot(ClampedSlot);
+		}
+	}
+
+	AIU_PlayerCharacter* IUChar = GetIUPlayerCharacter();
+	if (!IUChar)
+	{
+		return;
+	}
+
+	switch (ClampedSlot)
+	{
+	case 1:
+		IUChar->MeleeAttackInput();
+		break;
+	case 2:
+		IUChar->KiBlastInput();
+		break;
+	case 3:
+		IUChar->DodgeInput();
+		break;
+	case 4:
+		IUChar->ToggleMobilityStyleInput();
+		break;
+	case 5:
+		IUChar->ToggleLockOnInput();
+		break;
+	case 6:
+		IUChar->ToggleFlightInput();
+		break;
+	default:
+		break;
+	}
 }
 
-void AIU_PlayerController::HandleQuickUpgradeKi()
-{
-	Server_RequestAllocatePotential(EIU_PotentialStatType::MaxKi);
-}
-
-void AIU_PlayerController::HandleQuickUpgradeAtk()
-{
-	Server_RequestAllocatePotential(EIU_PotentialStatType::AttackPower);
-}
+void AIU_PlayerController::HandleSkillHotbar1() { ExecuteHubSkillSlot(1); }
+void AIU_PlayerController::HandleSkillHotbar2() { ExecuteHubSkillSlot(2); }
+void AIU_PlayerController::HandleSkillHotbar3() { ExecuteHubSkillSlot(3); }
+void AIU_PlayerController::HandleSkillHotbar4() { ExecuteHubSkillSlot(4); }
+void AIU_PlayerController::HandleSkillHotbar5() { ExecuteHubSkillSlot(5); }
+void AIU_PlayerController::HandleSkillHotbar6() { ExecuteHubSkillSlot(6); }
 
 void AIU_PlayerController::Server_RequestAllocatePotential_Implementation(EIU_PotentialStatType StatType)
 {
@@ -790,14 +862,45 @@ void AIU_PlayerController::SetInventoryPanelVisible(bool bVisible, bool bUpdateM
 	}
 }
 
+void AIU_PlayerController::OpenCharacterProfileOnTab(EIU_CharacterProfileTab TargetTab, bool bUpdateMouseInputMode)
+{
+	SetInventoryPanelVisible(true, bUpdateMouseInputMode);
+	if (ActiveInventoryWidget)
+	{
+		ActiveInventoryWidget->SetActiveProfileTab(TargetTab);
+	}
+}
+
 void AIU_PlayerController::HandleToggleInventoryPanel()
 {
-	SetInventoryPanelVisible(!IsInventoryPanelVisible(), true);
+	if (IsInventoryPanelVisible() && ActiveInventoryWidget && ActiveInventoryWidget->GetActiveProfileTab() == EIU_CharacterProfileTab::HanhTrang)
+	{
+		SetInventoryPanelVisible(false, true);
+	}
+	else
+	{
+		OpenCharacterProfileOnTab(EIU_CharacterProfileTab::HanhTrang, true);
+	}
+}
+
+void AIU_PlayerController::TriggerQuickUseElixirFromHUD()
+{
+	if (AIU_HUDManager* IUHUD = Cast<AIU_HUDManager>(GetHUD()))
+	{
+		if (UIU_PlayerHUDWidget* HUDWidget = IUHUD->GetPlayerHUDWidget())
+		{
+			if (HUDWidget->GetDisplayedElixirCount() > 0)
+			{
+				HUDWidget->NotifyElixirCooldownStarted(ConsumableCooldownSeconds);
+			}
+		}
+	}
+	Server_RequestUseConsumable(TEXT(""));
 }
 
 void AIU_PlayerController::HandleQuickUseElixir()
 {
-	Server_RequestUseConsumable(TEXT(""));
+	TriggerQuickUseElixirFromHUD();
 }
 
 bool AIU_PlayerController::CanUseConsumableOnServer(float& OutRemainingSeconds) const

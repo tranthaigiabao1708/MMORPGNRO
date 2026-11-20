@@ -134,7 +134,7 @@ TSharedRef<SWidget> UIU_PotentialUpgradeWidget::RebuildWidget()
 		USizeBox* FooterLeftBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 		FooterLeftBox->SetMinDesiredWidth(430.0f);
 		FeedbackStatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("FeedbackStatusText"));
-		FeedbackStatusText->SetText(FText::FromString(TEXT("Phim tat nhanh: [1] +100 HP | [2] +100 Ki | [3] +10 Suc Danh")));
+		FeedbackStatusText->SetText(FText::FromString(TEXT("Chi nang chi so bang click chuot trong Bang Ho So [Tab -> Ky Nang]!")));
 		FeedbackStatusText->SetColorAndOpacity(FSlateColor(FLinearColor(0.82f, 0.92f, 1.0f)));
 		ApplyFontSize(FeedbackStatusText, 11);
 		FooterLeftBox->SetContent(FeedbackStatusText);
@@ -379,14 +379,14 @@ void UIU_PotentialUpgradeWidget::UpdateAllLabels()
 
 	if (UpgradeHPBtnLabel)
 	{
-		UpgradeHPBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" [1] +100 HP (%lld TN) "), HPCost)));
+		UpgradeHPBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" +100 HP (%lld TN) "), HPCost)));
 	}
 	if (UpgradeKiBtnLabel)
 	{
-		UpgradeKiBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" [2] +100 KI (%lld TN) "), KiCost)));
+		UpgradeKiBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" +100 KI (%lld TN) "), KiCost)));
 	}
 	if (UpgradeAtkBtnLabel)
 	{
-		UpgradeAtkBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" [3] +10 SUC DANH (%lld TN) "), AtkCost)));
+		UpgradeAtkBtnLabel->SetText(FText::FromString(FString::Printf(TEXT(" +10 SUC DANH (%lld TN) "), AtkCost)));
 	}
 }

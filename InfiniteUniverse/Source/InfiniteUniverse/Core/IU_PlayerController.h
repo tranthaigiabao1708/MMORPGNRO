@@ -7,6 +7,7 @@
 #include "InputActionValue.h"
 #include "Data/IU_GameplayTypes.h"
 #include "Network/IU_BackendSubsystem.h"
+#include "UI/IU_InventoryEquipmentWidget.h"
 #include "IU_PlayerController.generated.h"
 
 class UInputMappingContext;
@@ -138,12 +139,30 @@ public:
 	UFUNCTION(BlueprintPure, Category = "IU|UI")
 	bool IsPotentialUpgradePanelVisible() const;
 
-	/** Shows or hides the Step 4 Authoritative 48-Slot Bag & 8-Slot Equipment UMG modal (Keys I / B). */
+	/** Shows or hides the NRO Character Profile modal (Key Tab / I / B / P). */
 	UFUNCTION(BlueprintCallable, Category = "IU|UI")
 	void SetInventoryPanelVisible(bool bVisible, bool bUpdateMouseInputMode = true);
 
+	/** Opens the NRO Character Profile modal directly on a specific tab (e.g. HanhTrang or KyNang). */
+	UFUNCTION(BlueprintCallable, Category = "IU|UI")
+	void OpenCharacterProfileOnTab(EIU_CharacterProfileTab TargetTab, bool bUpdateMouseInputMode = true);
+
 	UFUNCTION(BlueprintPure, Category = "IU|UI")
 	bool IsInventoryPanelVisible() const;
+
+	UFUNCTION(BlueprintPure, Category = "IU|UI")
+	UIU_InventoryEquipmentWidget* GetActiveCharacterProfileWidget() const { return ActiveInventoryWidget; }
+
+	/** Executes an outer Skill Hub slot (1..6) and highlights that slot on UIU_PlayerHUDWidget (NEVER spends Potential!). */
+	UFUNCTION(BlueprintCallable, Category = "IU|Skills")
+	void ExecuteHubSkillSlot(int32 SlotNumber);
+
+	/** Triggered by clicking the bottom-right circular Dau Than Hub or pressing Key G. */
+	UFUNCTION(BlueprintCallable, Category = "IU|Inventory")
+	void TriggerQuickUseElixirFromHUD();
+
+	/** Opens the Account/Character Login modal (Key F5 or Chuc Nang tab). */
+	void OpenLoginCharacterModal();
 
 	bool HasCachedInventorySnapshot() const { return bHasCachedInventorySnapshot; }
 	const FIU_InventorySnapshot& GetCachedInventorySnapshot() const { return CachedInventorySnapshot; }
@@ -214,11 +233,15 @@ private:
 	void HandleToggleDebugHUD();
 	void HandleToggleGlobalPvP();
 	void HandleToggleAuthPanel();
+	void HandleToggleCharacterProfileTab();
 	void HandleTogglePotentialPanel();
 	void HandleToggleInventoryPanel();
-	void HandleQuickUpgradeHP();
-	void HandleQuickUpgradeKi();
-	void HandleQuickUpgradeAtk();
+	void HandleSkillHotbar1();
+	void HandleSkillHotbar2();
+	void HandleSkillHotbar3();
+	void HandleSkillHotbar4();
+	void HandleSkillHotbar5();
+	void HandleSkillHotbar6();
 	void HandleQuickUseElixir();
 
 	UPROPERTY(Transient)

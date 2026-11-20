@@ -23,6 +23,7 @@
 #include "Combat/IU_DamageComponent.h"
 #include "Network/IU_BackendSubsystem.h"
 #include "UI/IU_InventoryEquipmentWidget.h"
+#include "UI/IU_PlayerHUDWidget.h"
 
 namespace IU_S4TestHelpers
 {
@@ -523,6 +524,72 @@ bool FIU_S4_BackendLoopbackInventoryLootEnhanceRoundTripTest::RunTest(const FStr
 
 	Backend->ReleaseCharacterLease(Claimed.CharacterID, Claimed.FencingEpoch, nullptr);
 	FHttpModule::Get().GetHttpManager().Flush(EHttpFlushReason::Default);
+
+	return true;
+}
+
+// ============================================================================
+// TEST 6: NRO Character Profile 5-Tab Modal (Tab), Outer Skill Hub (1..6) & Dau Than Hub
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FIU_S4_CharacterProfileTabsSkillHubAndElixirHubTest,
+	"InfiniteUniverse.Step4.CharacterProfileTabsSkillHubAndElixirHub",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FIU_S4_CharacterProfileTabsSkillHubAndElixirHubTest::RunTest(const FString& Parameters)
+{
+	IU_S4TestHelpers::FScopedStep4World ScopeWorld;
+
+	// 1. Verify 5-Tab NRO Character Profile Window (NhiemVu, HanhTrang, KyNang, BangHoi, ChucNang)
+	UIU_InventoryEquipmentWidget* ProfileWidget = CreateWidget<UIU_InventoryEquipmentWidget>(
+		ScopeWorld.TempGI,
+		UIU_InventoryEquipmentWidget::StaticClass());
+	TestNotNull(TEXT("NRO Character Profile widget created"), ProfileWidget);
+	TSharedRef<SWidget> ProfileSlate = ProfileWidget->TakeWidget();
+	TestTrue(TEXT("Profile widget built valid Slate tree"), ProfileSlate->GetType() != FName(TEXT("SNullWidget")));
+	TestEqual(TEXT("Default active tab is HanhTrang"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::HanhTrang);
+
+	ProfileWidget->SetActiveProfileTab(EIU_CharacterProfileTab::NhiemVu);
+	TestEqual(TEXT("Switched to NhiemVu tab"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::NhiemVu);
+	ProfileWidget->SetActiveProfileTab(EIU_CharacterProfileTab::KyNang);
+	TestEqual(TEXT("Switched to KyNang (Potential Stat Upgrade) tab"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::KyNang);
+	ProfileWidget->SetActiveProfileTab(EIU_CharacterProfileTab::BangHoi);
+	TestEqual(TEXT("Switched to BangHoi tab"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::BangHoi);
+	ProfileWidget->SetActiveProfileTab(EIU_CharacterProfileTab::ChucNang);
+	TestEqual(TEXT("Switched to ChucNang tab"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::ChucNang);
+	ProfileWidget->SetActiveProfileTab(EIU_CharacterProfileTab::HanhTrang);
+	TestEqual(TEXT("Returned to HanhTrang Paperdoll+Grid tab"), ProfileWidget->GetActiveProfileTab(), EIU_CharacterProfileTab::HanhTrang);
+
+	// 2. Verify Outer Gameplay HUD builds Skill Hub (1..6) & Dau Than Hub, and Keys 1..3 NEVER spend Potential Points!
+	AIU_PlayerController* PC = ScopeWorld.World->SpawnActor<AIU_PlayerController>();
+	AIU_PlayerState* PS = ScopeWorld.World->SpawnActor<AIU_PlayerState>();
+	AIU_PlayerCharacter* Pawn = ScopeWorld.World->SpawnActor<AIU_PlayerCharacter>();
+	PC->PlayerState = PS;
+	Pawn->SetPlayerState(PS);
+	PC->Possess(Pawn);
+
+	PS->AwardOfflineHitProgress(200.0f); // +300 Potential Points (more than enough for HP/Ki/Atk upgrades!)
+	const int64 InitialTN = PS->GetPotentialPoints();
+	TestEqual(TEXT("Player starts with 300 Potential Points"), InitialTN, int64(300));
+	PS->ApplyAuthoritativeEconomySummary(250, 7, 4, 2);
+
+	UIU_PlayerHUDWidget* OuterHUD = CreateWidget<UIU_PlayerHUDWidget>(ScopeWorld.TempGI, UIU_PlayerHUDWidget::StaticClass());
+	TestNotNull(TEXT("Outer UIU_PlayerHUDWidget created"), OuterHUD);
+	TSharedRef<SWidget> OuterSlate = OuterHUD->TakeWidget();
+	TestTrue(TEXT("Outer HUD built valid Slate tree (Skill Hub 1..6 + Dau Than Hub)"), OuterSlate->GetType() != FName(TEXT("SNullWidget")));
+	OuterHUD->BindToPlayerPawn(Pawn);
+
+	TestEqual(TEXT("Default active Skill Hub slot is 1"), OuterHUD->GetActiveSkillSlot(), 1);
+	TestEqual(TEXT("Outer Dau Than Hub displays exact ElixirCount = 7"), OuterHUD->GetDisplayedElixirCount(), 7);
+
+	OuterHUD->SetActiveSkillSlot(6);
+	TestEqual(TEXT("Skill Hub highlights Slot 6 (top-left Kame/Flight slot)"), OuterHUD->GetActiveSkillSlot(), 6);
+
+	// Execute Skill Hotbar slots 1, 2, 3 -> PotentialPoints MUST remain 300 (strictly upgraded via Character Profile UI!)
+	PC->ExecuteHubSkillSlot(1);
+	PC->ExecuteHubSkillSlot(2);
+	PC->ExecuteHubSkillSlot(3);
+	TestEqual(TEXT("Keys 1/2/3 execute Hub Skills and NEVER deduct Potential Points"), PS->GetPotentialPoints(), InitialTN);
 
 	return true;
 }

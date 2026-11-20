@@ -1315,10 +1315,11 @@ void UIU_AutoDemoSubsystem::TickStep4InventoryShowcase(UWorld* World, AIU_Player
 		if (IUPC && !bStep4UsedElixirAndEquippedLoot)
 		{
 			bStep4UsedElixirAndEquippedLoot = true;
-			IUPC->Server_RequestUseConsumable(TEXT(""));
+			IUPC->TriggerQuickUseElixirFromHUD();
 
 			if (PoolTN >= 150)
 			{
+				IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::KyNang, false);
 				IUPC->Server_RequestAllocatePotential(EIU_PotentialStatType::AttackPower);
 			}
 
@@ -1366,6 +1367,14 @@ void UIU_AutoDemoSubsystem::TickStep4InventoryShowcase(UWorld* World, AIU_Player
 			}
 		}
 
+		if (IUPC && NetDemoClientRole == 1 && T >= 19.0)
+		{
+			if (IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
+			}
+		}
+
 		const FVector CheckpointSpot(-320.0f, (NetDemoClientRole == 1) ? -180.0f : 180.0f, 112.0f);
 		SteerPlayerToward(Player, RawPC, CheckpointSpot, 80.0f, true, false);
 	}
@@ -1379,9 +1388,13 @@ void UIU_AutoDemoSubsystem::TickStep4InventoryShowcase(UWorld* World, AIU_Player
 		if (IUPC && NetDemoClientRole == 1)
 		{
 			const bool bShowFinalModal = (T >= 21.0 && T <= 24.8);
-			if (IUPC->IsInventoryPanelVisible() != bShowFinalModal)
+			if (bShowFinalModal && !IUPC->IsInventoryPanelVisible())
 			{
-				IUPC->SetInventoryPanelVisible(bShowFinalModal, false);
+				IUPC->OpenCharacterProfileOnTab(EIU_CharacterProfileTab::HanhTrang, false);
+			}
+			else if (!bShowFinalModal && IUPC->IsInventoryPanelVisible())
+			{
+				IUPC->SetInventoryPanelVisible(false, false);
 			}
 		}
 
